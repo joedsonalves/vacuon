@@ -34,17 +34,16 @@ project.lock.json
 project.fragment.lock.json
 
 # ==================== fora do repositório público ====================
-# A suíte e o PRD ficam só na máquina. Os arquivos continuam existindo em disco;
-# o que muda é que o git deixa de segui-los.
-#
-# Consequências, para quem for reverter isto sem se surpreender:
-#   - Vacuon.sln não referencia mais o projeto de teste, senão um clone não
-#     compila. Localmente a suíte roda apontando para o projeto:
-#         dotnet test tests/Vacuon.Core.Tests
-#   - a CI compila e não testa, porque não teria o que testar
-#   - README e CONTRIBUTING perderam os links para PRD.md e para tests/
+# O PRD é o documento de projeto: roteiro, decisões e o registro de armadilhas.
+# Fica só na máquina. O arquivo continua existindo em disco; o que muda é que o
+# git deixa de segui-lo. Os links para ele foram removidos do README e do
+# CONTRIBUTING — reponha-os se algum dia voltar.
 /PRD.md
-/tests/
+
+# A suíte NÃO entra aqui, e é deliberado. Ela é a evidência de tudo que o README
+# afirma sobre o parser de MFT, e "compile e teste você mesmo" é a alternativa
+# que o projeto oferece a quem não quer confiar num binário sem assinatura.
+# O que fica de fora é só o lixo que a execução produz.
 
 # ==================== artefatos de teste ====================
 
