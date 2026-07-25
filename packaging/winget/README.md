@@ -54,6 +54,18 @@ The URL points at the asset **with the version in its name**. The
 more than precision; here it would be a bug, since the hash is fixed and what `latest` serves
 is not.
 
+## Asset names
+
+Every release carries the same two binaries under two names each, and the reason is not
+tidiness:
+
+| Asset | For | Why the name |
+|---|---|---|
+| `Vacuon.exe` | people | It is what the file is called after downloading, and Windows search shows a loose executable by its **file name**. `Vacuon-win-x64.exe` in the Start menu reads like a build artefact, because it is one. |
+| `vacuon-cli.exe` | people | Same, for the command line. Cannot be `vacuon.exe`: Windows filenames are case-insensitive, so it would collide with the GUI in the same folder. |
+| `Vacuon-<version>-win-x64.exe` | winget | The manifest pins a SHA256, so it must point at a name whose content never changes. |
+| `vacuon-cli-<version>-win-x64.exe` | winget | Same. |
+
 ## Testing the install before opening the PR
 
 Needs an elevated terminal once, to let winget read a manifest off disk:

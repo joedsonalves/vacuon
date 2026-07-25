@@ -16,7 +16,7 @@ e nunca afirma um número que não mediu.
 
 **Português (Brasil)** · [English](README.md)
 
-[**⬇ Baixar para Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe) · portátil, 62 MB, nada para instalar
+[**⬇ Baixar para Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon.exe) · portátil, 62 MB, nada para instalar
 
 <img src="docs/img/02-explorer-escuro.png" width="900" alt="Explorer do Vacuon com a árvore de pastas e a lista de arquivos">
 
@@ -26,7 +26,7 @@ e nunca afirma um número que não mediu.
 
 ## Como começar
 
-**[⬇ Baixar o Vacuon para Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe)** — 62 MB, portátil, nada para instalar.
+**[⬇ Baixar o Vacuon para Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon.exe)** — 62 MB, portátil, nada para instalar.
 
 1. Baixe o arquivo acima.
 2. Dê dois cliques. O Windows mostra uma tela azul **"O Windows protegeu o seu PC"** — o app
@@ -61,8 +61,16 @@ fingir o contrário. O Vacuon abre o volume **somente para leitura** — `GENERI
 
 ### Linha de comando
 
-`vacuon-cli-win-x64.exe` é o mesmo núcleo sem janela, para scripts. Renomeie para
-`vacuon.exe`, coloque em algum lugar do `PATH`, e veja [a seção da CLI](#interface-gráfica-e-linha-de-comando).
+O [`vacuon-cli.exe`](https://github.com/joedsonalves/vacuon/releases/latest/download/vacuon-cli.exe)
+é o mesmo núcleo sem janela, para scripts. Coloque em algum lugar do `PATH` e veja
+[a seção da CLI](#interface-gráfica-e-linha-de-comando).
+
+Ou deixe o winget colocar por você, assim que o pacote for aceito — ele instala o app e põe um
+comando `vacuon` no seu `PATH`:
+
+```powershell
+winget install Joedsonalves.Vacuon
+```
 
 ### Compilar do código
 
