@@ -42,7 +42,7 @@ public sealed class VolumeIndex
     /// para guardar zeros.
     /// </para>
     /// </summary>
-    public IReadOnlyDictionary<int, long> AdsBytes { get; }
+    public IReadOnlyDictionary<int, long> AdsBytes { get; private set; }
 
     public VolumeIndex(FileEntry[] entries, NameBlob names, VolumeInfo volume, ScanStrategy strategy,
                        IReadOnlyDictionary<int, long>? adsBytes = null)
@@ -57,6 +57,41 @@ public sealed class VolumeIndex
 
     /// <summary>Bytes de ADS deste item, ou 0 se não tiver.</summary>
     public long GetAdsBytes(int index) => AdsBytes.TryGetValue(index, out long bytes) ? bytes : 0;
+
+    /// <summary>
+    /// Same index, refreshed volume figures.
+    /// <para>
+    /// Free space moves without any journal record, so an incrementally updated index
+    /// must re-read it instead of reporting the number from when the snapshot was taken.
+    /// The heavy arrays are shared, not copied.
+    /// </para>
+    /// </summary>
+    public VolumeIndex WithVolume(VolumeInfo volume) =>
+        new(Entries, Names, volume, Strategy, AdsBytes);
+
+    /// <summary>Swaps the Alternate Data Stream side table after a delta.</summary>
+    public void ReplaceAdsTable(IReadOnlyDictionary<int, long> table)
+    {
+        AdsBytes = table;
+        InvalidateAggregates();
+    }
+
+    /// <summary>
+    /// Drops the cached subtree sizes and the child index.
+    /// <para>
+    /// Both are derived from the entry array, so any mutation makes them wrong. Clearing
+    /// them costs one lazy rebuild; leaving them would show sizes for files that no
+    /// longer exist.
+    /// </para>
+    /// </summary>
+    public void InvalidateAggregates()
+    {
+        _subtreeSize = null;
+        _subtreeSizeOnDisk = null;
+        _subtreeCount = null;
+        _childStart = null;
+        _childList = null;
+    }
 
     /// <summary>Espaço total em disco: fluxo principal + Alternate Data Streams.</summary>
     public long GetSizeOnDisk(int index) => Entries[index].AllocatedSize + GetAdsBytes(index);
