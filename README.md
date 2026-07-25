@@ -16,7 +16,7 @@ to delete, and never claims a number it did not measure.
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
-[**⬇ Download for Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe) · portable, 62 MB, nothing to install
+[**⬇ Download for Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon.exe) · portable, 62 MB, nothing to install
 
 <img src="docs/img/02-explorer-escuro.png" width="900" alt="Vacuon Explorer showing the folder tree and the file list">
 
@@ -26,7 +26,7 @@ to delete, and never claims a number it did not measure.
 
 ## Getting started
 
-**[⬇ Download Vacuon for Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe)** — 62 MB, portable, nothing to install.
+**[⬇ Download Vacuon for Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon.exe)** — 62 MB, portable, nothing to install.
 
 1. Download the file above.
 2. Double-click it. Windows shows a blue **"Windows protected your PC"** screen — the app is
@@ -60,8 +60,16 @@ never `GENERIC_WRITE`.
 
 ### Command line
 
-`vacuon-cli-win-x64.exe` is the same core without a window, for scripting. Rename it
-to `vacuon.exe`, put it somewhere on your `PATH`, and see [the CLI section](#gui-and-command-line).
+[`vacuon-cli.exe`](https://github.com/joedsonalves/vacuon/releases/latest/download/vacuon-cli.exe)
+is the same core without a window, for scripting. Put it somewhere on your `PATH` and see
+[the CLI section](#gui-and-command-line).
+
+Or let winget place it for you, once the package is accepted — it installs the app and puts a
+`vacuon` command on your `PATH`:
+
+```powershell
+winget install Joedsonalves.Vacuon
+```
 
 ### Build it yourself
 
