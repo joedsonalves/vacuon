@@ -12,7 +12,6 @@ e nunca afirma um número que não mediu.
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-187-3FB950.svg)](tests)
 
 **Português (Brasil)** · [English](README.md)
 
@@ -102,7 +101,7 @@ Três perguntas, respondidas em segundos:
 
 E uma quarta, que quase nenhum utilitário de disco responde: **tem alguma coisa estranha se alojando na minha máquina?**
 
-> **v0.2.0 — marcos M1 e M2.** Somente leitura: o Vacuon mede, explica e mostra. Ele **ainda não apaga nada** — exclusão e quarentena reversível chegam no M4, porque um app que apaga arquivos tem exatamente uma chance de errar. O roteiro completo está no [PRD.md](PRD.md).
+> **v0.2.0 — marcos M1 e M2.** Somente leitura: o Vacuon mede, explica e mostra. Ele **ainda não apaga nada** — exclusão e quarentena reversível chegam no M4, porque um app que apaga arquivos tem exatamente uma chance de errar.
 
 ---
 
@@ -363,7 +362,7 @@ Códigos de saída: `0` sucesso · `1` sucesso parcial · `2` erro de argumento 
 - **O volume é aberto somente para leitura.** `GENERIC_READ`, nunca `GENERIC_WRITE`.
 - **O scanner de registro não escreve.** Todas as chaves são abertas com `writable: false`.
 - **Nada é executado.** Autoruns suspeitos são exibidos como texto, jamais invocados.
-- **Nunca haverá "limpeza de registro"**: ganho de espaço nulo, risco alto. Está nos [não-objetivos](PRD.md#32-não-objetivos-explicitamente-fora-do-escopo), junto com tweaks de sistema e "PC Health Score".
+- **Nunca haverá "limpeza de registro"**: ganho de espaço nulo, risco alto. É um não-objetivo explícito, junto com tweaks de sistema e "PC Health Score".
 
 Detalhes em [SECURITY.md](SECURITY.md).
 
@@ -427,8 +426,6 @@ Se você for escrever um leitor de MFT ou temas em WPF, estas custam caro:
 10. **A barra de título é do Windows.** Sem `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, o tema escuro fica com uma faixa branca no topo.
 11. **`GridViewRowPresenter` exige um `GridView`.** Reusar o estilo de linha de um `ListView` com colunas em outro sem `View` faz o item simplesmente não aparecer.
 12. **Um recurso chamado `Strings.en-US.json` vira assembly satélite.** Ele casa com o padrão `nome.cultura.extensão`, então o MSBuild infere a cultura e manda o arquivo para `bin\en-US\*.resources.dll` em vez do assembly principal. O build passa, `GetManifestResourceStream` devolve null e a interface inteira aparece como `[chave]`. `WithCulture="false"` é obrigatório — e há um teste guardando isso.
-
-A lista completa está no [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 
 ## Contribuindo
 
