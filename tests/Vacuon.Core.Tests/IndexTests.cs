@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -234,23 +235,42 @@ public class VolumeIndexTests
         Assert.Equal(".mp4", buckets[0].Extension);
         Assert.Equal(3000, buckets[0].TotalBytes);
         Assert.Equal(2, buckets[0].Count);
-        Assert.Equal("Vídeo", buckets[0].Category);
+        Assert.Equal(FileCategories.Video, buckets[0].CategoryKey);
     }
 }
 
 public class FileCategoriesTests
 {
     [Theory]
-    [InlineData("filme.mkv", "Vídeo")]
-    [InlineData("foto.HEIC", "Imagem")]
-    [InlineData("musica.flac", "Áudio")]
-    [InlineData("relatorio.pdf", "Documento")]
-    [InlineData("backup.7z", "Compactado")]
-    [InlineData("maquina.vhdx", "Imagem de disco / VM")]
-    [InlineData("desconhecido.qqq", "Outro")]
-    public void Of_ClassifiesByExtension(string fileName, string expected)
+    [InlineData("filme.mkv", FileCategories.Video)]
+    [InlineData("foto.HEIC", FileCategories.Image)]
+    [InlineData("musica.flac", FileCategories.Audio)]
+    [InlineData("relatorio.pdf", FileCategories.Document)]
+    [InlineData("backup.7z", FileCategories.Archive)]
+    [InlineData("maquina.vhdx", FileCategories.Disk)]
+    [InlineData("desconhecido.qqq", FileCategories.Other)]
+    public void Of_ClassifiesByExtension(string fileName, string expectedKey)
     {
-        Assert.Equal(expected, FileCategories.Of(fileName.AsSpan()));
+        // Compara a CHAVE, não o texto exibido: o texto muda com o idioma e o teste
+        // passaria a depender de qual tradução está ativa.
+        Assert.Equal(expectedKey, FileCategories.Of(fileName.AsSpan()));
+    }
+
+    [Fact]
+    public void DisplayName_UsesTheActiveLanguage()
+    {
+        try
+        {
+            L.Use(AppLanguage.English);
+            Assert.Equal("Disk image / VM", FileCategories.DisplayNameOf("maquina.vhdx".AsSpan()));
+
+            L.Use(AppLanguage.Portuguese);
+            Assert.Equal("Imagem de disco / VM", FileCategories.DisplayNameOf("maquina.vhdx".AsSpan()));
+        }
+        finally
+        {
+            L.Use(AppLanguage.English);
+        }
     }
 
     [Fact]

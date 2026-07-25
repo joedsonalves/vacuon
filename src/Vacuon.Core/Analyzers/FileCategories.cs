@@ -1,40 +1,56 @@
+using Vacuon.Core.Localization;
+
 namespace Vacuon.Core.Analyzers;
 
 /// <summary>
 /// Classificação de arquivos por categoria. Além de colorir o treemap, é o que decide
 /// se um item ganha miniatura do conteúdo ou o ícone padrão do tipo (PRD F6.5).
+/// <para>
+/// A categoria é identificada por uma <b>chave estável</b> (<c>category.video</c>), não
+/// pelo texto exibido: assim comparações, cores e testes não quebram quando o idioma
+/// muda. O nome legível sai de <see cref="DisplayName"/>.
+/// </para>
 /// </summary>
 public static class FileCategories
 {
-    public const string Video = "Vídeo";
-    public const string Image = "Imagem";
-    public const string Audio = "Áudio";
-    public const string Document = "Documento";
-    public const string Archive = "Compactado";
-    public const string Installer = "Instalador";
-    public const string Code = "Código";
-    public const string Executable = "Executável";
-    public const string Build = "Artefato de build";
-    public const string Disk = "Imagem de disco / VM";
-    public const string Database = "Banco de dados";
-    public const string Font = "Fonte";
-    public const string Log = "Log / temporário";
-    public const string Other = "Outro";
+    public const string Video = "category.video";
+    public const string Image = "category.image";
+    public const string Audio = "category.audio";
+    public const string Document = "category.document";
+    public const string Archive = "category.archive";
+    public const string Installer = "category.installer";
+    public const string Code = "category.code";
+    public const string Executable = "category.executable";
+    public const string Build = "category.build";
+    public const string Disk = "category.disk";
+    public const string Database = "category.database";
+    public const string Font = "category.font";
+    public const string Log = "category.log";
+    public const string Other = "category.other";
+
+    public const string NoExtension = "category.noExtension";
 
     private static readonly Dictionary<string, string> Map = BuildMap();
 
+    /// <summary>Chave da categoria da extensão informada.</summary>
     public static string Of(string extension) =>
         Map.TryGetValue(extension, out string? category) ? category : Other;
 
     public static string Of(ReadOnlySpan<char> fileName) =>
         Of(SizeAnalyzer.ExtractExtension(fileName));
 
+    /// <summary>Nome da categoria no idioma ativo.</summary>
+    public static string DisplayName(string categoryKey) => L.T(categoryKey);
+
+    /// <summary>Nome da categoria de um arquivo, direto do nome dele.</summary>
+    public static string DisplayNameOf(ReadOnlySpan<char> fileName) => L.T(Of(fileName));
+
     /// <summary>
     /// Categorias que ganham miniatura do próprio conteúdo. As demais recebem o ícone
     /// do tipo, resolvido pelo Shell do Windows.
     /// </summary>
-    public static bool HasContentThumbnail(string category) =>
-        category is Video or Image or Document;
+    public static bool HasContentThumbnail(string categoryKey) =>
+        categoryKey is Video or Image or Document;
 
     private static Dictionary<string, string> BuildMap()
     {

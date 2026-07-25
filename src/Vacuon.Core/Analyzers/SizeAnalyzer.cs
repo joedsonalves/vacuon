@@ -1,4 +1,5 @@
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Analyzers;
 
@@ -6,14 +7,34 @@ public readonly record struct SizedItem(int Index, long LogicalSize, long SizeOn
 
 public readonly record struct ExtensionBucket(string Extension, long TotalBytes, int Count)
 {
-    public string Category => FileCategories.Of(Extension);
+    /// <summary>Chave estável da categoria — use para cor e comparação.</summary>
+    public string CategoryKey => FileCategories.Of(Extension);
+
+    /// <summary>Nome da categoria no idioma ativo.</summary>
+    public string Category => FileCategories.DisplayName(CategoryKey);
+
+    /// <summary>
+    /// Extensão como texto. Arquivos sem extensão carregam uma chave de tradução em
+    /// vez de um literal, então este é o único lugar que precisa saber disso.
+    /// </summary>
+    public string DisplayExtension =>
+        Extension == FileCategories.NoExtension ? L.T(FileCategories.NoExtension) : Extension;
 }
 
 /// <summary>Faixas de tamanho — responde "arquivos pequenos que atrapalham" (PRD F2.7).</summary>
-public readonly record struct SizeBucket(string Label, long MinBytes, long MaxBytes, int Count, long TotalBytes, long SlackBytes);
+public readonly record struct SizeBucket(string LabelKey, long MinBytes, long MaxBytes,
+                                         int Count, long TotalBytes, long SlackBytes)
+{
+    /// <summary>Rótulo no idioma ativo. Resolvido na leitura, não na construção,
+    /// para que trocar o idioma não exija revarrer o disco.</summary>
+    public string Label => L.T(LabelKey);
+}
 
 /// <summary>Faixas de idade por último acesso/escrita (PRD F2.6).</summary>
-public readonly record struct AgeBucket(string Label, int Count, long TotalBytes);
+public readonly record struct AgeBucket(string LabelKey, int Count, long TotalBytes)
+{
+    public string Label => L.T(LabelKey);
+}
 
 /// <summary>
 /// Consultas de tamanho sobre o índice. Tudo em passada linear sobre arrays planos,
@@ -92,17 +113,17 @@ public static class SizeAnalyzer
 
     public static List<SizeBucket> BySizeRange(VolumeIndex index)
     {
-        (string Label, long Max)[] ranges =
+        (string Key, long Max)[] ranges =
         [
-            ("0 B (vazio)",     0),
-            ("1 B – 4 KB",      4L * 1024),
-            ("4 KB – 64 KB",    64L * 1024),
-            ("64 KB – 1 MB",    1024L * 1024),
-            ("1 MB – 16 MB",    16L * 1024 * 1024),
-            ("16 MB – 128 MB",  128L * 1024 * 1024),
-            ("128 MB – 1 GB",   1024L * 1024 * 1024),
-            ("1 GB – 8 GB",     8L * 1024 * 1024 * 1024),
-            ("acima de 8 GB",   long.MaxValue),
+            ("sizeBucket.empty",     0),
+            ("sizeBucket.tiny",      4L * 1024),
+            ("sizeBucket.small",     64L * 1024),
+            ("sizeBucket.medium",    1024L * 1024),
+            ("sizeBucket.large",     16L * 1024 * 1024),
+            ("sizeBucket.big",       128L * 1024 * 1024),
+            ("sizeBucket.huge",      1024L * 1024 * 1024),
+            ("sizeBucket.giant",     8L * 1024 * 1024 * 1024),
+            ("sizeBucket.colossal",  long.MaxValue),
         ];
 
         var counts = new int[ranges.Length];
@@ -128,7 +149,7 @@ public static class SizeAnalyzer
         long min = 0;
         for (int i = 0; i < ranges.Length; i++)
         {
-            result.Add(new SizeBucket(ranges[i].Label, min, ranges[i].Max, counts[i], totals[i], slack[i]));
+            result.Add(new SizeBucket(ranges[i].Key, min, ranges[i].Max, counts[i], totals[i], slack[i]));
             min = ranges[i].Max + 1;
         }
         return result;
@@ -136,14 +157,14 @@ public static class SizeAnalyzer
 
     public static List<AgeBucket> ByAge(VolumeIndex index, DateTime nowUtc)
     {
-        (string Label, int Days)[] ranges =
+        (string Key, int Days)[] ranges =
         [
-            ("últimos 7 dias", 7),
-            ("7 – 30 dias", 30),
-            ("30 – 90 dias", 90),
-            ("90 dias – 1 ano", 365),
-            ("1 – 2 anos", 730),
-            ("mais de 2 anos", int.MaxValue),
+            ("ageBucket.week", 7),
+            ("ageBucket.month", 30),
+            ("ageBucket.quarter", 90),
+            ("ageBucket.year", 365),
+            ("ageBucket.twoYears", 730),
+            ("ageBucket.older", int.MaxValue),
         ];
 
         var counts = new int[ranges.Length];
@@ -167,16 +188,16 @@ public static class SizeAnalyzer
 
         var result = new List<AgeBucket>(ranges.Length);
         for (int i = 0; i < ranges.Length; i++)
-            result.Add(new AgeBucket(ranges[i].Label, counts[i], totals[i]));
+            result.Add(new AgeBucket(ranges[i].Key, counts[i], totals[i]));
         return result;
     }
 
     internal static string ExtractExtension(ReadOnlySpan<char> name)
     {
         int dot = name.LastIndexOf('.');
-        if (dot <= 0 || dot == name.Length - 1) return "(sem extensão)";
+        if (dot <= 0 || dot == name.Length - 1) return FileCategories.NoExtension;
         ReadOnlySpan<char> ext = name[(dot + 1)..];
-        if (ext.Length > 12) return "(sem extensão)"; // "extensão" absurda = provavelmente ponto no nome
+        if (ext.Length > 12) return FileCategories.NoExtension; // "extensão" absurda = ponto no nome
         return string.Concat(".", ext).ToLowerInvariant();
     }
 

@@ -28,17 +28,17 @@
 
                 <StackPanel Grid.Column="0">
                     <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                               Text="Pontos de persistência no registro"/>
+                               Text="{DynamicResource S.security.title}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
                                MaxWidth="820"
-                               Text="44 chaves onde malware costuma se alojar: Run e RunOnce, Winlogon, AppInit_DLLs, AppCertDlls, Image File Execution Options, SilentProcessExit, pacotes do LSA, Command Processor, Active Setup, BHOs, associações de arquivo e a pasta de Inicialização."/>
+                               Text="{DynamicResource S.security.intro}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
                                MaxWidth="820" Foreground="{DynamicResource Text.Muted}"
-                               Text="Somente leitura — nenhuma chave é alterada. O Vacuon não é antivírus: não existe base de assinaturas aqui, e sim heurística de comportamento com o motivo sempre à vista. Entradas legítimas aparecem na lista; leia o porquê antes de concluir qualquer coisa."/>
+                               Text="{DynamicResource S.security.disclaimer}"/>
                 </StackPanel>
 
                 <Button Grid.Column="1" Style="{StaticResource Button.Primary}" VerticalAlignment="Top"
-                        Content="Inspecionar" Command="{Binding RunSecurityScanCommand}"/>
+                        Content="{DynamicResource S.action.inspect}" Command="{Binding RunSecurityScanCommand}"/>
             </Grid>
         </Border>
 
@@ -85,7 +85,7 @@
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource Text.Muted}"
                                        Visibility="{Binding TargetPath, Converter={StaticResource NotEmpty}}">
-                                <Run Text="alvo:"/>
+                                <Run Text="{DynamicResource S.security.target}"/>
                                 <Run Text="{Binding TargetPath, Mode=OneWay}"/>
                             </TextBlock>
                         </StackPanel>
@@ -98,7 +98,7 @@
         <Border Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top" Padding="26"
                 Visibility="{Binding HasSecurityRun, Converter={StaticResource InverseVisible}}">
             <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="700"
-                       Text="Clique em Inspecionar. Sem privilégio de administrador, as chaves protegidas de HKLM e as Tarefas Agendadas ficam de fora — e o relatório diz exatamente isso em vez de dar a lista como completa."/>
+                       Text="{DynamicResource S.security.emptyHint}"/>
         </Border>
     </Grid>
 </UserControl>

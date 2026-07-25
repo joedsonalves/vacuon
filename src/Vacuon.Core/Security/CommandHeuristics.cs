@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Security;
 
@@ -161,28 +162,28 @@ public static partial class CommandHeuristics
 
         // --- PowerShell com comando codificado: quase nunca é legítimo em autorun ---
         if (EncodedPowerShell().IsMatch(lower))
-            Raise(Suspicion.HighlySuspicious, "PowerShell com comando codificado em Base64 (-EncodedCommand)");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.encodedPowerShell"));
 
         if (lower.Contains("powershell") &&
             (lower.Contains("-w hidden") || lower.Contains("-windowstyle hidden") || lower.Contains("-w h ")))
-            Raise(Suspicion.HighlySuspicious, "PowerShell iniciado com janela oculta");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.hiddenWindow"));
 
         if (lower.Contains("executionpolicy bypass") || lower.Contains("-ep bypass") || lower.Contains("-exec bypass"))
-            Raise(Suspicion.HighlySuspicious, "Política de execução do PowerShell contornada (Bypass)");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.policyBypass"));
 
         if (lower.Contains("downloadstring") || lower.Contains("downloadfile") ||
             lower.Contains("invoke-webrequest") || lower.Contains("iwr ") || lower.Contains("invoke-expression"))
-            Raise(Suspicion.HighlySuspicious, "Baixa e executa conteúdo da internet");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.downloadAndRun"));
 
         // --- Download direto na linha de comando ---
         if (UrlInCommand().IsMatch(lower))
-            Raise(Suspicion.Suspicious, "URL embutida na linha de comando do autorun");
+            Raise(Suspicion.Suspicious, L.T("heuristic.urlInCommand"));
 
         // --- Binários do próprio Windows usados como intermediário ---
         foreach (string lolbin in AlwaysSuspiciousBinaries)
         {
             if (!lower.Contains(lolbin)) continue;
-            Raise(Suspicion.HighlySuspicious, $"Usa {lolbin} como intermediário (técnica de living-off-the-land)");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.lolbin", lolbin));
             break;
         }
 
@@ -193,16 +194,16 @@ public static partial class CommandHeuristics
             foreach (string lolbin in ContextualBinaries)
             {
                 if (!lower.Contains(lolbin)) continue;
-                Raise(Suspicion.Suspicious, $"Usa {lolbin} como intermediário fora do diretório do sistema");
+                Raise(Suspicion.Suspicious, L.T("heuristic.lolbinOutside", lolbin));
                 break;
             }
         }
 
         if (lower.Contains("certutil") && (lower.Contains("-decode") || lower.Contains("-urlcache")))
-            Raise(Suspicion.HighlySuspicious, "certutil usado para decodificar ou baixar arquivo");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.certutil"));
 
         if (lower.Contains("rundll32") && (lower.Contains("javascript:") || lower.Contains("vbscript:")))
-            Raise(Suspicion.HighlySuspicious, "rundll32 executando script embutido");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.rundllScript"));
 
         // --- Localização do alvo ---
         if (!string.IsNullOrEmpty(normalizedTarget))
@@ -210,19 +211,19 @@ public static partial class CommandHeuristics
             foreach ((string folder, Suspicion folderLevel) in VolatileFolders)
             {
                 if (!normalizedTarget.Contains(folder, StringComparison.Ordinal)) continue;
-                Raise(folderLevel, $"Executável fica em pasta volátil ({folder.Trim('\\')})");
+                Raise(folderLevel, L.T("heuristic.volatileFolder", folder.Trim('\\')));
                 break;
             }
 
             // Script interpretado direto do perfil do usuário
             if (ScriptInUserProfile().IsMatch(normalizedTarget))
-                Raise(Suspicion.Suspicious, "Autorun aponta para um script (vbs/js/ps1/bat) no perfil do usuário");
+                Raise(Suspicion.Suspicious, L.T("heuristic.scriptInProfile"));
         }
 
         // --- Nome do executável tentando parecer do sistema ---
         string fileName = Path.GetFileName(normalizedTarget);
         if (LooksLikeSystemBinaryTypo(fileName))
-            Raise(Suspicion.HighlySuspicious, $"Nome imita um binário do sistema ({fileName})");
+            Raise(Suspicion.HighlySuspicious, L.T("heuristic.impostorName", fileName));
 
         return (level, reasons);
     }

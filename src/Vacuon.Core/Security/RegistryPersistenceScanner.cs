@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Win32;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Security;
 
@@ -55,8 +56,8 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
                     Kind = FindingKind.RegistryAutorun,
                     Level = Suspicion.Notable,
                     Location = location.DisplayPath,
-                    Name = "(acesso negado)",
-                    Reason = "Chave não pôde ser lida sem privilégio de Administrador — execute elevado para inspecioná-la",
+                    Name = L.T("autorun.accessDenied"),
+                    Reason = L.T("autorun.accessDeniedReason"),
                 });
             }
             catch (IOException)
@@ -150,7 +151,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
                 (int)Suspicion.Suspicious,
                 Math.Max((int)cmdLevel, (int)location.BaseLevel));
 
-            reasons.Insert(0, $"Valor difere do esperado (\"{location.ExpectedValue}\")");
+            reasons.Insert(0, L.T("autorun.expectedValue", location.ExpectedValue));
 
             findings.Add(Build(location, FindingKind.RegistryHijack, level, name, value, targetPath, reasons));
             return 1;
@@ -177,7 +178,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             if (string.IsNullOrWhiteSpace(value)) continue;
 
             var scoped = location with { SubKey = $@"{location.SubKey}\{subName}" };
-            Consider(scoped, location.ValueName ?? "(padrão)", value, findings, subName);
+            Consider(scoped, location.ValueName ?? L.T("autorun.defaultValue"), value, findings, subName);
         }
 
         return count;
@@ -224,7 +225,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             {
                 // Autorun apontando para o nada: ou é resto de desinstalação (lixo a limpar),
                 // ou é malware que já foi removido pela metade.
-                reasons.Add("O arquivo apontado não existe — autorun órfão");
+                reasons.Add(L.T("autorun.orphan"));
                 if (level < Suspicion.Notable) level = Suspicion.Notable;
             }
             else if (_options.CheckSignatures && signer is null && IsExecutable(resolved)
@@ -232,12 +233,12 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             {
                 // Fora do diretório do sistema, a ausência de assinatura embutida vale
                 // como sinal. Dentro dele não vale: o Windows assina por catálogo.
-                reasons.Add("Binário sem assinatura digital válida");
+                reasons.Add(L.T("autorun.unsigned"));
                 if (level < Suspicion.Notable) level = Suspicion.Notable;
             }
         }
 
-        if (context is not null) reasons.Add($"Entrada: {context}");
+        if (context is not null) reasons.Add(L.T("autorun.entry", context));
 
         if (level == Suspicion.Normal && !_options.IncludeNormal) return;
 
@@ -259,7 +260,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             Kind = kind,
             Level = level,
             Location = location.DisplayPath,
-            Name = string.IsNullOrEmpty(name) ? "(padrão)" : name,
+            Name = string.IsNullOrEmpty(name) ? L.T("autorun.defaultValue") : name,
             Value = value,
             Reason = reasons.Count > 0
                 ? string.Join(" · ", reasons)
@@ -277,9 +278,9 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             Kind = FindingKind.RegistryAutorun,
             Level = Suspicion.Normal,
             Location = location.DisplayPath,
-            Name = string.IsNullOrEmpty(name) ? "(padrão)" : name,
+            Name = string.IsNullOrEmpty(name) ? L.T("autorun.defaultValue") : name,
             Value = value,
-            Reason = "Valor esperado, nada a fazer",
+            Reason = L.T("autorun.asExpected"),
         });
 
     private int InspectStartupFolders(List<SecurityFinding> findings)
@@ -309,16 +310,16 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
                 if (ext is ".vbs" or ".vbe" or ".js" or ".jse" or ".bat" or ".cmd" or ".ps1" or ".hta" or ".wsf")
                 {
                     level = Suspicion.Suspicious;
-                    reasons.Add($"Script ({ext}) na pasta de Inicialização");
+                    reasons.Add(L.T("startup.script", ext));
                 }
                 else if (ext == ".lnk")
                 {
-                    reasons.Add("Atalho na pasta de Inicialização");
+                    reasons.Add(L.T("startup.shortcut"));
                 }
                 else if (ext is ".exe" or ".scr" or ".com" or ".pif")
                 {
                     level = Suspicion.Notable;
-                    reasons.Add("Executável colocado direto na pasta de Inicialização (o normal é um atalho)");
+                    reasons.Add(L.T("startup.bareExecutable"));
                 }
 
                 if (level == Suspicion.Normal && !_options.IncludeNormal) continue;
@@ -330,7 +331,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
                     Location = folder,
                     Name = name,
                     Value = file,
-                    Reason = reasons.Count > 0 ? string.Join(" · ", reasons) : "Item de inicialização",
+                    Reason = reasons.Count > 0 ? string.Join(" · ", reasons) : L.T("startup.item"),
                     TargetPath = file,
                     TargetExists = true,
                 });
@@ -361,8 +362,8 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
                 Kind = FindingKind.ScheduledTask,
                 Level = Suspicion.Notable,
                 Location = tasksRoot,
-                Name = "(acesso negado)",
-                Reason = "Tarefas agendadas exigem Administrador para serem lidas",
+                Name = L.T("autorun.accessDenied"),
+                Reason = L.T("autorun.accessDeniedReason"),
             });
             return 0;
         }
@@ -386,7 +387,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
             {
                 Kind = FindingKind.ScheduledTask,
                 Level = level,
-                Location = @"Tarefas Agendadas",
+                Location = @L.T("security.scheduledTasks"),
                 Name = relative,
                 Value = file,
                 Reason = string.Join(" · ", reasons),
@@ -448,7 +449,7 @@ public sealed class RegistryPersistenceScanner(SecurityScanOptions? options = nu
         null => string.Empty,
         string s => s,
         string[] arr => string.Join(" ; ", arr),
-        byte[] bytes => $"(binário, {bytes.Length} bytes)",
+        byte[] bytes => L.T("autorun.binary", bytes.Length),
         _ => raw.ToString() ?? string.Empty,
     };
 }

@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Security;
 
@@ -25,7 +26,17 @@ public sealed record AutorunLocation
 {
     public required RegistryHive Hive { get; init; }
     public required string SubKey { get; init; }
-    public required string Description { get; init; }
+
+    /// <summary>Chave de tradução da descrição, não o texto em si.</summary>
+    public required string DescriptionKey { get; init; }
+
+    /// <summary>Argumentos de formatação da descrição, quando ela tem {0}.</summary>
+    public object?[] DescriptionArgs { get; init; } = [];
+
+    /// <summary>Descrição no idioma ativo.</summary>
+    public string Description => DescriptionArgs.Length == 0
+        ? L.T(DescriptionKey)
+        : L.T(DescriptionKey, DescriptionArgs);
     public AutorunShape Shape { get; init; } = AutorunShape.ValuesAreCommands;
 
     /// <summary>Para <see cref="AutorunShape.NamedValue"/> / <see cref="AutorunShape.SubkeysWithValue"/>.</summary>
@@ -82,20 +93,20 @@ public static class AutorunLocations
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\Run",
-                Description = "Programas iniciados junto com o Windows",
+                DescriptionKey = "autorun.run",
             });
             list.Add(new AutorunLocation
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce",
-                Description = "Executa uma vez no próximo logon e se apaga",
+                DescriptionKey = "autorun.runOnce",
                 BaseLevel = Suspicion.Notable,
             });
             list.Add(new AutorunLocation
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnceEx",
-                Description = "Variante do RunOnce, raramente usada por software legítimo",
+                DescriptionKey = "autorun.runOnceEx",
                 BaseLevel = Suspicion.Suspicious,
                 PresenceIsTheSignal = true,
             });
@@ -103,7 +114,7 @@ public static class AutorunLocations
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\RunServices",
-                Description = "Autorun herdado do Windows 9x; software moderno não usa",
+                DescriptionKey = "autorun.runServices",
                 BaseLevel = Suspicion.Suspicious,
                 PresenceIsTheSignal = true,
             });
@@ -111,7 +122,7 @@ public static class AutorunLocations
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\RunServicesOnce",
-                Description = "Autorun herdado do Windows 9x, execução única",
+                DescriptionKey = "autorun.runServicesOnce",
                 BaseLevel = Suspicion.Suspicious,
                 PresenceIsTheSignal = true,
             });
@@ -119,7 +130,7 @@ public static class AutorunLocations
             {
                 Hive = hive,
                 SubKey = @"Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run",
-                Description = "Autorun por política de grupo — fora de domínio, é bandeira vermelha",
+                DescriptionKey = "autorun.policiesRun",
                 BaseLevel = Suspicion.Suspicious,
                 PresenceIsTheSignal = true,
             });
@@ -127,7 +138,7 @@ public static class AutorunLocations
             {
                 Hive = hive,
                 SubKey = @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
-                Description = "Autorun de aplicativos 32 bits",
+                DescriptionKey = "autorun.run32",
                 IsWow64View = true,
             });
         }
@@ -144,7 +155,7 @@ public static class AutorunLocations
             ValueName = "Shell",
             ExpectedValue = "explorer.exe",
             Shape = AutorunShape.NamedValue,
-            Description = "Shell do Windows. Qualquer coisa diferente de explorer.exe é sequestro",
+            DescriptionKey = "autorun.winlogonShell",
             BaseLevel = Suspicion.Notable,
         });
         list.Add(new AutorunLocation
@@ -154,7 +165,7 @@ public static class AutorunLocations
             ValueName = "Userinit",
             ExpectedValue = @"C:\Windows\system32\userinit.exe,",
             Shape = AutorunShape.NamedValue,
-            Description = "Processo de inicialização do usuário. Comandos extras aqui rodam a cada logon",
+            DescriptionKey = "autorun.winlogonUserinit",
             BaseLevel = Suspicion.Notable,
         });
         list.Add(new AutorunLocation
@@ -163,7 +174,7 @@ public static class AutorunLocations
             SubKey = winlogon,
             ValueName = "Taskman",
             Shape = AutorunShape.NamedValue,
-            Description = "Gerenciador de tarefas alternativo. Normalmente não existe",
+            DescriptionKey = "autorun.winlogonTaskman",
             BaseLevel = Suspicion.Suspicious,
             PresenceIsTheSignal = true,
         });
@@ -173,7 +184,7 @@ public static class AutorunLocations
             SubKey = winlogon + @"\Notify",
             Shape = AutorunShape.SubkeysWithValue,
             ValueName = "DllName",
-            Description = "DLLs notificadas em eventos de logon",
+            DescriptionKey = "autorun.winlogonNotify",
             BaseLevel = Suspicion.Suspicious,
             PresenceIsTheSignal = true,
         });
@@ -188,7 +199,7 @@ public static class AutorunLocations
             ValueName = "AppInit_DLLs",
             ExpectedValue = "",
             Shape = AutorunShape.NamedValue,
-            Description = "DLLs carregadas em TODO processo que usa user32.dll. Deve estar vazio",
+            DescriptionKey = "autorun.appInitDlls",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -200,7 +211,7 @@ public static class AutorunLocations
             ExpectedValue = "",
             Shape = AutorunShape.NamedValue,
             IsWow64View = true,
-            Description = "AppInit_DLLs na visão 32 bits. Deve estar vazio",
+            DescriptionKey = "autorun.appInitDlls32",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -210,7 +221,7 @@ public static class AutorunLocations
             SubKey = @"System\CurrentControlSet\Control\Session Manager",
             ValueName = "AppCertDlls",
             Shape = AutorunShape.NamedValue,
-            Description = "DLLs carregadas em toda criação de processo. Normalmente não existe",
+            DescriptionKey = "autorun.appCertDlls",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -221,7 +232,7 @@ public static class AutorunLocations
             ValueName = "BootExecute",
             ExpectedValue = "autocheck autochk *",
             Shape = AutorunShape.NamedValue,
-            Description = "Executado pelo gerenciador de sessão antes do logon",
+            DescriptionKey = "autorun.bootExecute",
         });
 
         // ---------------------------------------------------------------
@@ -233,7 +244,7 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options",
             Shape = AutorunShape.SubkeysWithValue,
             ValueName = "Debugger",
-            Description = "Depurador anexado a um executável: rodar o programa X roda o programa Y",
+            DescriptionKey = "autorun.ifeoDebugger",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -243,7 +254,7 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Windows NT\CurrentVersion\SilentProcessExit",
             Shape = AutorunShape.SubkeysWithValue,
             ValueName = "MonitorProcess",
-            Description = "Processo disparado quando outro encerra — técnica de persistência",
+            DescriptionKey = "autorun.silentProcessExit",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -259,7 +270,8 @@ public static class AutorunLocations
                 SubKey = @"System\CurrentControlSet\Control\Lsa",
                 ValueName = v,
                 Shape = AutorunShape.NamedValue,
-                Description = $"{v}: DLLs carregadas pelo LSASS. Alvo clássico de roubo de credencial",
+                DescriptionKey = "autorun.lsaPackage",
+                DescriptionArgs = [v],
             });
         }
 
@@ -288,7 +300,8 @@ public static class AutorunLocations
                 ValueName = "",
                 ExpectedValue = expected,
                 Shape = AutorunShape.NamedValue,
-                Description = $"Comando de abertura de {cls}. Alterado, roda malware junto com qualquer arquivo do tipo",
+                DescriptionKey = "autorun.fileAssociation",
+                DescriptionArgs = [cls],
                 BaseLevel = Suspicion.Notable,
             });
         }
@@ -299,7 +312,7 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Command Processor",
             ValueName = "AutoRun",
             Shape = AutorunShape.NamedValue,
-            Description = "Comando executado em toda abertura do cmd.exe",
+            DescriptionKey = "autorun.commandProcessor",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -309,7 +322,7 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Command Processor",
             ValueName = "AutoRun",
             Shape = AutorunShape.NamedValue,
-            Description = "Comando executado em toda abertura do cmd.exe (usuário atual)",
+            DescriptionKey = "autorun.commandProcessorUser",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });
@@ -323,19 +336,19 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Browser Helper Objects",
             Shape = AutorunShape.SubkeysWithValue,
             ValueName = "",
-            Description = "Browser Helper Objects (Internet Explorer). Vetor histórico de adware",
+            DescriptionKey = "autorun.bho",
         });
         list.Add(new AutorunLocation
         {
             Hive = RegistryHive.LocalMachine,
             SubKey = @"Software\Microsoft\Windows\CurrentVersion\ShellServiceObjectDelayLoad",
-            Description = "Objetos COM carregados pelo Explorer na inicialização",
+            DescriptionKey = "autorun.shellServiceObject",
         });
         list.Add(new AutorunLocation
         {
             Hive = RegistryHive.LocalMachine,
             SubKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\SharedTaskScheduler",
-            Description = "Tarefas compartilhadas do Explorer",
+            DescriptionKey = "autorun.sharedTaskScheduler",
             BaseLevel = Suspicion.Suspicious,
             PresenceIsTheSignal = true,
         });
@@ -345,7 +358,7 @@ public static class AutorunLocations
             SubKey = @"Software\Microsoft\Active Setup\Installed Components",
             Shape = AutorunShape.SubkeysWithValue,
             ValueName = "StubPath",
-            Description = "Active Setup: roda uma vez por usuário no primeiro logon",
+            DescriptionKey = "autorun.activeSetup",
         });
 
         // ---------------------------------------------------------------
@@ -360,7 +373,7 @@ public static class AutorunLocations
                 ValueName = "Startup",
                 Shape = AutorunShape.NamedValue,
                 ValueIsFolder = true,
-                Description = "Pasta de inicialização. Redirecionar isto esconde os autoruns do usuário",
+                DescriptionKey = "autorun.startupFolder",
             });
         }
 
@@ -373,7 +386,7 @@ public static class AutorunLocations
             SubKey = @"Environment",
             ValueName = "UserInitMprLogonScript",
             Shape = AutorunShape.NamedValue,
-            Description = "Script executado no logon do usuário. Não é criado por software comum",
+            DescriptionKey = "autorun.logonScript",
             BaseLevel = Suspicion.HighlySuspicious,
             PresenceIsTheSignal = true,
         });

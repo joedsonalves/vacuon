@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Security;
 
@@ -87,13 +88,6 @@ public sealed class SuspiciousFileAnalyzer
         @"\packages\", @"\.venv\", @"\lib\python", @"\dist-packages\",
     ];
 
-    /// <summary>
-    /// Texto do sinal "executável novo no System32". É comparado como marcador para
-    /// que esse achado sobreviva às exclusões por pasta — daí ser uma constante e não
-    /// uma string literal espalhada.
-    /// </summary>
-    private const string RecentSystem32Signal = "executável criado em System32 nos últimos 30 dias";
-
     /// <summary>Caracteres Unicode de override bidirecional — usados para inverter a extensão visível.</summary>
     private const char RightToLeftOverride = '‮';
     private const char LeftToRightOverride = '‭';
@@ -114,31 +108,27 @@ public sealed class SuspiciousFileAnalyzer
             ReadOnlySpan<char> name = index.GetName(i);
             if (name.IsEmpty) continue;
 
-            (Suspicion level, string? reason) = Evaluate(name, e, index.GetAdsBytes(i));
-            if (level == Suspicion.Normal) continue;
+            Verdict verdict = Evaluate(name, e, index.GetAdsBytes(i));
+            if (verdict.Level == Suspicion.Normal) continue;
 
             string path = index.GetFullPath(i);
 
             // Refina com o caminho, que só existe depois de materializado.
-            (level, reason) = RefineWithPath(path, name, e, level, reason!);
-            if (level == Suspicion.Normal) continue;
+            verdict = RefineWithPath(path, name, e, verdict);
+            if (verdict.Level == Suspicion.Normal) continue;
 
-            // O caractere RLO no nome não tem uso legítimo em lugar nenhum, nem dentro
-            // de node_modules — esse sinal sobrevive às exclusões por pasta.
             // Dois sinais atravessam as exclusões por pasta, porque não têm explicação
-            // inocente em lugar nenhum: o caractere RLO no nome, e um executável
-            // recém-criado dentro do System32.
-            bool survivesFolderExclusions =
-                reason!.Contains("RLO", StringComparison.Ordinal) ||
-                reason.Contains(RecentSystem32Signal, StringComparison.Ordinal);
-
-            if (!survivesFolderExclusions && (IsInsideDependencyFolder(path)
-                                           || IsSystemGenerated(path)
-                                           || IsShippedWithWindows(path))) continue;
+            // inocente em lugar nenhum: o caractere RLO no nome e um executável
+            // recém-criado dentro do System32. A decisão é uma FLAG, não uma busca de
+            // substring no motivo — o motivo é texto traduzido, e amarrar lógica a ele
+            // quebraria em silêncio na hora de trocar o idioma.
+            if (!verdict.SurvivesFolderExclusions && (IsInsideDependencyFolder(path)
+                                                   || IsSystemGenerated(path)
+                                                   || IsShippedWithWindows(path))) continue;
 
             e.Flags |= EntryFlags.Suspicious;
 
-            results.Add(new SuspiciousFile(i, path, level, reason!, e.LogicalSize, e.LastWrite));
+            results.Add(new SuspiciousFile(i, path, verdict.Level, verdict.Reason, e.LogicalSize, e.LastWrite));
         }
 
         results.Sort(static (a, b) =>
@@ -150,16 +140,25 @@ public sealed class SuspiciousFileAnalyzer
         return results.Count > maxResults ? results.GetRange(0, maxResults) : results;
     }
 
+    /// <summary>
+    /// Veredito de uma heurística: nível, motivo já traduzido, e se o achado sobrevive
+    /// às exclusões por pasta.
+    /// </summary>
+    private readonly record struct Verdict(Suspicion Level, string Reason, bool SurvivesFolderExclusions = false)
+    {
+        public static Verdict None => new(Suspicion.Normal, string.Empty);
+    }
+
     /// <summary>Sinais que dependem só do nome e dos atributos.</summary>
-    private static (Suspicion, string?) Evaluate(ReadOnlySpan<char> name, in FileEntry entry, long adsBytes)
+    private static Verdict Evaluate(ReadOnlySpan<char> name, in FileEntry entry, long adsBytes)
     {
         // --- Override bidirecional: "fatura‮gpj.exe" aparece como "fatura exe.jpg" ---
         foreach (char c in name)
         {
             if (c is RightToLeftOverride or LeftToRightOverride or RightToLeftMark)
             {
-                return (Suspicion.HighlySuspicious,
-                    "Nome contém caractere Unicode de inversão de texto (RLO) — truque clássico para esconder a extensão real");
+                return new Verdict(Suspicion.HighlySuspicious, L.T("file.rlo"),
+                                   SurvivesFolderExclusions: true);
             }
         }
 
@@ -174,29 +173,26 @@ public sealed class SuspiciousFileAnalyzer
 
             if (inner.Length > 0 && Array.IndexOf(DecoyExtensions, inner) >= 0)
             {
-                return (Suspicion.HighlySuspicious,
-                    $"Extensão dupla: parece um arquivo {inner} mas é executável ({ext})");
+                return new Verdict(Suspicion.HighlySuspicious, L.T("file.doubleExtension", inner, ext));
             }
 
             // --- Espaços para empurrar a extensão real para fora da vista ---
             if (lower.Contains("      ", StringComparison.Ordinal))
             {
-                return (Suspicion.HighlySuspicious,
-                    "Sequência longa de espaços no nome, escondendo a extensão executável");
+                return new Verdict(Suspicion.HighlySuspicious, L.T("file.spacePadding"));
             }
         }
 
         // --- Executável oculto ---
         if (IsExecutableExtension(ext) && (entry.Flags & EntryFlags.Hidden) != 0)
         {
-            return (Suspicion.Suspicious, $"Executável ({ext}) com atributo oculto");
+            return new Verdict(Suspicion.Suspicious, L.T("file.hiddenExecutable", ext));
         }
 
         // --- Executável com ADS: o stream extra pode carregar um segundo binário ---
         if (IsExecutableExtension(ext) && (entry.Flags & EntryFlags.HasAds) != 0 && adsBytes > 4096)
         {
-            return (Suspicion.Suspicious,
-                $"Executável com Alternate Data Stream de {adsBytes / 1024} KB — conteúdo invisível no Explorer");
+            return new Verdict(Suspicion.Suspicious, L.T("file.executableWithAds", adsBytes / 1024));
         }
 
         // --- Extensões que praticamente só existem em campanha de phishing ---
@@ -204,16 +200,15 @@ public sealed class SuspiciousFileAnalyzer
         // Ribbons.scr são protetores de tela que vêm com o sistema.
         if (ext is ".scr" or ".pif" or ".hta" or ".jse" or ".vbe" or ".wsh")
         {
-            return (Suspicion.Suspicious,
-                $"Extensão {ext} é rara em software legítimo e comum em anexos maliciosos");
+            return new Verdict(Suspicion.Suspicious, L.T("file.phishingExtension", ext));
         }
 
-        return (Suspicion.Normal, null);
+        return Verdict.None;
     }
 
     /// <summary>Sinais que dependem de onde o arquivo está.</summary>
-    private static (Suspicion, string) RefineWithPath(string path, ReadOnlySpan<char> name,
-                                                      in FileEntry entry, Suspicion level, string reason)
+    private static Verdict RefineWithPath(string path, ReadOnlySpan<char> name,
+                                          in FileEntry entry, Verdict verdict)
     {
         string lowerPath = path.ToLowerInvariant();
 
@@ -221,15 +216,21 @@ public sealed class SuspiciousFileAnalyzer
         {
             if (!lowerPath.Contains(folder, StringComparison.Ordinal)) continue;
 
+            string label = folder.Trim('\\');
+
             // Executável em pasta volátil sozinho é ruído (instaladores vivem em Downloads).
             // Combinado com outro sinal, sobe o nível.
-            if (level >= Suspicion.Suspicious)
+            if (verdict.Level >= Suspicion.Suspicious)
             {
-                return ((Suspicion)Math.Min((int)Suspicion.HighlySuspicious, (int)level + 1),
-                        $"{reason} · localizado em pasta volátil ({folder.Trim('\\')})");
+                var escalated = (Suspicion)Math.Min((int)Suspicion.HighlySuspicious, (int)verdict.Level + 1);
+                return verdict with
+                {
+                    Level = escalated,
+                    Reason = L.T("file.escalatedVolatile", verdict.Reason, label),
+                };
             }
 
-            return (level, $"{reason} · em {folder.Trim('\\')}");
+            return verdict with { Reason = L.T("file.inVolatileFolder", verdict.Reason, label) };
         }
 
         // Executável recém-criado dentro de System32 é um sinal forte — o diretório
@@ -239,10 +240,12 @@ public sealed class SuspiciousFileAnalyzer
             (DateTime.UtcNow - entry.Created).TotalDays < 30 &&
             IsExecutableExtension(GetExtension(name.ToString().ToLowerInvariant())))
         {
-            return (Suspicion.HighlySuspicious, $"{reason} · {RecentSystem32Signal}");
+            return new Verdict(Suspicion.HighlySuspicious,
+                               $"{verdict.Reason} · {L.T("file.recentSystem32")}",
+                               SurvivesFolderExclusions: true);
         }
 
-        return (level, reason);
+        return verdict;
     }
 
     /// <summary>

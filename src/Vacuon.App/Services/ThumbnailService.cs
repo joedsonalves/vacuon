@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Vacuon.Core.Preview;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.App.Services;
 
@@ -94,17 +95,20 @@ public sealed class ThumbnailService : IDisposable
 }
 
 /// <summary>Tamanhos de ícone oferecidos na barra de ferramentas.</summary>
-public sealed record IconSizeOption(ThumbnailSize Size, string Label)
+public sealed record IconSizeOption(ThumbnailSize Size, string LabelKey)
 {
     public static IReadOnlyList<IconSizeOption> All { get; } =
     [
-        new(ThumbnailSize.Tiny, "16 px — lista compacta"),
-        new(ThumbnailSize.Small, "32 px — lista"),
-        new(ThumbnailSize.Medium, "64 px — reconhece foto"),
-        new(ThumbnailSize.Large, "128 px — grade"),
-        new(ThumbnailSize.ExtraLarge, "256 px — frame de vídeo"),
-        new(ThumbnailSize.Huge, "512 px — antes de apagar"),
+        new(ThumbnailSize.Tiny, "icon.tiny"),
+        new(ThumbnailSize.Small, "icon.small"),
+        new(ThumbnailSize.Medium, "icon.medium"),
+        new(ThumbnailSize.Large, "icon.large"),
+        new(ThumbnailSize.ExtraLarge, "icon.extraLarge"),
+        new(ThumbnailSize.Huge, "icon.huge"),
     ];
+
+    /// <summary>Rótulo no idioma ativo — é o que o ComboBox exibe.</summary>
+    public string Label => L.T(LabelKey);
 
     public override string ToString() => Label;
 }
