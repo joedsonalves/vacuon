@@ -16,9 +16,76 @@ e nunca afirma um número que não mediu.
 
 **Português (Brasil)** · [English](README.md)
 
+[**⬇ Baixar para Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe) · portátil, 62 MB, nada para instalar
+
 <img src="docs/img/02-explorer-escuro.png" width="900" alt="Explorer do Vacuon com a árvore de pastas e a lista de arquivos">
 
 </div>
+
+---
+
+## Como começar
+
+**[⬇ Baixar o Vacuon para Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe)** — 62 MB, portátil, nada para instalar.
+
+1. Baixe o arquivo acima.
+2. Dê dois cliques. O Windows mostra uma tela azul **"O Windows protegeu o seu PC"** — o app
+   não tem assinatura digital, então esse aviso é esperado. Clique em **Mais informações** e
+   depois em **Executar assim mesmo**.
+3. Escolha uma unidade e clique em **Scan**.
+
+É isso. Sem instalador, sem .NET para instalar, sem entrada no registro. Roda de um pendrive,
+e apagar o `.exe` desinstala. A única coisa que ele grava fora de si mesmo é
+`%AppData%\Vacuon\settings.json`, que guarda o tema e o idioma.
+
+> Não quer confiar num binário sem assinatura vindo de um estranho? Instinto correto —
+> [compile você mesmo](#compilar-do-código), são três comandos. O SHA256 de cada arquivo
+> publicado está nas [notas da versão](https://github.com/joedsonalves/vacuon/releases/tag/v0.3.0).
+
+### Execute como administrador para o caminho rápido
+
+O Vacuon funciona sem privilégio nenhum: clique em **Scan** e ele lê o disco pela API do
+Windows. Na máquina onde foi desenvolvido isso levou **34 segundos** para 2,6 milhões de
+arquivos.
+
+Ler a MFT do NTFS direto leva **3 a 8 segundos por milhão de arquivos**, e o Windows só
+permite isso a um processo elevado. Dois caminhos:
+
+- clique em **Restart elevated** no canto inferior esquerdo, ou
+- ligue **Sempre abrir como administrador** nas Configurações, e ele faz isso a cada abertura.
+
+Nos dois casos o Windows exibe o UAC. Não há como contornar, e o app diz isso em vez de
+fingir o contrário. O Vacuon abre o volume **somente para leitura** — `GENERIC_READ`, nunca
+`GENERIC_WRITE`.
+
+### Linha de comando
+
+`vacuon-cli-win-x64.exe` é o mesmo núcleo sem janela, para scripts. Renomeie para
+`vacuon.exe`, coloque em algum lugar do `PATH`, e veja [a seção da CLI](#interface-gráfica-e-linha-de-comando).
+
+### Compilar do código
+
+Precisa do [SDK do .NET 10](https://dotnet.microsoft.com/download).
+
+```bash
+git clone https://github.com/joedsonalves/vacuon.git
+cd vacuon
+dotnet build -c Release
+dotnet test
+```
+
+O app sai em `src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe`. Para gerar o mesmo
+arquivo único self-contained que a release publica:
+
+```bash
+dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
+```
+
+### Requisitos
+
+Windows 10 21H2 ou mais novo, x64 (ARM64 compilando do código). NTFS para o caminho rápido;
+exFAT, FAT32, ReFS e unidades de rede funcionam pela travessia mais lenta.
 
 ---
 
@@ -209,25 +276,6 @@ Rodando contra uma máquina real, a primeira versão cuspiu 21 achados no regist
 Dois sinais atravessam todas essas exclusões, porque não têm explicação inocente em lugar nenhum: o caractere **RLO** no nome e um **executável recém-criado em System32**.
 
 Se o Vacuon marcar algo legítimo na sua máquina, [abra uma issue](../../issues/new?template=falso-positivo.yml) — o template existe só para isso.
-
-## Instalação
-
-Baixe o `.exe` da [página de releases](../../releases) — é portátil, roda de um pendrive, não instala nada.
-
-Ou compile:
-
-```bash
-git clone https://github.com/joedsonalves/vacuon.git
-cd vacuon
-dotnet build -c Release
-dotnet test
-```
-
-### Requisitos
-
-- Windows 10 21H2+ ou Windows 11 (x64 / ARM64)
-- [.NET 10 Runtime](https://dotnet.microsoft.com/download)
-- **Administrador** apenas para a leitura da MFT. O app abre sem UAC e só pede elevação quando você liga a opção nas Configurações.
 
 ## Interface gráfica e linha de comando
 
