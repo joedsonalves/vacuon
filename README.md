@@ -12,7 +12,7 @@ to delete, and never claims a number it did not measure.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
-[![Tests](https://img.shields.io/badge/tests-99-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-136-3FB950.svg)](tests)
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
@@ -34,15 +34,14 @@ Three questions, answered in seconds:
 
 And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **v0.2.0 — milestones M1 and M2.** Read-only: Vacuon measures, explains and shows. It **does not delete anything yet** — deletion and the reversible quarantine arrive in M4, because an app that deletes files gets exactly one chance to be wrong. The full roadmap lives in [PRD.md](PRD.md) (written in Portuguese).
+> **v0.3.0 — milestones M1, M2 and deletion.** Vacuon measures, explains, shows — and now deletes, to the Recycle Bin by default and permanently only when you say so. The reversible quarantine of milestone M4 is still ahead, so the Recycle Bin is the only undo today, and the app says so where it matters. The full roadmap lives in [PRD.md](PRD.md) (written in Portuguese).
 
 ---
 
 ## The screens
 
-> The screenshots are in Portuguese because that is the language the app was first built
-> in. English is now the default; every string shown below has an English counterpart, and
-> the language switch is in Settings.
+> Screenshots are taken from real runs on a real machine. A few older ones are still in
+> Portuguese; the language switch lives in Settings and English is the default.
 
 ### Dashboard — where the space is
 
@@ -73,6 +72,32 @@ Images and videos show their content; every other type shows its registered icon
 The "came from the content" label is a **verified fact**, not a guess: Vacuon asks for `SIIGBF_THUMBNAILONLY` first and only falls back to `SIIGBF_ICONONLY` when the Shell has no thumbnail. Without that split, a `.md` file with no preview handler would be announced as if the thumbnail were its content.
 
 > The files in this screenshot are synthetic (ffmpeg's `smptebars` and `testsrc`, plus generated gradients), precisely so no one's content gets published.
+
+### Deleting — Recycle Bin by default, permanent by choice
+
+<img src="docs/img/08-confirmacao-marcada.png" width="620" alt="Permanent delete confirmation">
+
+Multi-selection works on both panes: Ctrl-click and Shift-click in the file list, and a
+checkbox per folder in the tree (a WPF TreeView has no multi-selection, and the checkbox
+also makes the batch visible instead of something you hold Ctrl and hope for).
+
+- **`Del`** → Recycle Bin. Recoverable, and the default everywhere.
+- **`Shift+Del`** → permanent, gated behind an acknowledgement box.
+
+Both modes plan first and show the plan: how many items, the total size, every path, and
+which items the protection list refuses to touch. The shortcuts only fire while the list
+or the tree has focus — `Del` must not delete files while you are editing the search box.
+
+**Nothing overrides the protection list.** There is no flag, setting or argument that
+unblocks the volume root, `%WINDIR%`, System32, the Program Files folders, well-known
+profile folders, kernel-owned files (`pagefile.sys`, `hiberfil.sys`, `$MFT`), credential
+stores, or Vacuon's own directory. Paths are canonicalized first, so `\?\C:\Windows`
+and `C:\Windows\System32\..\System32` are caught too. The files *inside* a protected
+folder are still deletable — you may well want to delete a 9 GB render sitting in Videos;
+you must not be able to delete Videos itself.
+
+This arrived before milestone M4, so **the Recycle Bin is currently the only undo**, and
+the dialog says exactly that instead of implying a safety net that does not exist yet.
 
 ### Security — registry persistence points
 
@@ -244,6 +269,7 @@ Details in [SECURITY.md](SECURITY.md).
 | **M2** | **GUI: dashboard, virtualized explorer, search, light/dark themes, elevation, i18n** | ✅ |
 | M1d | Binary snapshot + incremental USN update | ⬜ |
 | M3 | Embedded player (LibVLCSharp) and media preview | ⬜ |
+| M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
 | M4 | Reversible quarantine, history, undo | ⬜ |
 | M5 | Catalog of 120+ cleanup rules | ⬜ |
 | M6 | Exact and near duplicates | ⬜ |
@@ -260,6 +286,8 @@ src/
 │  ├─ Index/        FileEntry (64 bytes) · NameBlob · VolumeIndex
 │  ├─ Scan/         ScanOrchestrator · MftScanner · Win32Walker · VolumeProbe
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
+│  ├─ Actions/      DeleteService (Recycle Bin · permanent · dry-run)
+│  ├─ Safety/       ProtectedPaths — the list nothing overrides
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (en-US base + optional pt-BR, embedded JSON)
 │  └─ Preview/      ThumbnailProvider · BmpWriter
@@ -291,7 +319,10 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 9. **The default `ComboBox` template ignores `Background`** — in the dark theme it renders white. It needs its own template, and so does `ProgressBar` (its animated glow reads as a whitish bar over a dark background).
 10. **The title bar belongs to Windows.** Without `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, the dark theme keeps a white strip at the top.
 11. **`GridViewRowPresenter` requires a `GridView`.** Reusing a column-based `ListView` row style in one without a `View` makes the item simply not render.
-12. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
+12. **`SHFILEOPSTRUCT.pFrom` is a double-null-terminated list**, not a string. One terminator silently truncates the batch.
+13. **`Path.GetFullPath("C:")` returns the process's current directory on C:**, not the root — a drive spec without a separator is drive-*relative*. As a deletion target that is a trap, so `C:` is read as the volume root and refused.
+14. **`ListView.SelectedItems` is not a bindable dependency property.** Multi-selection has to be pushed to the view model from code-behind.
+15. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
 
 The full list lives in [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 

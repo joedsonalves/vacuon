@@ -15,11 +15,48 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!--
+            Calibration warning. This module is the newest and least settled part of the
+            app: it reaches high finding counts on an elevated full-volume scan, and a
+            user who trusts it blindly could delete something they need. The banner says
+            so before the results, not after.
+        -->
+        <Border Grid.Row="0" CornerRadius="8" Padding="14" Margin="0,0,0,14"
+                Background="{DynamicResource Accent.Muted}"
+                BorderBrush="{DynamicResource Risk.Notable}" BorderThickness="1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" CornerRadius="4" Padding="7,3" VerticalAlignment="Top"
+                        Background="{DynamicResource Risk.Notable}">
+                    <TextBlock Text="{DynamicResource S.security.experimentalBadge}"
+                               FontSize="10" FontWeight="Bold"
+                               FontFamily="{StaticResource Font.Ui}" Foreground="White"/>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               Text="{DynamicResource S.security.experimentalTitle}"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               MaxWidth="880"
+                               Text="{DynamicResource S.security.experimentalBody}"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               MaxWidth="880" FontSize="11"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{DynamicResource S.security.falsePositiveNote}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- explicação e ação -->
-        <Border Grid.Row="0" Style="{StaticResource Card}">
+        <Border Grid.Row="1" Style="{StaticResource Card}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -42,11 +79,11 @@
             </Grid>
         </Border>
 
-        <TextBlock Grid.Row="1" Style="{StaticResource Text.Sub}" Margin="2,14,0,10" TextWrapping="Wrap"
+        <TextBlock Grid.Row="2" Style="{StaticResource Text.Sub}" Margin="2,14,0,10" TextWrapping="Wrap"
                    Text="{Binding SecurityStatusText}"/>
 
         <!-- achados -->
-        <ListView Grid.Row="2" Style="{StaticResource FileList}"
+        <ListView Grid.Row="3" Style="{StaticResource FileList}"
                   ItemsSource="{Binding Findings}"
                   ItemContainerStyle="{StaticResource PlainRow}"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
@@ -95,7 +132,7 @@
         </ListView>
 
         <!-- vazio -->
-        <Border Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top" Padding="26"
+        <Border Grid.Row="3" Style="{StaticResource Card}" VerticalAlignment="Top" Padding="26"
                 Visibility="{Binding HasSecurityRun, Converter={StaticResource InverseVisible}}">
             <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="700"
                        Text="{DynamicResource S.security.emptyHint}"/>

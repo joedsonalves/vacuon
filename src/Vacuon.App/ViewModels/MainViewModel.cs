@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Input;
 using Vacuon.App.Infra;
 using Vacuon.App.Services;
+using Vacuon.Core.Actions;
+using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
@@ -136,9 +138,17 @@ public sealed class MainViewModel : Observable, IDisposable
     // ================= idioma =================
 
     /// <summary>Versão exibida no rodapé e nas Configurações.</summary>
-    public static string AppVersion => "0.2.0";
+    public static string AppVersion => "0.3.0";
 
-    public string FooterText => L.T("app.footer", AppVersion);
+    /// <summary>
+    /// Footer tag. It claims "nothing was deleted" only while that is still true —
+    /// leaving the claim up after a delete would be the app lying about itself.
+    /// </summary>
+    public string FooterText => _anythingDeleted
+        ? L.T("app.footerAfterDelete", AppVersion)
+        : L.T("app.footer", AppVersion);
+
+    private bool _anythingDeleted;
     public string VersionTitleText => L.T("settings.versionTitle", AppVersion);
     public string PrivacyNoteText => L.T("settings.privacyNote", AppSettings.FilePath);
 
@@ -432,18 +442,16 @@ public sealed class MainViewModel : Observable, IDisposable
         ? L.T("list.truncated", Format.Count(Rows.Count), Format.Count(TotalMatches))
         : L.T("list.itemCount", Format.Count(Rows.Count));
 
+    /// <summary>
+    /// The single "current" row, kept so the one-item actions (open, reveal, copy path)
+    /// keep working. The multi-selection lives in the delete section below.
+    /// </summary>
     private FileRowViewModel? _selectedRow;
     public FileRowViewModel? SelectedRow
     {
         get => _selectedRow;
-        set { Set(ref _selectedRow, value); Raise(nameof(HasSelection)); Raise(nameof(SelectionDetailText)); }
+        set => Set(ref _selectedRow, value);
     }
-
-    public bool HasSelection => SelectedRow is not null;
-
-    public string SelectionDetailText => SelectedRow is null
-        ? string.Empty
-        : $"{SelectedRow.FullPath}\n{Format.Bytes(SelectedRow.LogicalSize)} · modificado em {SelectedRow.ModifiedText}";
 
     public void ShowFolder(int entryIndex)
     {
@@ -767,6 +775,167 @@ public sealed class MainViewModel : Observable, IDisposable
             // A área de transferência pode estar travada por outro processo.
             StatusText = L.T("status.clipboardBusy");
         }
+    }
+
+    // ================= exclusão =================
+
+    /// <summary>
+    /// Extra paths selected in the folder tree. The tree and the list are separate
+    /// selections, and a delete acts on both — selecting a folder on the left and files
+    /// on the right is a normal way to work.
+    /// </summary>
+    private readonly List<string> _treeSelection = [];
+
+    /// <summary>Rows selected in the file list. Fed by the view (SelectedItems is not bindable).</summary>
+    private readonly List<FileRowViewModel> _listSelection = [];
+
+    public int SelectedCount => _treeSelection.Count + _listSelection.Count;
+    public bool HasSelection => SelectedCount > 0;
+
+    public string SelectionSummaryText
+    {
+        get
+        {
+            if (SelectedCount == 0) return string.Empty;
+
+            long bytes = _listSelection.Sum(r => r.LogicalSize);
+            return L.T("delete.selectionCount", Format.Count(SelectedCount), Format.Bytes(bytes));
+        }
+    }
+
+    public string SelectionDetailText => _listSelection.Count == 1 && _treeSelection.Count == 0
+        ? $"{_listSelection[0].FullPath}\n{Format.Bytes(_listSelection[0].LogicalSize)} · {_listSelection[0].ModifiedText}"
+        : SelectionSummaryText;
+
+    /// <summary>Called by the view whenever the list selection changes.</summary>
+    public void SetListSelection(IEnumerable<FileRowViewModel> rows)
+    {
+        _listSelection.Clear();
+        _listSelection.AddRange(rows);
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>Called by the view whenever the tree selection changes.</summary>
+    public void SetTreeSelection(IEnumerable<string> paths)
+    {
+        _treeSelection.Clear();
+        _treeSelection.AddRange(paths);
+        RaiseSelectionChanged();
+    }
+
+    private void RaiseSelectionChanged()
+    {
+        Raise(nameof(SelectedCount));
+        Raise(nameof(HasSelection));
+        Raise(nameof(SelectionSummaryText));
+        Raise(nameof(SelectionDetailText));
+
+        // SelectedRow keeps the single-item actions (open, reveal) working unchanged.
+        SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
+    }
+
+    /// <summary>Every path the current selection covers, list and tree together.</summary>
+    private List<string> SelectedPaths() =>
+        [.. _treeSelection.Concat(_listSelection.Select(r => r.FullPath))];
+
+    /// <summary>
+    /// Plans a deletion, asks for confirmation, executes it and reports the outcome.
+    /// </summary>
+    /// <param name="mode">
+    /// <see cref="DeleteMode.RecycleBin"/> for <c>Del</c>, <see cref="DeleteMode.Permanent"/>
+    /// for <c>Shift+Del</c>.
+    /// </param>
+    /// <param name="owner">Owner window for the confirmation dialog.</param>
+    public void DeleteSelection(DeleteMode mode, Window owner)
+    {
+        List<string> paths = SelectedPaths();
+
+        if (paths.Count == 0)
+        {
+            StatusText = L.T("delete.nothingSelected");
+            return;
+        }
+
+        var service = new DeleteService();
+
+        // Plan first, always. The dialog shows exactly what will happen, including the
+        // items the protection list refuses to touch.
+        DeleteReport plan = service.Plan(paths, mode);
+
+        if (!DeleteDialog.Confirm(owner, plan, mode)) return;
+
+        DeleteReport report = service.Execute(paths, mode);
+
+        StatusText = report.FailedCount == 0
+            ? L.T("delete.done", Format.Count(report.DeletedCount), Format.Bytes(report.BytesFreed))
+            : L.T("delete.donePartial", Format.Count(report.DeletedCount),
+                  Format.Bytes(report.BytesFreed), Format.Count(report.FailedCount));
+
+        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+
+        if (report.DeletedCount > 0 && !_anythingDeleted)
+        {
+            _anythingDeleted = true;
+            Raise(nameof(FooterText));
+        }
+
+        RemoveDeletedRows(report);
+    }
+
+    /// <summary>Human-readable reason a single item did not go.</summary>
+    private static string Describe(DeleteResult result)
+    {
+        string reason = L.T(result.Outcome switch
+        {
+            DeleteOutcome.Blocked => "delete.outcomeBlocked",
+            DeleteOutcome.NotFound => "delete.outcomeNotFound",
+            DeleteOutcome.InUse => "delete.outcomeInUse",
+            DeleteOutcome.AccessDenied => "delete.outcomeAccessDenied",
+            _ => "delete.outcomeFailed",
+        });
+
+        return $"{result.Path} — {reason}";
+    }
+
+    private List<string> _lastFailures = [];
+    public List<string> LastFailures
+    {
+        get => _lastFailures;
+        private set { Set(ref _lastFailures, value); Raise(nameof(HasFailures)); }
+    }
+
+    public bool HasFailures => LastFailures.Count > 0;
+
+    /// <summary>
+    /// Drops the rows that are really gone.
+    /// <para>
+    /// The index in memory still describes the old disk — rescanning after every delete
+    /// would cost a full traversal, so the list is pruned instead and the numbers in the
+    /// sidebar stay as measured. They will be right again after the next scan.
+    /// </para>
+    /// </summary>
+    private void RemoveDeletedRows(DeleteReport report)
+    {
+        var deleted = new HashSet<string>(
+            report.Results.Where(r => r.Succeeded).Select(r => r.Path),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (deleted.Count == 0) return;
+
+        for (int i = Rows.Count - 1; i >= 0; i--)
+        {
+            string path = Rows[i].FullPath.TrimEnd('\\');
+
+            bool gone = deleted.Contains(path)
+                     || deleted.Any(d => path.StartsWith(d + "\\", StringComparison.OrdinalIgnoreCase));
+
+            if (gone) Rows.RemoveAt(i);
+        }
+
+        _listSelection.Clear();
+        _treeSelection.Clear();
+        TotalMatches = Rows.Count;
+        RaiseSelectionChanged();
     }
 
     // ================= segurança =================

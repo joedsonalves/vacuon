@@ -798,6 +798,7 @@ Códigos de saída: `0` sucesso · `1` sucesso parcial (itens pulados) · `2` er
 | **M1d — Snapshot** | Formato binário do índice + atualização incremental por USN Journal | Reabrir e ter o índice atualizado em < 1 s | ⬜ |
 | **M2 — Visualização** | WPF, Dashboard, Explorer virtualizado, árvore, top-N, busca, filtros, ícones do Shell | Navegar 1 M arquivos a 60 fps; busca < 100 ms | ⬜ |
 | **M3 — Preview** | LibVLCSharp, player, viewer de imagem, thumbnails nativas, media probe, "abrir pasta de origem", menu de contexto | Dar play em `.mkv` H.265 sem codec pack; `explorer /select` funcionando | ⬜ |
+| **M2b — Exclusão** | Lixeira e exclusão permanente com multi-seleção, lista de caminhos protegidos, diálogo de confirmação com plano | 6 arquivos apagados de vez e 2 pastas para a Lixeira, recuperáveis com a origem preservada; 136 testes | ✅ |
 | **M4 — Ações** | Quarentena + manifesto + restauração, Lixeira, exclusão permanente, arquivos travados, histórico, undo | Mover 90 GB para quarentena e restaurar 100 % dos itens, byte a byte idênticos | ⬜ |
 | **M5 — Limpeza** | RuleEngine, catálogo de ≥ 120 regras, perfis, integrações DISM/vssadmin/powercfg, classificador de risco, listas de proteção | Limpeza Rápida em máquina real libera ≥ 10 GB sem quebrar nada; suíte de testes de proteção 100 % verde | ⬜ |
 | **M6 — Duplicados** | Pipeline de 4 estágios, seleção inteligente, hardlink dedupe, pastas duplicadas | Zero falso positivo em corpus de teste de 200 k arquivos | ⬜ |
@@ -840,7 +841,11 @@ Marcos são sequenciais em dependência, não em calendário. M1 é o risco téc
 14. **`Dispatcher.Invoke` por item.** Reportar progresso arquivo por arquivo trava a UI mais que a varredura em si. Throttle obrigatório.
 15. **`FILE_FLAG_NO_BUFFERING` exige alinhamento** de buffer, offset e tamanho ao setor. Desalinhado, falha com erro genérico difícil de diagnosticar.
 16. **ReFS/exFAT não têm MFT.** Detectar o filesystem antes de escolher a estratégia; nunca assumir NTFS.
-17. **Configuração comentada volta ao default interno.** Comentar `THREADS_HASH` não significa "sem limite" — significa `auto`. Documentar isso na cara do arquivo.
+17. **`SHFILEOPSTRUCT.pFrom` é uma lista com terminador duplo,** não uma string. Um terminador só trunca o lote em silêncio.
+18. **`Path.GetFullPath("C:")` devolve o diretório ATUAL daquela unidade,** não a raiz — especificação de unidade sem separador é relativa à unidade. Como alvo de exclusão isso é uma armadilha, então `C:` é lido como raiz de volume e recusado.
+19. **`ListView.SelectedItems` não é propriedade de dependência bindável.** A seleção múltipla tem que ser empurrada ao ViewModel pelo code-behind.
+20. **Recurso chamado `Strings.en-US.json` vira assembly satélite** (ver §8.9 e o README).
+21. **Configuração comentada volta ao default interno.** Comentar `THREADS_HASH` não significa "sem limite" — significa `auto`. Documentar isso na cara do arquivo.
 
 ---
 

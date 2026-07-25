@@ -81,7 +81,7 @@ static class Help
     {
         Console.WriteLine();
         Console.WriteLine($"  {L.T("app.name")} — {L.T("app.tagline")}");
-        Console.WriteLine($"  v0.2.0 · {L.T("settings.versionTitle", "0.2.0")}");
+        Console.WriteLine($"  v0.3.0 · {L.T("settings.versionTitle", "0.3.0")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.usage")}");
         Console.WriteLine("    vacuon <command> [options]");
@@ -119,7 +119,7 @@ static class Commands
 {
     public static int Version()
     {
-        Console.WriteLine("Vacuon 0.2.0");
+        Console.WriteLine("Vacuon 0.3.0");
         Console.WriteLine($".NET        {Environment.Version}");
         Console.WriteLine($"OS          {Environment.OSVersion.VersionString}");
         Console.WriteLine($"{L.T("cli.cores"),-11} {Environment.ProcessorCount}");

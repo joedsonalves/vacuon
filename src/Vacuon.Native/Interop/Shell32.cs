@@ -62,9 +62,62 @@ public struct SHFILEINFO
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string szTypeName;
 }
 
+/// <summary>Operation codes for <c>SHFileOperation</c>.</summary>
+public enum FileOperation : uint
+{
+    Move = 0x0001,
+    Copy = 0x0002,
+    Delete = 0x0003,
+    Rename = 0x0004,
+}
+
+[Flags]
+public enum FileOperationFlags : ushort
+{
+    /// <summary>Send to the Recycle Bin instead of deleting outright.</summary>
+    AllowUndo = 0x0040,
+    /// <summary>Do not ask the user to confirm.</summary>
+    NoConfirmation = 0x0010,
+    /// <summary>Do not show the progress dialog.</summary>
+    Silent = 0x0004,
+    /// <summary>Do not show an error dialog; report through the return code instead.</summary>
+    NoErrorUi = 0x0400,
+    /// <summary>Do not ask about creating directories.</summary>
+    NoConfirmMkDir = 0x0200,
+    /// <summary>Suppress the "which files?" summary.</summary>
+    NoConfirmation2 = 0x0010,
+}
+
+/// <summary>
+/// <c>SHFILEOPSTRUCT</c> — the only API that moves files to the Recycle Bin.
+/// <para>
+/// <see cref="pFrom"/> is a double-null-terminated list, not a plain string. Passing a
+/// single path without the extra terminator silently truncates the batch.
+/// </para>
+/// </summary>
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct SHFILEOPSTRUCT
+{
+    public nint hwnd;
+    public FileOperation wFunc;
+    [MarshalAs(UnmanagedType.LPWStr)] public string pFrom;
+    [MarshalAs(UnmanagedType.LPWStr)] public string? pTo;
+    public FileOperationFlags fFlags;
+    [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
+    public nint hNameMappings;
+    [MarshalAs(UnmanagedType.LPWStr)] public string? lpszProgressTitle;
+}
+
 public static partial class Shell32
 {
     public const int S_OK = 0;
+
+    /// <summary>
+    /// Moves items to the Recycle Bin (with <see cref="FileOperationFlags.AllowUndo"/>)
+    /// or deletes them.
+    /// </summary>
+    [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", CharSet = CharSet.Unicode)]
+    public static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
 
     // DllImport e não LibraryImport: o gerador de origem não sabe marshalar
     // interfaces COM (SYSLIB1052). Aqui o marshalling em runtime é obrigatório.
