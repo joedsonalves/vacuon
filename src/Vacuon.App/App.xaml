@@ -1,0 +1,17 @@
+<Application x:Class="Vacuon.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnMainWindowClose">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!--
+                    Posição 0 é o dicionário de cores e o ThemeManager a substitui em
+                    runtime. Controls.xaml vem depois porque consome essas cores.
+                -->
+                <ResourceDictionary Source="Themes/Dark.xaml"/>
+                <ResourceDictionary Source="Themes/Controls.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

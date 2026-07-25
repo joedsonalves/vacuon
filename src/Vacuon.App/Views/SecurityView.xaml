@@ -1,0 +1,104 @@
+<UserControl x:Class="Vacuon.App.Views.SecurityView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <infra:SuspicionBrushConverter x:Key="RiskBrush"/>
+        <infra:SuspicionLabelConverter x:Key="RiskLabel"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="InverseVisible"/>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- explicação e ação -->
+        <Border Grid.Row="0" Style="{StaticResource Card}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               Text="Pontos de persistência no registro"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               MaxWidth="820"
+                               Text="44 chaves onde malware costuma se alojar: Run e RunOnce, Winlogon, AppInit_DLLs, AppCertDlls, Image File Execution Options, SilentProcessExit, pacotes do LSA, Command Processor, Active Setup, BHOs, associações de arquivo e a pasta de Inicialização."/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               MaxWidth="820" Foreground="{DynamicResource Text.Muted}"
+                               Text="Somente leitura — nenhuma chave é alterada. O Vacuon não é antivírus: não existe base de assinaturas aqui, e sim heurística de comportamento com o motivo sempre à vista. Entradas legítimas aparecem na lista; leia o porquê antes de concluir qualquer coisa."/>
+                </StackPanel>
+
+                <Button Grid.Column="1" Style="{StaticResource Button.Primary}" VerticalAlignment="Top"
+                        Content="Inspecionar" Command="{Binding RunSecurityScanCommand}"/>
+            </Grid>
+        </Border>
+
+        <TextBlock Grid.Row="1" Style="{StaticResource Text.Sub}" Margin="2,14,0,10" TextWrapping="Wrap"
+                   Text="{Binding SecurityStatusText}"/>
+
+        <!-- achados -->
+        <ListView Grid.Row="2" Style="{StaticResource FileList}"
+                  ItemsSource="{Binding Findings}"
+                  ItemContainerStyle="{StaticResource PlainRow}"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource RiskBadge}"
+                                        Background="{Binding Level, Converter={StaticResource RiskBrush}}">
+                                    <TextBlock Text="{Binding Level, Converter={StaticResource RiskLabel}}"
+                                               FontSize="10" FontWeight="Bold"
+                                               FontFamily="{StaticResource Font.Ui}"
+                                               Foreground="White"/>
+                                </Border>
+                                <TextBlock Style="{StaticResource Text.Sub}" Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                           Text="{Binding Location}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Text.Body}" Margin="0,10,0,0"
+                                       TextWrapping="Wrap">
+                                <Run FontWeight="SemiBold" Text="{Binding Name, Mode=OneWay}"/>
+                                <Run Text="="/>
+                                <Run FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                     Text="{Binding Value, Mode=OneWay}"/>
+                            </TextBlock>
+
+                            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Text.Secondary}"
+                                       Text="{Binding Reason}"/>
+
+                            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Visibility="{Binding TargetPath, Converter={StaticResource NotEmpty}}">
+                                <Run Text="alvo:"/>
+                                <Run Text="{Binding TargetPath, Mode=OneWay}"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- vazio -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top" Padding="26"
+                Visibility="{Binding HasSecurityRun, Converter={StaticResource InverseVisible}}">
+            <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="700"
+                       Text="Clique em Inspecionar. Sem privilégio de administrador, as chaves protegidas de HKLM e as Tarefas Agendadas ficam de fora — e o relatório diz exatamente isso em vez de dar a lista como completa."/>
+        </Border>
+    </Grid>
+</UserControl>

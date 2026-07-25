@@ -28,6 +28,34 @@ public sealed class SuspiciousFileAnalyzer
         ".wsf", ".wsh", ".hta", ".ps1", ".psm1", ".jar", ".msi", ".cpl", ".lnk", ".reg",
     ];
 
+    /// <summary>
+    /// Extensões que participam da regra de extensão dupla.
+    /// <para>
+    /// <c>.lnk</c> ficou DE FORA: <c>relatorio.pdf.lnk</c> é exatamente como o Windows
+    /// nomeia um atalho para <c>relatorio.pdf</c>, e a pasta Recentes é cheia deles.
+    /// Incluir <c>.lnk</c> marcava dezenas de atalhos normais em qualquer máquina usada.
+    /// Um atalho malicioso se detecta pelo alvo, não pelo nome — e isso exige parsear
+    /// o próprio <c>.lnk</c>, que é trabalho de outro marco.
+    /// </para>
+    /// </summary>
+    private static readonly string[] DoubleExtensionTriggers =
+    [
+        ".exe", ".scr", ".com", ".pif", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse",
+        ".wsf", ".wsh", ".hta", ".ps1", ".jar", ".msi", ".cpl",
+    ];
+
+    /// <summary>
+    /// Pastas cujo conteúdo é gerado pelo próprio Windows. Os nomes ali não foram
+    /// escolhidos por ninguém, então não dizem nada sobre intenção.
+    /// </summary>
+    private static readonly string[] SystemGeneratedFolders =
+    [
+        @"\appdata\roaming\microsoft\windows\recent\",
+        @"\appdata\roaming\microsoft\office\recent\",
+        @"\appdata\roaming\microsoft\windows\start menu\",
+        @"\programdata\microsoft\windows\start menu\",
+    ];
+
     /// <summary>Extensões que o usuário lê como "documento inofensivo".</summary>
     private static readonly string[] DecoyExtensions =
     [
@@ -59,6 +87,13 @@ public sealed class SuspiciousFileAnalyzer
         @"\packages\", @"\.venv\", @"\lib\python", @"\dist-packages\",
     ];
 
+    /// <summary>
+    /// Texto do sinal "executável novo no System32". É comparado como marcador para
+    /// que esse achado sobreviva às exclusões por pasta — daí ser uma constante e não
+    /// uma string literal espalhada.
+    /// </summary>
+    private const string RecentSystem32Signal = "executável criado em System32 nos últimos 30 dias";
+
     /// <summary>Caracteres Unicode de override bidirecional — usados para inverter a extensão visível.</summary>
     private const char RightToLeftOverride = '‮';
     private const char LeftToRightOverride = '‭';
@@ -89,11 +124,17 @@ public sealed class SuspiciousFileAnalyzer
             if (level == Suspicion.Normal) continue;
 
             // O caractere RLO no nome não tem uso legítimo em lugar nenhum, nem dentro
-            // de node_modules — esse sinal sobrevive à exclusão de dependências.
-            if (level != Suspicion.HighlySuspicious || !reason!.Contains("RLO", StringComparison.Ordinal))
-            {
-                if (IsInsideDependencyFolder(path)) continue;
-            }
+            // de node_modules — esse sinal sobrevive às exclusões por pasta.
+            // Dois sinais atravessam as exclusões por pasta, porque não têm explicação
+            // inocente em lugar nenhum: o caractere RLO no nome, e um executável
+            // recém-criado dentro do System32.
+            bool survivesFolderExclusions =
+                reason!.Contains("RLO", StringComparison.Ordinal) ||
+                reason.Contains(RecentSystem32Signal, StringComparison.Ordinal);
+
+            if (!survivesFolderExclusions && (IsInsideDependencyFolder(path)
+                                           || IsSystemGenerated(path)
+                                           || IsShippedWithWindows(path))) continue;
 
             e.Flags |= EntryFlags.Suspicious;
 
@@ -126,7 +167,7 @@ public sealed class SuspiciousFileAnalyzer
         string ext = GetExtension(lower);
 
         // --- Extensão dupla: relatorio.pdf.exe ---
-        if (IsExecutableExtension(ext))
+        if (Array.IndexOf(DoubleExtensionTriggers, ext) >= 0)
         {
             string withoutExt = lower[..^ext.Length];
             string inner = GetExtension(withoutExt);
@@ -159,6 +200,8 @@ public sealed class SuspiciousFileAnalyzer
         }
 
         // --- Extensões que praticamente só existem em campanha de phishing ---
+        // O refino por caminho descarta as que vivem dentro do Windows: Bubbles.scr e
+        // Ribbons.scr são protetores de tela que vêm com o sistema.
         if (ext is ".scr" or ".pif" or ".hta" or ".jse" or ".vbe" or ".wsh")
         {
             return (Suspicion.Suspicious,
@@ -196,8 +239,7 @@ public sealed class SuspiciousFileAnalyzer
             (DateTime.UtcNow - entry.Created).TotalDays < 30 &&
             IsExecutableExtension(GetExtension(name.ToString().ToLowerInvariant())))
         {
-            return (Suspicion.HighlySuspicious,
-                $"{reason} · executável criado em System32 nos últimos 30 dias");
+            return (Suspicion.HighlySuspicious, $"{reason} · {RecentSystem32Signal}");
         }
 
         return (level, reason);
@@ -213,6 +255,36 @@ public sealed class SuspiciousFileAnalyzer
         foreach (string folder in DependencyFolders)
             if (lower.Contains(folder, StringComparison.Ordinal)) return true;
         return false;
+    }
+
+    /// <summary>
+    /// O arquivo está numa pasta cujo conteúdo o Windows gera sozinho (Recentes,
+    /// Menu Iniciar)? Ninguém escolheu esses nomes, então eles não indicam intenção.
+    /// </summary>
+    public static bool IsSystemGenerated(string path)
+    {
+        string lower = path.ToLowerInvariant();
+        foreach (string folder in SystemGeneratedFolders)
+            if (lower.Contains(folder, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// O arquivo vem com o Windows?
+    /// <para>
+    /// Só a extensão não basta para julgar o que está dentro de <c>%WINDIR%</c>:
+    /// <c>Bubbles.scr</c> e <c>Ribbons.scr</c> em System32 são os protetores de tela
+    /// do sistema, e marcá-los como phishing é ruído garantido em toda máquina.
+    /// Um executável <b>recém-criado</b> ali continua sendo sinalizado pelo refino
+    /// de caminho, que é o caso que realmente importa.
+    /// </para>
+    /// </summary>
+    public static bool IsShippedWithWindows(string path)
+    {
+        string lower = path.ToLowerInvariant();
+        return lower.Contains(@"\windows\system32\", StringComparison.Ordinal)
+            || lower.Contains(@"\windows\syswow64\", StringComparison.Ordinal)
+            || lower.Contains(@"\windows\winsxs\", StringComparison.Ordinal);
     }
 
     private static bool IsExecutableExtension(string ext) =>

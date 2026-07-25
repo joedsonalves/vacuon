@@ -1,0 +1,297 @@
+<UserControl x:Class="Vacuon.App.Views.ExplorerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <infra:BytesConverter x:Key="Bytes"/>
+        <infra:ShareToPercentConverter x:Key="SharePercent"/>
+        <infra:CategoryBrushConverter x:Key="CategoryBrush"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==================== barra de ferramentas ==================== -->
+        <Border Grid.Row="0" Padding="24,12" BorderBrush="{DynamicResource Stroke.Subtle}"
+                BorderThickness="0,0,0,1">
+            <StackPanel>
+                <!-- modos + busca -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button Style="{StaticResource Button.Base}" Content="Maiores arquivos"
+                                FontSize="12" Padding="10,6" Click="OnBiggestFiles"/>
+                        <Button Style="{StaticResource Button.Base}" Content="Maiores pastas" Margin="6,0,0,0"
+                                FontSize="12" Padding="10,6" Click="OnBiggestFolders"/>
+                        <Button Style="{StaticResource Button.Base}" Content="Suspeitos" Margin="6,0,0,0"
+                                FontSize="12" Padding="10,6" Click="OnSuspicious"/>
+                    </StackPanel>
+
+                    <TextBox Grid.Column="1" Style="{StaticResource Input}" Margin="14,0"
+                             Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=180}"
+                             ToolTip="Busca por parte do nome. A varredura já está em memória, então o resultado é imediato."/>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.Muted}" Text="Ícone"/>
+                        <ComboBox Margin="8,0,0,0" Width="180"
+                                  ItemsSource="{Binding IconSizeOptions}"
+                                  SelectedItem="{Binding SelectedIconSizeOption}"
+                                  ToolTip="Tamanho da miniatura. Nos tamanhos grandes, imagem e vídeo mostram o conteúdo real."/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- filtros -->
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Text.Muted}" Text="Maior que"/>
+                    <ComboBox Margin="7,0,0,0" Width="104" SelectedIndex="0" SelectionChanged="OnMinSizeChanged">
+                        <ComboBoxItem Content="qualquer" Tag="0"/>
+                        <ComboBoxItem Content="1 MB" Tag="1048576"/>
+                        <ComboBoxItem Content="10 MB" Tag="10485760"/>
+                        <ComboBoxItem Content="100 MB" Tag="104857600"/>
+                        <ComboBoxItem Content="500 MB" Tag="524288000"/>
+                        <ComboBoxItem Content="1 GB" Tag="1073741824"/>
+                    </ComboBox>
+
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Text.Muted}" Text="Sem alterar há"/>
+                    <ComboBox Margin="7,0,0,0" Width="104" SelectedIndex="0" SelectionChanged="OnMinAgeChanged">
+                        <ComboBoxItem Content="qualquer" Tag="0"/>
+                        <ComboBoxItem Content="30 dias" Tag="30"/>
+                        <ComboBoxItem Content="90 dias" Tag="90"/>
+                        <ComboBoxItem Content="180 dias" Tag="180"/>
+                        <ComboBoxItem Content="1 ano" Tag="365"/>
+                        <ComboBoxItem Content="2 anos" Tag="730"/>
+                    </ComboBox>
+
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource Text.Muted}" Text="Extensão"/>
+                    <TextBox Style="{StaticResource Input}" Margin="7,0,0,0" Width="150"
+                             Text="{Binding ExtensionFilter, UpdateSourceTrigger=PropertyChanged, Delay=250}"
+                             ToolTip="mp4, mkv, iso — separadas por vírgula"/>
+
+                    <Button Style="{StaticResource Button.Ghost}" Margin="10,0,0,0" FontSize="12"
+                            Content="Limpar" Command="{Binding ClearFiltersCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- ==================== árvore + lista ==================== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" MinWidth="200"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- árvore de pastas -->
+            <Border Grid.Column="0" Padding="12,10">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Style="{StaticResource Text.Section}" Margin="6,0,0,6"
+                               Text="PASTAS — MAIORES PRIMEIRO"/>
+
+                    <!-- Rolagem horizontal desabilitada de propósito: com ela ligada os
+                         itens crescem além da viewport e a coluna de tamanho sai de vista. -->
+                    <TreeView Grid.Row="1" ItemsSource="{Binding RootNodes}"
+                              SelectedItemChanged="OnFolderSelected"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                              BorderThickness="0">
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <!-- Sem largura fixa: com Width fixo os nós indentados
+                                     empurravam a coluna de tamanho para fora da vista. -->
+                                <Grid Margin="0,2,4,2" HorizontalAlignment="Stretch">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="60"/>
+                                        <ColumnDefinition Width="62"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}"/>
+                                        <!-- Barra de proporção: qual fatia do disco esta subárvore ocupa.
+                                             Foreground explícito porque a cor herdada do TreeViewItem
+                                             deixaria a barra cinza em vez de âmbar. -->
+                                        <ProgressBar Height="3" Margin="0,4,0,1" Maximum="100"
+                                                     Foreground="{DynamicResource Gauge.Fill}"
+                                                     Background="{DynamicResource Gauge.Track}"
+                                                     Value="{Binding ShareOfVolume, Mode=OneWay,
+                                                             Converter={StaticResource SharePercent}}"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                               FontSize="11" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding SizeText}"/>
+                                </Grid>
+                                <HierarchicalDataTemplate.ItemContainerStyle>
+                                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                    </Style>
+                                </HierarchicalDataTemplate.ItemContainerStyle>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                    </TreeView>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch"
+                          Background="{DynamicResource Stroke.Subtle}"/>
+
+            <!-- lista de arquivos -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="16,10,20,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               Text="{Binding ModeText}"/>
+                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding TruncationText}"/>
+                </Grid>
+
+                <ListView x:Name="Files" Grid.Row="1" Style="{StaticResource FileList}"
+                          ItemsSource="{Binding Rows}"
+                          ItemContainerStyle="{StaticResource FileRow}"
+                          SelectedItem="{Binding SelectedRow}"
+                          Margin="10,0,10,0"
+                          MouseDoubleClick="OnRowDoubleClick">
+                    <ListView.View>
+                        <GridView AllowsColumnReorder="True">
+                            <!-- Ícone / miniatura: a largura acompanha o tamanho escolhido -->
+                            <GridViewColumn Width="{Binding IconPixels, Mode=OneWay}">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid Width="{Binding DataContext.IconPixels,
+                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                              Height="{Binding DataContext.IconPixels,
+                                                       RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <!-- espaço reservado enquanto o Shell decodifica -->
+                                            <Border CornerRadius="3" Background="{DynamicResource Surface.RowAlt}"
+                                                    BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1"/>
+                                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Nome" Width="380">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="6,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource Text.Body}" Text="{Binding Name}"
+                                                       ToolTip="{Binding FullPath}"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                <Border Width="6" Height="6" CornerRadius="3"
+                                                        VerticalAlignment="Center"
+                                                        Background="{Binding Category, Converter={StaticResource CategoryBrush}}"/>
+                                                <TextBlock Style="{StaticResource Text.Sub}" Margin="5,0,0,0"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource Text.Muted}"
+                                                           Text="{Binding DetailText}"/>
+                                                <TextBlock Style="{StaticResource Text.Sub}" Margin="8,0,0,0"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource Risk.Notable}"
+                                                           Text="{Binding Badges}"
+                                                           Visibility="{Binding Badges, Converter={StaticResource NotEmpty}}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Tamanho" Width="96">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Style="{StaticResource Text.Number}" Width="86"
+                                                   VerticalAlignment="Center" Text="{Binding SizeText}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Modificado" Width="130">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                                   FontSize="11" Text="{Binding ModifiedText}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
+                            <GridViewColumn Header="Caminho" Width="420">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                                   FontSize="11" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding FullPath}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+
+                    <ListView.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Abrir" Command="{Binding OpenCommand}"/>
+                            <MenuItem Header="Abrir pasta de origem" InputGestureText="Ctrl+Enter"
+                                      Command="{Binding RevealCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Copiar caminho" InputGestureText="Ctrl+C"
+                                      Command="{Binding CopyPathCommand}"/>
+                        </ContextMenu>
+                    </ListView.ContextMenu>
+                </ListView>
+
+                <!-- ações da seleção -->
+                <Border Grid.Row="2" Padding="16,10" BorderBrush="{DynamicResource Stroke.Subtle}"
+                        BorderThickness="0,1,0,0"
+                        Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="Abrir" Command="{Binding OpenCommand}"/>
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
+                                Content="Pasta de origem" Command="{Binding RevealCommand}"/>
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
+                                Content="Copiar caminho" Command="{Binding CopyPathCommand}"/>
+                        <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.Muted}"
+                                   Text="Apagar e mover chegam no M4, com quarentena reversível."/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
