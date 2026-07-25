@@ -1,6 +1,7 @@
 using System.Windows;
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.App;
 
@@ -19,34 +20,46 @@ public partial class MainWindow : Window
         // fica com uma faixa branca no topo.
         SourceInitialized += (_, _) => ApplyTitleBar();
         ThemeManager.Changed += ApplyTitleBar;
+        L.Changed += RefreshHeader;
 
         Closed += (_, _) =>
         {
             ThemeManager.Changed -= ApplyTitleBar;
+            L.Changed -= RefreshHeader;
             _model.Dispose();
         };
     }
 
+    private void RefreshHeader() => HeaderTitle.Text = L.T(_headerKey);
+
     private void ApplyTitleBar() =>
         TitleBarTheme.Apply(this, ThemeManager.Effective == ThemeChoice.Dark);
 
-    private void Navigate(Section section, string title)
+    /// <summary>
+    /// Navigates and sets the header. The title comes from the SAME key the sidebar
+    /// uses — hardcoding it here left the header in Portuguese while the rest of the
+    /// interface had already switched to English.
+    /// </summary>
+    private void Navigate(Section section, string titleKey)
     {
         _model.Section = section;
-        HeaderTitle.Text = title;
+        _headerKey = titleKey;
+        HeaderTitle.Text = L.T(titleKey);
     }
 
+    private string _headerKey = "nav.dashboard";
+
     private void OnNavDashboard(object sender, RoutedEventArgs e) =>
-        Navigate(Section.Dashboard, "Painel");
+        Navigate(Section.Dashboard, "nav.dashboard");
 
     private void OnNavExplorer(object sender, RoutedEventArgs e) =>
-        Navigate(Section.Explorer, "Explorer");
+        Navigate(Section.Explorer, "nav.explorer");
 
     private void OnNavSecurity(object sender, RoutedEventArgs e) =>
-        Navigate(Section.Security, "Segurança");
+        Navigate(Section.Security, "nav.security");
 
     private void OnNavSettings(object sender, RoutedEventArgs e) =>
-        Navigate(Section.Settings, "Configurações");
+        Navigate(Section.Settings, "nav.settings");
 
     private void OnToggleTheme(object sender, RoutedEventArgs e) => _model.ToggleTheme();
 }

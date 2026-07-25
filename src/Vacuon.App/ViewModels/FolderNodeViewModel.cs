@@ -76,6 +76,44 @@ public sealed class FolderNodeViewModel : Observable
         set => Set(ref _isSelected, value);
     }
 
+    private bool _isChecked;
+
+    /// <summary>
+    /// Ticked for a batch action.
+    /// <para>
+    /// A WPF TreeView has no multi-selection, so folders are gathered with a checkbox
+    /// per node instead. It also makes the batch explicit — you can see what is marked
+    /// without holding Ctrl and hoping.
+    /// </para>
+    /// </summary>
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set => Set(ref _isChecked, value);
+    }
+
+    /// <summary>Full path of this folder, materialized on demand.</summary>
+    public string FullPath => _index?.GetFullPath(_entryIndex) ?? string.Empty;
+
+    /// <summary>Walks this node and its loaded descendants collecting the ticked ones.</summary>
+    public void CollectChecked(List<string> into)
+    {
+        if (IsChecked && _index is not null)
+        {
+            string path = FullPath;
+            if (!string.IsNullOrEmpty(path)) into.Add(path);
+        }
+
+        foreach (FolderNodeViewModel child in Children) child.CollectChecked(into);
+    }
+
+    /// <summary>Clears every tick in this subtree, after a delete or a rescan.</summary>
+    public void ClearChecks()
+    {
+        IsChecked = false;
+        foreach (FolderNodeViewModel child in Children) child.ClearChecks();
+    }
+
     private void LoadChildren()
     {
         if (_loaded || _index is null) return;

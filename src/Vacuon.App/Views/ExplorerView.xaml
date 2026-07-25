@@ -109,8 +109,9 @@
 
                     <!-- Rolagem horizontal desabilitada de propósito: com ela ligada os
                          itens crescem além da viewport e a coluna de tamanho sai de vista. -->
-                    <TreeView Grid.Row="1" ItemsSource="{Binding RootNodes}"
+                    <TreeView x:Name="Folders" Grid.Row="1" ItemsSource="{Binding RootNodes}"
                               SelectedItemChanged="OnFolderSelected"
+                              PreviewKeyDown="OnTreeKeyDown"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               BorderThickness="0">
                         <TreeView.ItemTemplate>
@@ -123,8 +124,16 @@
                                         <ColumnDefinition Width="62"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding Name}"/>
+                                        <!-- TreeView nao tem selecao multipla. Um checkbox por no
+                                             deixa marcar varias pastas e apagar de uma vez. -->
+                                        <StackPanel Orientation="Horizontal">
+                                            <CheckBox Style="{StaticResource Check}" Margin="0,0,6,0"
+                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      Checked="OnTreeCheckChanged"
+                                                      Unchecked="OnTreeCheckChanged"/>
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding Name}"/>
+                                        </StackPanel>
                                         <!-- Barra de proporção: qual fatia do disco esta subárvore ocupa.
                                              Foreground explícito porque a cor herdada do TreeViewItem
                                              deixaria a barra cinza em vez de âmbar. -->
@@ -181,12 +190,16 @@
                                Text="{Binding TruncationText}"/>
                 </Grid>
 
+                <!-- Extended: Ctrl-click e Shift-click selecionam varios. SelectedItems nao
+                     e bindavel no WPF, por isso a selecao vai ao VM pelo code-behind. -->
                 <ListView x:Name="Files" Grid.Row="1" Style="{StaticResource FileList}"
                           ItemsSource="{Binding Rows}"
                           ItemContainerStyle="{StaticResource FileRow}"
-                          SelectedItem="{Binding SelectedRow}"
+                          SelectionMode="Extended"
+                          SelectionChanged="OnListSelectionChanged"
                           Margin="10,0,10,0"
-                          MouseDoubleClick="OnRowDoubleClick">
+                          MouseDoubleClick="OnRowDoubleClick"
+                          PreviewKeyDown="OnListKeyDown">
                     <ListView.View>
                         <GridView AllowsColumnReorder="True">
                             <!-- Ícone / miniatura: a largura acompanha o tamanho escolhido -->
@@ -271,6 +284,11 @@
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.action.copyPath}" InputGestureText="Ctrl+C"
                                       Command="{Binding CopyPathCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="{DynamicResource S.delete.recycleHeader}" InputGestureText="Del"
+                                      Click="OnDeleteToRecycleBin"/>
+                            <MenuItem Header="{DynamicResource S.delete.permanentHeader}" InputGestureText="Shift+Del"
+                                      Click="OnDeletePermanently"/>
                         </ContextMenu>
                     </ListView.ContextMenu>
                 </ListView>
@@ -284,11 +302,22 @@
                                 Content="{DynamicResource S.action.open}" Command="{Binding OpenCommand}"/>
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.action.reveal}" Command="{Binding RevealCommand}"/>
-                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
+                            <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.action.copyPath}" Command="{Binding CopyPathCommand}"/>
+
+                        <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
+
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="{DynamicResource S.delete.recycle}" Click="OnDeleteToRecycleBin"/>
+                        <!-- Vermelho no permanente: a cor de risco e o sinal mais rapido de
+                             que este botao nao tem volta. -->
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
+                                Foreground="{DynamicResource Risk.Danger}"
+                                Content="{DynamicResource S.delete.permanent}" Click="OnDeletePermanently"/>
+
                         <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource Text.Muted}"
-                                   Text="{DynamicResource S.list.deleteComingLater}"/>
+                                   Text="{Binding SelectionSummaryText}"/>
                     </StackPanel>
                 </Border>
             </Grid>

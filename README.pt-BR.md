@@ -12,7 +12,7 @@ e nunca afirma um número que não mediu.
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-99-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-136-3FB950.svg)](tests)
 
 **Português (Brasil)** · [English](README.md)
 
@@ -69,6 +69,33 @@ Imagem e vídeo mostram o conteúdo; todo outro tipo mostra o ícone registrado 
 O rótulo "veio do conteúdo" é **fato verificado**, não palpite: o Vacuon pede `SIIGBF_THUMBNAILONLY` primeiro e só cai para `SIIGBF_ICONONLY` se o Shell não tiver miniatura. Sem essa separação, um `.md` sem handler de preview seria anunciado como se a miniatura fosse do arquivo.
 
 > Os arquivos deste print são sintéticos (`smptebars` e `testsrc` do ffmpeg, mais gradientes gerados), justamente para não publicar conteúdo de ninguém.
+
+### Apagar — Lixeira por padrão, permanente por escolha
+
+<img src="docs/img/08-confirmacao-marcada.png" width="620" alt="Confirmação de exclusão permanente">
+
+A seleção múltipla funciona nos dois painéis: Ctrl-clique e Shift-clique na lista, e um
+checkbox por pasta na árvore (TreeView do WPF não tem seleção múltipla, e o checkbox
+também deixa o lote visível em vez de algo que você segura Ctrl e reza).
+
+- **`Del`** → Lixeira. Recuperável, e o padrão em todo lugar.
+- **`Shift+Del`** → permanente, travado atrás de uma caixa de reconhecimento.
+
+Os dois modos planejam primeiro e mostram o plano: quantos itens, o tamanho total, cada
+caminho, e quais itens a lista de proteção se recusa a tocar. Os atalhos só disparam
+enquanto a lista ou a árvore tem foco — `Del` não pode apagar arquivos enquanto você
+edita a busca.
+
+**Nada contorna a lista de proteção.** Não existe flag, configuração ou argumento que
+libere a raiz do volume, `%WINDIR%`, System32, as pastas de Arquivos de Programas, pastas
+conhecidas do perfil, arquivos do kernel (`pagefile.sys`, `hiberfil.sys`, `$MFT`), cofres
+de credencial, nem o diretório do próprio Vacuon. Os caminhos são canonizados antes, então
+`\?\C:\Windows` e `C:\Windows\System32\..\System32` também são pegos. Os arquivos
+*dentro* de uma pasta protegida continuam apagáveis — você pode muito bem querer apagar um
+render de 9 GB que está em Vídeos; você não pode apagar a pasta Vídeos.
+
+Isto chegou antes do marco M4, então **a Lixeira é hoje o único desfazer**, e o diálogo diz
+exatamente isso em vez de sugerir uma rede de segurança que ainda não existe.
 
 ### Segurança — pontos de persistência no registro
 
@@ -239,6 +266,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | **M2** | **GUI: painel, explorer virtualizado, busca, temas claro/escuro, elevação, i18n** | ✅ |
 | M1d | Snapshot binário + atualização incremental por USN | ⬜ |
 | M3 | Player embutido (LibVLCSharp) e preview de mídia | ⬜ |
+| M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
 | M4 | Quarentena reversível, histórico, desfazer | ⬜ |
 | M5 | Catálogo de 120+ regras de limpeza | ⬜ |
 | M6 | Duplicados exatos e quase-duplicados | ⬜ |
@@ -255,6 +283,8 @@ src/
 │  ├─ Index/        FileEntry (64 bytes) · NameBlob · VolumeIndex
 │  ├─ Scan/         ScanOrchestrator · MftScanner · Win32Walker · VolumeProbe
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
+│  ├─ Actions/      DeleteService (Lixeira · permanente · dry-run)
+│  ├─ Safety/       ProtectedPaths — a lista que nada contorna
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (base en-US + pt-BR opcional, JSON embutido)
 │  └─ Preview/      ThumbnailProvider · BmpWriter

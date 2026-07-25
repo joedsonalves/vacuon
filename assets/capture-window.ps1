@@ -10,6 +10,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Output,
     [string]$ProcessName = 'Vacuon',
+    # Captura uma janela especifica do processo pelo titulo (dialogos modais sao
+    # janelas separadas e nao aparecem na captura da janela principal).
+    [string]$WindowTitle = '',
     [int]$DelaySeconds = 0
 )
 
@@ -30,6 +33,9 @@ public static class WinCap
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
     [DllImport("dwmapi.dll")]
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT value, int size);
 
@@ -45,13 +51,18 @@ public static class WinCap
 }
 '@
 
-$proc = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
-        Where-Object { $_.MainWindowHandle -ne 0 } |
-        Select-Object -First 1
+if ($WindowTitle) {
+    $hwnd = [WinCap]::FindWindow([NullString]::Value, $WindowTitle)
+    if ($hwnd -eq [IntPtr]::Zero) { throw "Nao achei janela com titulo '$WindowTitle'." }
+}
+else {
+    $proc = Get-Process -Name $ProcessName -ErrorAction SilentlyContinue |
+            Where-Object { $_.MainWindowHandle -ne 0 } |
+            Select-Object -First 1
 
-if (-not $proc) { throw "Processo '$ProcessName' sem janela principal." }
-
-$hwnd = $proc.MainWindowHandle
+    if (-not $proc) { throw "Processo '$ProcessName' sem janela principal." }
+    $hwnd = $proc.MainWindowHandle
+}
 [void][WinCap]::SetForegroundWindow($hwnd)
 Start-Sleep -Milliseconds 700
 
