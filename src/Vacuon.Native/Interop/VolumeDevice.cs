@@ -18,6 +18,15 @@ public sealed class VolumeDevice : IDisposable
     public NtfsVolumeData VolumeData { get; }
     public bool IncursSeekPenalty { get; }
 
+    /// <summary>
+    /// The raw volume handle. Exposed so the USN journal reader can issue its own
+    /// FSCTLs against the same elevated handle instead of opening a second one.
+    /// </summary>
+    public SafeFileHandle Handle => _handle;
+
+    /// <summary>Volume serial from the NTFS metadata. Survives a drive-letter change.</summary>
+    public long SerialNumber => VolumeData.VolumeSerialNumber;
+
     private VolumeDevice(char driveLetter, SafeFileHandle handle, NtfsVolumeData data, bool seekPenalty)
     {
         DriveLetter = driveLetter;

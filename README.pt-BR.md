@@ -12,7 +12,7 @@ e nunca afirma um número que não mediu.
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-136-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-170-3FB950.svg)](tests)
 
 **Português (Brasil)** · [English](README.md)
 
@@ -96,6 +96,41 @@ render de 9 GB que está em Vídeos; você não pode apagar a pasta Vídeos.
 
 Isto chegou antes do marco M4, então **a Lixeira é hoje o único desfazer**, e o diálogo diz
 exatamente isso em vez de sugerir uma rede de segurança que ainda não existe.
+
+### Reabrir — snapshot mais o diário de alterações
+
+O índice é salvo como snapshot binário: um cabeçalho, e então o array de `FileEntry` e o
+blob de nomes gravados como blocos crus. Carregar é uma leitura de bloco mais um
+`MemoryMarshal.Cast` — sem parse por entrada, sem alocação por arquivo. Serializar em JSON
+teria destruído o propósito: 2,8 milhões de entradas custariam mais para parsear do que a
+travessia que as produziu.
+
+Na abertura seguinte, o Vacuon pergunta ao NTFS **o que mudou** pelo diário de alterações
+(USN Journal) em vez de percorrer o volume de novo. Numa máquina parada isso é um punhado
+de registros.
+
+O diário diz o que mudou, mas nunca **de que tamanho** a coisa ficou — então arquivo criado
+ou modificado ainda precisa de uma consulta de tamanho cada. Adiada para o fim, de modo que
+um arquivo escrito cem vezes no delta é medido uma vez, no tamanho final.
+
+**Toda recusa é explicada**, porque elas levam a conclusões diferentes e só uma delas é
+algo que você pode resolver:
+
+| Recusa | Significado |
+|---|---|
+| ainda não há snapshot deste volume | primeira execução |
+| o snapshot é de outra versão do formato | `FileEntry` mudou; reinterpretar bytes antigos como a struct nova produziria um índice plausível e sem sentido |
+| o diário de alterações foi recriado | a numeração não bate mais com a nossa |
+| o diário descartou os registros de que precisávamos | ele deu a volta; o delta é indeterminável |
+| ler o diário exige executar como Administrador | **a acionável** |
+
+Snapshots são chaveados pelo **serial do volume, não pela letra** — letras são
+reatribuídas, e ler o índice do D: como E: seria pior que não ter nenhum. `--fresh` força
+varredura completa.
+
+> Como a leitura da MFT, o diário exige elevação. Sem ela o Vacuon não grava snapshot
+> nenhum: um índice sem posição de diário nunca poderia ser atualizado, então deixá-lo lá
+> só forçaria uma revarredura enquanto parecia um cache.
 
 ### Segurança — pontos de persistência no registro
 
@@ -264,7 +299,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | M1b | Scanner de persistência no registro + arquivos suspeitos | ✅ |
 | M1c | Miniaturas do Shell em seis tamanhos | ✅ |
 | **M2** | **GUI: painel, explorer virtualizado, busca, temas claro/escuro, elevação, i18n** | ✅ |
-| M1d | Snapshot binário + atualização incremental por USN | ⬜ |
+| **M1d** | **Snapshot binário + atualização incremental por USN** | ✅ |
 | M3 | Player embutido (LibVLCSharp) e preview de mídia | ⬜ |
 | M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
 | M4 | Quarentena reversível, histórico, desfazer | ⬜ |

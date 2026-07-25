@@ -795,7 +795,7 @@ Códigos de saída: `0` sucesso · `1` sucesso parcial (itens pulados) · `2` er
 | **M1 — Motor** | MftReader (runs, fixups, ADS, registros de extensão), Win32Walker de fallback, FileIndex, orquestrador com queda em cascata, CLI | CLI `vacuon scan C:` imprime top-100; 69 testes verdes sobre registros de MFT sintéticos | ✅ |
 | **M1b — Segurança** | 44 pontos de autorun do registro, heurísticas de comando, detecção de arquivo disfarçado, calibração contra falso positivo | `vacuon security` em máquina limpa devolve 0 achados falsos | ✅ |
 | **M1c — Miniaturas** | `IShellItemImageFactory` com `THUMBNAILONLY`→`ICONONLY`, 6 tamanhos, cache LRU | `vacuon thumb video.mkv --size=256` grava um frame real; `.md` é rotulado como ícone, não como conteúdo | ✅ |
-| **M1d — Snapshot** | Formato binário do índice + atualização incremental por USN Journal | Reabrir e ter o índice atualizado em < 1 s | ⬜ |
+| **M1d — Snapshot** | Formato binário do índice + atualização incremental por USN Journal | Snapshot faz round-trip exato e recusa versão ou tamanho de struct divergente; toda recusa de delta tem explicação própria; 170 testes | ✅ |
 | **M2 — Visualização** | WPF, Dashboard, Explorer virtualizado, árvore, top-N, busca, filtros, ícones do Shell | Navegar 1 M arquivos a 60 fps; busca < 100 ms | ⬜ |
 | **M3 — Preview** | LibVLCSharp, player, viewer de imagem, thumbnails nativas, media probe, "abrir pasta de origem", menu de contexto | Dar play em `.mkv` H.265 sem codec pack; `explorer /select` funcionando | ⬜ |
 | **M2b — Exclusão** | Lixeira e exclusão permanente com multi-seleção, lista de caminhos protegidos, diálogo de confirmação com plano | 6 arquivos apagados de vez e 2 pastas para a Lixeira, recuperáveis com a origem preservada; 136 testes | ✅ |

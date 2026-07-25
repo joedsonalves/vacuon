@@ -354,5 +354,22 @@
   "security.experimentalBadge": "EXPERIMENTAL",
   "security.falsePositiveNote": "A false positive here is treated as a bug. If something legitimate shows up, please report it.",
   "security.foundCount": "{0} files flagged",
-  "app.footerAfterDelete": "Vacuon {0}"
+  "app.footerAfterDelete": "Vacuon {0}",
+  "snapshot.usedTitle": "updated from snapshot",
+  "snapshot.used": "{0} changes applied from the change journal · snapshot was {1} old",
+  "snapshot.usedNoChanges": "nothing changed since the snapshot, taken {0} ago",
+  "snapshot.saved": "snapshot saved — the next open starts from a journal delta",
+  "snapshot.refusedNoSnapshot": "no snapshot for this volume yet",
+  "snapshot.refusedUnusable": "the snapshot is from another format version",
+  "snapshot.refusedNoJournal": "the volume has no active change journal",
+  "snapshot.refusedJournalReplaced": "the change journal was recreated — its numbering no longer matches",
+  "snapshot.refusedJournalWrapped": "the change journal discarded the records we needed",
+  "snapshot.refusedNeedsElevation": "reading the change journal requires running as Administrator",
+  "snapshot.age.seconds": "{0} s",
+  "snapshot.age.minutes": "{0} min",
+  "snapshot.age.hours": "{0} h",
+  "snapshot.age.days": "{0} days",
+  "cli.optFresh": "Force a full scan, ignoring any snapshot",
+  "cli.sourceSnapshot": "snapshot + journal delta",
+  "cli.sourceScan": "full scan"
 }
