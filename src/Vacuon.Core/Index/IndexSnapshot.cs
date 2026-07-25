@@ -33,8 +33,14 @@ public static class IndexSnapshot
     /// Bumped whenever <see cref="FileEntry"/> or the layout changes. A mismatch makes
     /// the loader refuse the file instead of reinterpreting old bytes as a new struct —
     /// which would produce a plausible-looking index full of garbage.
+    /// <para>
+    /// Version 2: the layout is byte-identical to version 1, but the MEANING of
+    /// <c>HardLinkCount</c> changed — it used to carry the record header's link count,
+    /// which counts the DOS 8.3 alias as a link. A v1 snapshot loaded by this code would
+    /// read cleanly and then hide a quarter of the disk. Semantics count as format.
+    /// </para>
     /// </summary>
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
 
     private const int HeaderSize = 128;
 

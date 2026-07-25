@@ -21,7 +21,12 @@ public sealed class MftRecordBuilder
 
     public uint RecordNumber { get; set; }
     public uint BaseRecordNumber { get; set; }
-    public ushort HardLinkCount { get; set; } = 1;
+    /// <summary>
+    /// The record header's link count (offset 0x12). Named after what it is rather than
+    /// what it looks like: NTFS counts $FILE_NAME attributes here, DOS alias included, so
+    /// it is not the hardlink count and tests must not treat it as one.
+    /// </summary>
+    public ushort StatedLinkCount { get; set; } = 1;
     public bool InUse { get; set; } = true;
     public bool IsDirectory { get; set; }
 
@@ -55,18 +60,28 @@ public sealed class MftRecordBuilder
         return this;
     }
 
-    public MftRecordBuilder WithResidentData(byte[] content)
+    public MftRecordBuilder WithResidentData(byte[] content, string? streamName = null)
     {
-        _attributes.Add(BuildResident(NtfsAttributeType.Data, content, name: null));
+        _attributes.Add(BuildResident(NtfsAttributeType.Data, content, streamName));
         return this;
     }
 
+    /// <param name="allocatedSize">
+    /// The value that goes at offset 0x28. For a compressed or sparse attribute NTFS puts
+    /// the run space here — the size as if nothing had been compressed — so pass the
+    /// virtual figure and give the true one as <paramref name="compressedSize"/>.
+    /// </param>
+    /// <param name="compressedSize">
+    /// The value at 0x40, present only when the compressed or sparse flag is set, and then
+    /// the only field that says how many bytes are really on disk.
+    /// </param>
     public MftRecordBuilder WithNonResidentData(long logicalSize, long allocatedSize,
                                                 string? streamName = null, ushort flags = 0,
-                                                long startVcn = 0, byte[]? dataRuns = null)
+                                                long startVcn = 0, byte[]? dataRuns = null,
+                                                long compressedSize = 0)
     {
         _attributes.Add(BuildNonResident(NtfsAttributeType.Data, logicalSize, allocatedSize,
-                                         streamName, flags, startVcn, dataRuns));
+                                         streamName, flags, startVcn, dataRuns, compressedSize));
         return this;
     }
 
@@ -83,7 +98,7 @@ public sealed class MftRecordBuilder
         BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecUsaOffset), (ushort)usaOffset);
         BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecUsaCount), (ushort)usaCount);
         BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecSequenceNumber), 1);
-        BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecHardLinkCount), HardLinkCount);
+        BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecHardLinkCount), StatedLinkCount);
         BinaryPrimitives.WriteUInt16LittleEndian(record.AsSpan(NtfsLayout.RecFirstAttributeOffset), (ushort)attributesOffset);
 
         ushort flags = 0;
@@ -153,11 +168,18 @@ public sealed class MftRecordBuilder
     }
 
     private static byte[] BuildNonResident(NtfsAttributeType type, long logicalSize, long allocatedSize,
-                                           string? name, ushort flags, long startVcn, byte[]? dataRuns)
+                                           string? name, ushort flags, long startVcn, byte[]? dataRuns,
+                                           long compressedSize = 0)
     {
         dataRuns ??= [0x00];
+        bool compressedOrSparse =
+            (flags & (NtfsLayout.AttrFlagCompressed | NtfsLayout.AttrFlagSparse)) != 0;
+
         int nameBytes = name is null ? 0 : name.Length * 2;
-        int nameOffset = 0x40;
+
+        // The header grows by the CompressedSize field, so the stream name cannot sit at
+        // 0x40 for these — which is exactly where it used to land unconditionally.
+        int nameOffset = compressedOrSparse ? 0x48 : 0x40;
         int runsOffset = Align8(nameOffset + nameBytes);
         int length = Align8(runsOffset + dataRuns.Length);
 
@@ -175,6 +197,10 @@ public sealed class MftRecordBuilder
         BinaryPrimitives.WriteInt64LittleEndian(attribute.AsSpan(NtfsLayout.NonResAllocatedSize), allocatedSize);
         BinaryPrimitives.WriteInt64LittleEndian(attribute.AsSpan(NtfsLayout.NonResRealSize), logicalSize);
         BinaryPrimitives.WriteInt64LittleEndian(attribute.AsSpan(NtfsLayout.NonResInitializedSize), logicalSize);
+
+        if (compressedOrSparse)
+            BinaryPrimitives.WriteInt64LittleEndian(
+                attribute.AsSpan(NtfsLayout.NonResCompressedSize), compressedSize);
 
         if (name is not null) Encoding.Unicode.GetBytes(name).CopyTo(attribute.AsSpan(nameOffset));
         dataRuns.CopyTo(attribute.AsSpan(runsOffset));

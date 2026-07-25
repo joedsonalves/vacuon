@@ -12,7 +12,7 @@ to delete, and never claims a number it did not measure.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
-[![Tests](https://img.shields.io/badge/tests-170-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-183-3FB950.svg)](tests)
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
@@ -197,6 +197,25 @@ reading D:'s index as E: would be worse than having none. `--fresh` forces a ful
 > Like the MFT read, the journal needs elevation. Without it Vacuon writes no snapshot at
 > all: an index with no journal position could never be brought up to date, so leaving one
 > behind would only ever force a rescan while looking like a cache.
+
+### Cross-checking the total against the filesystem
+
+Every scan compares the space it attributed to files against what the volume reports as used,
+and says which way it came out.
+
+The two can never match exactly, and the reasons are structural: directory indexes
+(`$INDEX_ALLOCATION`) occupy clusters without being files, `$LogFile` and `$Bitmap` are
+metadata, and volume shadow copies hold space that no directory entry points at. So landing a
+few percent **under** the reported figure is the healthy case.
+
+Landing **over** it is not. That direction is arithmetically impossible, and the check calls it
+a bug rather than printing the number as measured fact.
+
+This exists because it was missing. Version 0.3.0 reported `Size on disk 758 GiB` for a 476 GiB
+volume, one line above the correct `377 GiB used of 476 GiB`, and nothing objected — because
+nothing was comparing them. Three separate defects were feeding it, all in the same family:
+reading a field whose meaning is close to, but not the same as, what its name suggests. See
+traps 18 to 21.
 
 ### Security — registry persistence points
 
@@ -407,6 +426,11 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 15. **A USN file reference is not an MFT record number.** The high 16 bits are the sequence number; using the whole 64-bit value as an array index would be catastrophic.
 16. **`ListView.SelectedItems` is not a bindable dependency property.** Multi-selection has to be pushed to the view model from code-behind.
 17. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
+
+18. **The record header's link count (offset 0x12) counts the DOS 8.3 alias as a link.** NTFS counts `$FILE_NAME` attributes there, and every name that does not fit 8.3 gets a second one in the DOS namespace. On a real volume that marked **75% of all files** as hardlinked — a downloaded `.mp4`, an installer `.exe`. Since hardlinked content is deliberately charged to the disk only once, it **hid 217 GiB**. The true count is the number of `$FILE_NAME` attributes whose namespace is not `Dos`.
+19. **For a compressed or sparse attribute, the size on disk is at 0x40, not 0x28.** Field 0x28 holds the run space *as if nothing had been compressed or punched out*; `CompressedSize` at 0x40 — present only when the flag is set — is what is really occupied. And in those attributes the stream name starts at **0x48**, not 0x40.
+20. **`$BadClus:$Bad` is the size of the whole volume and occupies zero.** Every NTFS volume carries that sparse named stream, and `$Extend\$UsnJrnl:$J` is another. Using their logical size as occupancy added **568 GiB to a 476 GiB disk**. A fallback like `allocated > 0 ? allocated : logical` looks harmless — a resident stream does report 0 — and is exactly what turns them into hundreds of imaginary gigabytes.
+21. **Two totals that are never compared drift apart unnoticed.** The app printed `Size on disk 758 GiB` one line above `377 GiB used of 476 GiB` for an entire release. Measuring *more* than the volume reports as used is arithmetically impossible and always a bug; measuring slightly less is the healthy case, because directory indexes and metadata occupy clusters without being files. Hence `VolumeIndex.CheckAgainstFileSystem()`, the cross-check that would have caught traps 18, 19 and 20 on the first run.
 
 The full list lives in [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 

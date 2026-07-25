@@ -1,5 +1,5 @@
 using System.Globalization;
-using Vacuon.Core.Localization;
+using Vacuon.Core;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Security;
 
@@ -8,25 +8,7 @@ namespace Vacuon.Cli;
 /// <summary>Formatação para o terminal. Números tabulares, cor só onde significa algo.</summary>
 public static class Formatting
 {
-    private static readonly string[] BinaryUnits = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
-
-    public static string Bytes(long value)
-    {
-        if (value < 0) return "-" + Bytes(-value);
-        if (value < 1024) return $"{value} B";
-
-        double size = value;
-        int unit = 0;
-        while (size >= 1024 && unit < BinaryUnits.Length - 1)
-        {
-            size /= 1024;
-            unit++;
-        }
-
-        return size >= 100
-            ? string.Format(CultureInfo.CurrentCulture, "{0:N0} {1}", size, BinaryUnits[unit])
-            : string.Format(CultureInfo.CurrentCulture, "{0:N1} {1}", size, BinaryUnits[unit]);
-    }
+    public static string Bytes(long value) => ByteSize.Format(value);
 
     public static string Count(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
 

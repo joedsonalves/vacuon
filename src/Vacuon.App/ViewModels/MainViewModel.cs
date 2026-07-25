@@ -138,7 +138,7 @@ public sealed class MainViewModel : Observable, IDisposable
     // ================= idioma =================
 
     /// <summary>Versão exibida no rodapé e nas Configurações.</summary>
-    public static string AppVersion => "0.3.0";
+    public static string AppVersion => "0.3.1";
 
     /// <summary>
     /// Footer tag. It claims "nothing was deleted" only while that is still true —

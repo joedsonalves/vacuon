@@ -81,7 +81,7 @@ static class Help
     {
         Console.WriteLine();
         Console.WriteLine($"  {L.T("app.name")} — {L.T("app.tagline")}");
-        Console.WriteLine($"  v0.3.0 · {L.T("settings.versionTitle", "0.3.0")}");
+        Console.WriteLine($"  v0.3.1 · {L.T("settings.versionTitle", "0.3.1")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.usage")}");
         Console.WriteLine("    vacuon <command> [options]");
@@ -120,7 +120,7 @@ static class Commands
 {
     public static int Version()
     {
-        Console.WriteLine("Vacuon 0.3.0");
+        Console.WriteLine("Vacuon 0.3.1");
         Console.WriteLine($".NET        {Environment.Version}");
         Console.WriteLine($"OS          {Environment.OSVersion.VersionString}");
         Console.WriteLine($"{L.T("cli.cores"),-11} {Environment.ProcessorCount}");
@@ -225,6 +225,18 @@ static class Commands
         }
 
         Console.WriteLine($"  {L.T("cli.labelVolume"),-17} {L.T("cli.labelUsedOf", Formatting.Bytes(index.Volume.UsedBytes), Formatting.Bytes(index.Volume.TotalBytes))}");
+
+        // Print the two totals against each other. They sat one line apart for a whole
+        // release saying "758 GiB on disk" and "377 GiB used of 476 GiB", and nothing
+        // objected, because nothing was comparing them.
+        if (hasRealAllocation)
+        {
+            Reconciliation check = index.CheckAgainstFileSystem();
+            string line = $"  {L.T("reconcile.label"),-17} {check.Describe()}";
+
+            if (check.IsImpossible) Formatting.WriteWarning(line);
+            else Formatting.WriteMuted(line);
+        }
 
         // ------------------------------------------------------------------
         Formatting.WriteHeading(L.T("cli.headBiggestFiles", top));

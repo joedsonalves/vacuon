@@ -12,7 +12,7 @@ e nunca afirma um número que não mediu.
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-170-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-183-3FB950.svg)](tests)
 
 **Português (Brasil)** · [English](README.md)
 
@@ -198,6 +198,24 @@ varredura completa.
 > Como a leitura da MFT, o diário exige elevação. Sem ela o Vacuon não grava snapshot
 > nenhum: um índice sem posição de diário nunca poderia ser atualizado, então deixá-lo lá
 > só forçaria uma revarredura enquanto parecia um cache.
+
+### Conferindo o total contra o sistema de arquivos
+
+Toda varredura compara o espaço que ela atribuiu a arquivos com o que o volume declara em uso,
+e diz para que lado deu.
+
+Os dois nunca batem exatamente, e os motivos são estruturais: índices de diretório
+(`$INDEX_ALLOCATION`) ocupam cluster sem ser arquivo, `$LogFile` e `$Bitmap` são metadados, e
+cópias de sombra guardam espaço que nenhuma entrada de diretório aponta. Então ficar alguns
+por cento **abaixo** do declarado é o caso saudável.
+
+Ficar **acima** não é. Esse lado é aritmeticamente impossível, e a conferência chama de bug em
+vez de imprimir o número como fato medido.
+
+Isso existe porque faltava. A versão 0.3.0 informou `Size on disk 758 GiB` num volume de
+476 GiB, uma linha acima do correto `377 GiB used of 476 GiB`, e nada reclamou — porque nada
+estava comparando. Três defeitos distintos alimentavam o número, todos da mesma família: ler um
+campo cujo significado é próximo, mas não igual, ao que o nome sugere. Ver armadilhas 18 a 21.
 
 ### Segurança — pontos de persistência no registro
 
