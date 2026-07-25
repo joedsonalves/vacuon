@@ -30,34 +30,34 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <Button Style="{StaticResource Button.Base}" Content="Maiores arquivos"
+                        <Button Style="{StaticResource Button.Base}" Content="{DynamicResource S.filter.biggestFiles}"
                                 FontSize="12" Padding="10,6" Click="OnBiggestFiles"/>
-                        <Button Style="{StaticResource Button.Base}" Content="Maiores pastas" Margin="6,0,0,0"
+                        <Button Style="{StaticResource Button.Base}" Content="{DynamicResource S.filter.biggestFolders}" Margin="6,0,0,0"
                                 FontSize="12" Padding="10,6" Click="OnBiggestFolders"/>
-                        <Button Style="{StaticResource Button.Base}" Content="Suspeitos" Margin="6,0,0,0"
+                        <Button Style="{StaticResource Button.Base}" Content="{DynamicResource S.filter.suspicious}" Margin="6,0,0,0"
                                 FontSize="12" Padding="10,6" Click="OnSuspicious"/>
                     </StackPanel>
 
                     <TextBox Grid.Column="1" Style="{StaticResource Input}" Margin="14,0"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=180}"
-                             ToolTip="Busca por parte do nome. A varredura já está em memória, então o resultado é imediato."/>
+                             ToolTip="{DynamicResource S.filter.searchHint}"/>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Text.Muted}" Text="Ícone"/>
+                                   Foreground="{DynamicResource Text.Muted}" Text="{DynamicResource S.icon.label}"/>
                         <ComboBox Margin="8,0,0,0" Width="180"
                                   ItemsSource="{Binding IconSizeOptions}"
                                   SelectedItem="{Binding SelectedIconSizeOption}"
-                                  ToolTip="Tamanho da miniatura. Nos tamanhos grandes, imagem e vídeo mostram o conteúdo real."/>
+                                  ToolTip="{DynamicResource S.icon.hint}"/>
                     </StackPanel>
                 </Grid>
 
                 <!-- filtros -->
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                     <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
-                               Foreground="{DynamicResource Text.Muted}" Text="Maior que"/>
+                               Foreground="{DynamicResource Text.Muted}" Text="{DynamicResource S.filter.largerThan}"/>
                     <ComboBox Margin="7,0,0,0" Width="104" SelectedIndex="0" SelectionChanged="OnMinSizeChanged">
-                        <ComboBoxItem Content="qualquer" Tag="0"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.any}" Tag="0"/>
                         <ComboBoxItem Content="1 MB" Tag="1048576"/>
                         <ComboBoxItem Content="10 MB" Tag="10485760"/>
                         <ComboBoxItem Content="100 MB" Tag="104857600"/>
@@ -66,24 +66,24 @@
                     </ComboBox>
 
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
-                               Foreground="{DynamicResource Text.Muted}" Text="Sem alterar há"/>
+                               Foreground="{DynamicResource Text.Muted}" Text="{DynamicResource S.filter.notChangedFor}"/>
                     <ComboBox Margin="7,0,0,0" Width="104" SelectedIndex="0" SelectionChanged="OnMinAgeChanged">
-                        <ComboBoxItem Content="qualquer" Tag="0"/>
-                        <ComboBoxItem Content="30 dias" Tag="30"/>
-                        <ComboBoxItem Content="90 dias" Tag="90"/>
-                        <ComboBoxItem Content="180 dias" Tag="180"/>
-                        <ComboBoxItem Content="1 ano" Tag="365"/>
-                        <ComboBoxItem Content="2 anos" Tag="730"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.any}" Tag="0"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.d30}" Tag="30"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.d90}" Tag="90"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.d180}" Tag="180"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.y1}" Tag="365"/>
+                        <ComboBoxItem Content="{DynamicResource S.filter.y2}" Tag="730"/>
                     </ComboBox>
 
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
-                               Foreground="{DynamicResource Text.Muted}" Text="Extensão"/>
+                               Foreground="{DynamicResource Text.Muted}" Text="{DynamicResource S.filter.extension}"/>
                     <TextBox Style="{StaticResource Input}" Margin="7,0,0,0" Width="150"
                              Text="{Binding ExtensionFilter, UpdateSourceTrigger=PropertyChanged, Delay=250}"
-                             ToolTip="mp4, mkv, iso — separadas por vírgula"/>
+                             ToolTip="{DynamicResource S.filter.extensionHint}"/>
 
                     <Button Style="{StaticResource Button.Ghost}" Margin="10,0,0,0" FontSize="12"
-                            Content="Limpar" Command="{Binding ClearFiltersCommand}"/>
+                            Content="{DynamicResource S.action.clear}" Command="{Binding ClearFiltersCommand}"/>
                 </StackPanel>
             </StackPanel>
         </Border>
@@ -105,7 +105,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0" Style="{StaticResource Text.Section}" Margin="6,0,0,6"
-                               Text="PASTAS — MAIORES PRIMEIRO"/>
+                               Text="{DynamicResource S.list.folderTree}"/>
 
                     <!-- Rolagem horizontal desabilitada de propósito: com ela ligada os
                          itens crescem além da viewport e a coluna de tamanho sai de vista. -->
@@ -207,7 +207,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="Nome" Width="380">
+                            <GridViewColumn Header="{DynamicResource S.column.name}" Width="380">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="6,0,0,0" VerticalAlignment="Center">
@@ -232,7 +232,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="Tamanho" Width="96">
+                            <GridViewColumn Header="{DynamicResource S.column.size}" Width="96">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Number}" Width="86"
@@ -241,7 +241,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="Modificado" Width="130">
+                            <GridViewColumn Header="{DynamicResource S.column.modified}" Width="130">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
@@ -250,7 +250,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="Caminho" Width="420">
+                            <GridViewColumn Header="{DynamicResource S.column.path}" Width="420">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
@@ -265,11 +265,11 @@
 
                     <ListView.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Abrir" Command="{Binding OpenCommand}"/>
-                            <MenuItem Header="Abrir pasta de origem" InputGestureText="Ctrl+Enter"
+                            <MenuItem Header="{DynamicResource S.action.open}" Command="{Binding OpenCommand}"/>
+                            <MenuItem Header="{DynamicResource S.action.reveal}" InputGestureText="Ctrl+Enter"
                                       Command="{Binding RevealCommand}"/>
                             <Separator/>
-                            <MenuItem Header="Copiar caminho" InputGestureText="Ctrl+C"
+                            <MenuItem Header="{DynamicResource S.action.copyPath}" InputGestureText="Ctrl+C"
                                       Command="{Binding CopyPathCommand}"/>
                         </ContextMenu>
                     </ListView.ContextMenu>
@@ -281,14 +281,14 @@
                         Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
                     <StackPanel Orientation="Horizontal">
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
-                                Content="Abrir" Command="{Binding OpenCommand}"/>
+                                Content="{DynamicResource S.action.open}" Command="{Binding OpenCommand}"/>
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
-                                Content="Pasta de origem" Command="{Binding RevealCommand}"/>
+                                Content="{DynamicResource S.action.reveal}" Command="{Binding RevealCommand}"/>
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
-                                Content="Copiar caminho" Command="{Binding CopyPathCommand}"/>
+                                Content="{DynamicResource S.action.copyPath}" Command="{Binding CopyPathCommand}"/>
                         <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource Text.Muted}"
-                                   Text="Apagar e mover chegam no M4, com quarentena reversível."/>
+                                   Text="{DynamicResource S.list.deleteComingLater}"/>
                     </StackPanel>
                 </Border>
             </Grid>

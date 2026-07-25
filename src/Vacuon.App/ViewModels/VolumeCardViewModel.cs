@@ -1,5 +1,6 @@
 using Vacuon.App.Infra;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.App.ViewModels;
 
@@ -33,6 +34,6 @@ public sealed class VolumeCardViewModel(VolumeInfo volume) : Observable
         Volume.FileSystem.Equals("NTFS", StringComparison.OrdinalIgnoreCase);
 
     public string ScanHintText => SupportsFastScan
-        ? "NTFS — leitura da MFT disponível"
-        : $"{Volume.FileSystem} — sem MFT, varredura pela API";
+        ? L.T("volumes.ntfsReady")
+        : L.T("volumes.noMft", Volume.FileSystem);
 }

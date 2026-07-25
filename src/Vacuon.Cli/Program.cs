@@ -3,12 +3,16 @@ using System.Text;
 using Vacuon.Cli;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
 using Vacuon.Native.Interop;
 
 Console.OutputEncoding = Encoding.UTF8;
+
+// Idioma antes de qualquer escrita: en-US é o padrão, --language=pt-BR troca.
+L.Use(LanguageFromArgs(args));
 
 if (args.Length == 0 || args[0] is "-h" or "--help" or "help" or "/?")
 {
@@ -31,7 +35,7 @@ try
 }
 catch (OperationCanceledException)
 {
-    Formatting.WriteWarning("\nCancelado.");
+    Formatting.WriteWarning("\n" + L.T("cli.cancelled"));
     return 5;
 }
 catch (VolumeAccessException ex)
@@ -42,9 +46,31 @@ catch (VolumeAccessException ex)
 
 static int Unknown(string command)
 {
-    Formatting.WriteError($"Comando desconhecido: {command}");
+    Formatting.WriteError(L.T("cli.unknownCommand", command));
     Help.Print();
     return 2;
+}
+
+/// <summary>
+/// Lê --language=xx dos argumentos. Fica solto aqui porque precisa rodar antes do
+/// despacho de comandos — a mensagem de erro de um comando inválido já sai traduzida.
+/// </summary>
+static AppLanguage LanguageFromArgs(string[] args)
+{
+    foreach (string a in args)
+    {
+        if (!a.StartsWith("--language=", StringComparison.OrdinalIgnoreCase)) continue;
+
+        string tag = a["--language=".Length..].Trim();
+        return tag.ToLowerInvariant() switch
+        {
+            "pt" or "pt-br" or "portugues" or "português" => AppLanguage.Portuguese,
+            "system" or "auto" => AppLanguage.System,
+            _ => AppLanguage.English,
+        };
+    }
+
+    return AppLanguage.English;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,37 +80,37 @@ static class Help
     public static void Print()
     {
         Console.WriteLine();
-        Console.WriteLine("  VACUON — analisador e liberador de espaço em disco");
-        Console.WriteLine("  v0.1.0 · marco M1 (motor de varredura)");
+        Console.WriteLine($"  {L.T("app.name")} — {L.T("app.tagline")}");
+        Console.WriteLine($"  v0.2.0 · {L.T("settings.versionTitle", "0.2.0")}");
         Console.WriteLine();
-        Console.WriteLine("  USO");
-        Console.WriteLine("    vacuon <comando> [opções]");
+        Console.WriteLine($"  {L.T("cli.usage")}");
+        Console.WriteLine("    vacuon <command> [options]");
         Console.WriteLine();
-        Console.WriteLine("  COMANDOS");
-        Console.WriteLine("    volumes                    Lista os volumes e o espaço de cada um");
-        Console.WriteLine("    scan <unidade|pasta>       Mapeia o espaço e mostra o que ocupa");
-        Console.WriteLine("    security                   Inspeciona as chaves do registro onde malware se aloja");
-        Console.WriteLine("    thumb <arquivo>            Extrai a miniatura de um arquivo");
-        Console.WriteLine("    reveal <arquivo>           Abre o Explorer com o arquivo selecionado");
-        Console.WriteLine("    version                    Versão e ambiente");
+        Console.WriteLine($"  {L.T("cli.commands")}");
+        Console.WriteLine($"    volumes                    {L.T("cli.cmdVolumes")}");
+        Console.WriteLine($"    scan <drive|folder>        {L.T("cli.cmdScan")}");
+        Console.WriteLine($"    security                   {L.T("cli.cmdSecurity")}");
+        Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
+        Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
+        Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
         Console.WriteLine();
-        Console.WriteLine("  OPÇÕES DE scan");
-        Console.WriteLine("    --top=N                    Quantos itens listar (padrão 20)");
-        Console.WriteLine("    --strategy=auto|mft|walk   Força a estratégia de varredura");
-        Console.WriteLine("    --suspicious               Também procura arquivos suspeitos");
-        Console.WriteLine("    --no-progress              Silencia a barra de progresso");
+        Console.WriteLine($"  {L.T("cli.scanOptions")}");
+        Console.WriteLine($"    --top=N                    {L.T("cli.optTop")}");
+        Console.WriteLine($"    --strategy=auto|mft|walk   {L.T("cli.optStrategy")}");
+        Console.WriteLine($"    --suspicious               {L.T("cli.optSuspicious")}");
+        Console.WriteLine($"    --no-progress              {L.T("cli.optNoProgress")}");
+        Console.WriteLine($"    --language=en-US|pt-BR     {L.T("cli.optLanguage")}");
         Console.WriteLine();
-        Console.WriteLine("  OPÇÕES DE security");
-        Console.WriteLine("    --all                      Inclui também as entradas normais");
-        Console.WriteLine("    --no-signatures            Pula a checagem de assinatura digital (mais rápido)");
+        Console.WriteLine($"  {L.T("cli.securityOptions")}");
+        Console.WriteLine($"    --all                      {L.T("cli.optAll")}");
+        Console.WriteLine($"    --no-signatures            {L.T("cli.optNoSignatures")}");
         Console.WriteLine();
-        Console.WriteLine("  OPÇÕES DE thumb");
-        Console.WriteLine("    --size=16|32|64|128|256|512   Tamanho em pixels (padrão 256)");
-        Console.WriteLine("    --out=arquivo.bmp             Onde gravar (padrão: ao lado do original)");
-        Console.WriteLine("    --icon                        Força o ícone do tipo em vez do conteúdo");
+        Console.WriteLine($"  {L.T("cli.thumbOptions")}");
+        Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
+        Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
+        Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
         Console.WriteLine();
-        Console.WriteLine("  A leitura da MFT exige executar como Administrador. Sem elevação, o Vacuon");
-        Console.WriteLine("  cai automaticamente para a travessia pela API — mais lenta, mesmo resultado.");
+        Console.WriteLine("  " + L.T("cli.elevationNote").Replace("\n", "\n  "));
         Console.WriteLine();
     }
 }
@@ -93,17 +119,18 @@ static class Commands
 {
     public static int Version()
     {
-        Console.WriteLine($"Vacuon 0.1.0");
+        Console.WriteLine("Vacuon 0.2.0");
         Console.WriteLine($".NET        {Environment.Version}");
-        Console.WriteLine($"SO          {Environment.OSVersion.VersionString}");
-        Console.WriteLine($"Núcleos     {Environment.ProcessorCount}");
-        Console.WriteLine($"Elevado     {(VolumeProbe.IsElevated() ? "sim" : "não")}");
+        Console.WriteLine($"OS          {Environment.OSVersion.VersionString}");
+        Console.WriteLine($"{L.T("cli.cores"),-11} {Environment.ProcessorCount}");
+        Console.WriteLine($"{L.T("cli.elevated"),-11} {L.T(VolumeProbe.IsElevated() ? "cli.yes" : "cli.no")}");
+        Console.WriteLine($"Language    {L.Culture.Name}");
         return 0;
     }
 
     public static int Volumes()
     {
-        Formatting.WriteHeading("VOLUMES");
+        Formatting.WriteHeading(L.T("cli.headVolumes"));
 
         foreach (VolumeInfo v in VolumeProbe.EnumerateFixedVolumes())
         {
@@ -111,8 +138,8 @@ static class Commands
             string bar = Bar(usedPercent, 24);
 
             Console.WriteLine($"  {v.DriveLetter}:    {Formatting.Truncate(v.Label, 22),-24} {v.FileSystem,-8} " +
-                              $"{Formatting.Bytes(v.TotalBytes),12}   {bar} {usedPercent,5:N1}% usado   " +
-                              $"{Formatting.Bytes(v.FreeBytes)} livres");
+                              $"{Formatting.Bytes(v.TotalBytes),12}   {bar} {usedPercent,5:N1}%    " +
+                              $"{Formatting.Bytes(v.FreeBytes)} {L.T("volumes.freeOf").TrimEnd()}");
         }
 
         Console.WriteLine();
@@ -152,43 +179,45 @@ static class Commands
         VolumeIndex index = result.Index;
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading($"VARREDURA — {target}");
+        Formatting.WriteHeading(L.T("cli.headScan", target));
 
-        Console.WriteLine($"  Estratégia        {(result.StrategyUsed == ScanStrategy.Mft ? "leitura bruta da MFT" : "travessia pela API do Windows")}");
+        Console.WriteLine($"  {L.T("cli.labelStrategy"),-17} {L.T(result.StrategyUsed == ScanStrategy.Mft ? "scan.strategyMft" : "scan.strategyWalk")}");
         if (result.FallbackReason is not null)
-            Formatting.WriteMuted($"                    (caiu para o fallback: {result.FallbackReason})");
+            Formatting.WriteMuted($"                    {L.T("cli.labelFellBack", result.FallbackReason)}");
 
         int files = index.FileCount;
         int dirs = index.DirectoryCount;
 
-        Console.WriteLine($"  Tempo             {Formatting.Duration(sw.Elapsed)}");
-        Console.WriteLine($"  Arquivos          {Formatting.Count(files)}");
-        Console.WriteLine($"  Pastas            {Formatting.Count(dirs)}");
+        Console.WriteLine($"  {L.T("cli.labelTime"),-17} {Formatting.Duration(sw.Elapsed)}");
+        Console.WriteLine($"  {L.T("cli.labelFiles"),-17} {Formatting.Count(files)}");
+        Console.WriteLine($"  {L.T("cli.labelFolders"),-17} {Formatting.Count(dirs)}");
         if (sw.Elapsed.TotalSeconds > 0)
-            Console.WriteLine($"  Velocidade        {Formatting.Count((long)(files / sw.Elapsed.TotalSeconds))} arquivos/s");
+            Console.WriteLine($"  {L.T("cli.labelSpeed"),-17} {L.T("cli.labelFilesPerSecond", Formatting.Count((long)(files / sw.Elapsed.TotalSeconds)))}");
 
         bool hasRealAllocation = result.StrategyUsed == ScanStrategy.Mft;
 
         Console.WriteLine();
-        Console.WriteLine($"  Tamanho lógico    {Formatting.Bytes(index.TotalLogicalBytes)}");
+        Console.WriteLine($"  {L.T("cli.labelLogicalSize"),-17} {Formatting.Bytes(index.TotalLogicalBytes)}");
 
         if (hasRealAllocation)
         {
-            Console.WriteLine($"  Tamanho em disco  {Formatting.Bytes(index.TotalBytesOnDisk)}");
-            Console.WriteLine($"  Desperdício       {Formatting.Bytes(index.TotalSlackBytes)}  (folga de cluster)");
+            Console.WriteLine($"  {L.T("cli.labelSizeOnDisk"),-17} {Formatting.Bytes(index.TotalBytesOnDisk)}");
+            Console.WriteLine($"  {L.T("cli.labelSlack"),-17} {Formatting.Bytes(index.TotalSlackBytes)}  {L.T("cli.labelSlackNote")}");
         }
         else
         {
             // A API do Windows não expõe AllocatedSize: repetir o tamanho lógico aqui
             // faria o app afirmar "desperdício 0 B", que é falso e não medido.
-            Formatting.WriteMuted("  Tamanho em disco  não medido (só a leitura da MFT expõe AllocatedSize)");
-            Formatting.WriteMuted("  Desperdício       não medido pelo mesmo motivo");
+            // Rótulo e mensagem separados: com o texto inteiro numa chave, a largura
+            // do padding vinha de um idioma só e o outro saía desalinhado.
+            Formatting.WriteMuted($"  {L.T("cli.labelSizeOnDisk"),-17} {L.T("cli.notMeasuredDisk")}");
+            Formatting.WriteMuted($"  {L.T("cli.labelSlack"),-17} {L.T("cli.notMeasuredSame")}");
         }
 
-        Console.WriteLine($"  Volume            {Formatting.Bytes(index.Volume.UsedBytes)} usados de {Formatting.Bytes(index.Volume.TotalBytes)}");
+        Console.WriteLine($"  {L.T("cli.labelVolume"),-17} {L.T("cli.labelUsedOf", Formatting.Bytes(index.Volume.UsedBytes), Formatting.Bytes(index.Volume.TotalBytes))}");
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading($"MAIORES ARQUIVOS (top {top})");
+        Formatting.WriteHeading(L.T("cli.headBiggestFiles", top));
         foreach (SizedItem item in SizeAnalyzer.TopFiles(index, top))
         {
             string path = index.GetFullPath(item.Index);
@@ -203,29 +232,29 @@ static class Commands
         }
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading($"MAIORES PASTAS (top {top})");
+        Formatting.WriteHeading(L.T("cli.headBiggestFolders", top));
         foreach (SizedItem item in SizeAnalyzer.TopFolders(index, top))
         {
             string path = index.GetFullPath(item.Index);
-            Console.WriteLine($"  {Formatting.Bytes(item.LogicalSize),12}  {Formatting.Count(item.FileCount),9} arq.  {Formatting.Truncate(path, 80)}");
+            Console.WriteLine($"  {Formatting.Bytes(item.LogicalSize),12}  {Formatting.Count(item.FileCount),9} {L.T("cli.labelFilesUnit")}  {Formatting.Truncate(path, 80)}");
         }
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading("POR TIPO DE ARQUIVO");
+        Formatting.WriteHeading(L.T("cli.headByType"));
         foreach (ExtensionBucket bucket in SizeAnalyzer.ByExtension(index, 15))
         {
-            Console.WriteLine($"  {Formatting.Bytes(bucket.TotalBytes),12}  {Formatting.Count(bucket.Count),9} arq.  " +
-                              $"{bucket.Extension,-16} {bucket.Category}");
+            Console.WriteLine($"  {Formatting.Bytes(bucket.TotalBytes),12}  {Formatting.Count(bucket.Count),9} {L.T("cli.labelFilesUnit")}  " +
+                              $"{bucket.DisplayExtension,-16} {bucket.Category}");
         }
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading("DISTRIBUIÇÃO POR TAMANHO");
+        Formatting.WriteHeading(L.T("cli.headBySize"));
         foreach (SizeBucket bucket in SizeAnalyzer.BySizeRange(index))
         {
             if (bucket.Count == 0) continue;
 
             string slack = hasRealAllocation
-                ? $"   desperdício {Formatting.Bytes(bucket.SlackBytes)}"
+                ? $"   {L.T("cli.labelWaste")} {Formatting.Bytes(bucket.SlackBytes)}"
                 : string.Empty;
 
             Console.WriteLine($"  {bucket.Label,-18} {Formatting.Count(bucket.Count),10} arq. " +
@@ -233,7 +262,7 @@ static class Commands
         }
 
         // ------------------------------------------------------------------
-        Formatting.WriteHeading("IDADE DOS ARQUIVOS (última modificação)");
+        Formatting.WriteHeading(L.T("cli.headByAge"));
         foreach (AgeBucket bucket in SizeAnalyzer.ByAge(index, DateTime.UtcNow))
         {
             if (bucket.Count == 0) continue;
@@ -243,13 +272,13 @@ static class Commands
         // ------------------------------------------------------------------
         if (wantSuspicious)
         {
-            Formatting.WriteHeading("ARQUIVOS SUSPEITOS");
+            Formatting.WriteHeading(L.T("cli.headSuspicious"));
             var analyzer = new SuspiciousFileAnalyzer();
             List<SuspiciousFile> suspicious = analyzer.Analyze(index, 40, cts.Token);
 
             if (suspicious.Count == 0)
             {
-                Formatting.WriteMuted("  Nenhum arquivo bateu nas heurísticas. Isso é uma boa notícia.");
+                Formatting.WriteMuted("  " + L.T("status.noSuspicious"));
             }
             else
             {
@@ -260,12 +289,12 @@ static class Commands
                     Console.WriteLine($"  [{Formatting.LabelFor(s.Level)}] {Formatting.Truncate(s.Path, 88)}");
                     Console.ForegroundColor = previous;
                     Formatting.WriteMuted($"      {s.Reason}");
-                    Formatting.WriteMuted($"      {Formatting.Bytes(s.SizeBytes)} · modificado em {s.ModifiedUtc.ToLocalTime():dd/MM/yyyy HH:mm}");
+                    Formatting.WriteMuted($"      {L.T("cli.labelModifiedOn", Formatting.Bytes(s.SizeBytes), s.ModifiedUtc.ToLocalTime().ToString("g", L.Culture))}");
                 }
 
                 Console.WriteLine();
-                Formatting.WriteMuted("  O Vacuon não é antivírus: isto é heurística de comportamento, não veredito.");
-                Formatting.WriteMuted("  Nada foi alterado. Verifique cada item antes de agir.");
+                Formatting.WriteMuted("  " + L.T("cli.notAntivirusNote"));
+                Formatting.WriteMuted("  " + L.T("cli.nothingChangedNote"));
             }
         }
 
@@ -278,10 +307,10 @@ static class Commands
         bool all = args.Contains("--all");
         bool signatures = !args.Contains("--no-signatures");
 
-        Formatting.WriteHeading("CHAVES DE PERSISTÊNCIA DO REGISTRO");
+        Formatting.WriteHeading(L.T("cli.headSecurity"));
 
         if (!VolumeProbe.IsElevated())
-            Formatting.WriteWarning("  Sem elevação: chaves de HKLM protegidas podem não ser lidas. Execute como Administrador para a inspeção completa.\n");
+            Formatting.WriteWarning("  " + L.T("cli.notElevatedWarning") + "\n");
 
         var scanner = new RegistryPersistenceScanner(new SecurityScanOptions
         {
@@ -291,15 +320,15 @@ static class Commands
 
         SecurityReport report = scanner.Scan();
 
-        Console.WriteLine($"  Locais inspecionados   {report.LocationsInspected}");
-        Console.WriteLine($"  Entradas lidas         {Formatting.Count(report.EntriesInspected)}");
-        Console.WriteLine($"  Tempo                  {Formatting.Duration(report.Elapsed)}");
+        Console.WriteLine($"  {L.T("cli.labelLocations"),-22} {report.LocationsInspected}");
+        Console.WriteLine($"  {L.T("cli.labelEntries"),-22} {Formatting.Count(report.EntriesInspected)}");
+        Console.WriteLine($"  {L.T("cli.labelTime"),-22} {Formatting.Duration(report.Elapsed)}");
         Console.WriteLine();
 
         int flagged = report.CountAtLeast(Suspicion.Notable);
         if (flagged == 0)
         {
-            Formatting.WriteMuted("  Nenhuma entrada fugiu do padrão. Os pontos de autorun estão limpos.");
+            Formatting.WriteMuted("  " + L.T("cli.nothingFlagged"));
             Console.WriteLine();
             return 0;
         }
@@ -318,16 +347,17 @@ static class Commands
 
             if (f.TargetPath is not null)
             {
-                string exists = f.TargetExists == true ? "existe" : "NÃO EXISTE";
-                string signer = f.Signer is null ? "sem assinatura embutida" : $"assinado por {f.Signer}";
-                Formatting.WriteMuted($"      alvo: {Formatting.Truncate(f.TargetPath, 90)} ({exists}, {signer})");
+                string exists = L.T(f.TargetExists == true ? "security.exists" : "security.missing");
+                string signer = f.Signer is null ? L.T("security.unsigned") : L.T("security.signedBy", f.Signer);
+                _ = signer;
+                Formatting.WriteMuted($"      {L.T("security.target")} {Formatting.Truncate(f.TargetPath, 90)} ({exists}, {signer})");
             }
 
             Console.WriteLine();
         }
 
-        Formatting.WriteMuted("  Somente leitura: o Vacuon não alterou nenhuma chave.");
-        Formatting.WriteMuted("  Entradas legítimas aparecem aqui o tempo todo — leia o motivo antes de concluir.");
+        Formatting.WriteMuted("  " + L.T("cli.readOnlyFooter"));
+        Formatting.WriteMuted("  " + L.T("cli.legitimateNote"));
         Console.WriteLine();
         return 0;
     }
@@ -337,7 +367,7 @@ static class Commands
         string? file = args.FirstOrDefault(a => !a.StartsWith('-'));
         if (file is null || !File.Exists(file))
         {
-            Formatting.WriteError("Informe um arquivo existente: vacuon thumb <arquivo> [--size=256]");
+            Formatting.WriteError(L.T("cli.needFile"));
             return 2;
         }
 
@@ -362,19 +392,19 @@ static class Commands
 
         if (bitmap is null)
         {
-            Formatting.WriteError("O Shell do Windows não conseguiu produzir uma imagem para este arquivo.");
+            Formatting.WriteError(L.T("cli.noThumbnail"));
             return 1;
         }
 
         BmpWriter.Write(bitmap, output);
 
-        Formatting.WriteHeading("MINIATURA");
-        Console.WriteLine($"  Arquivo    {file}");
-        Console.WriteLine($"  Categoria  {FileCategories.Of(Path.GetFileName(file).AsSpan())}");
-        Console.WriteLine($"  Origem     {(bitmap.IsContentThumbnail ? "conteúdo do arquivo" : "ícone do tipo")}");
-        Console.WriteLine($"  Dimensões  {bitmap.Width} × {bitmap.Height} px");
-        Console.WriteLine($"  Tempo      {Formatting.Duration(sw.Elapsed)}");
-        Console.WriteLine($"  Gravado em {Path.GetFullPath(output)}");
+        Formatting.WriteHeading(L.T("cli.headThumbnail"));
+        Console.WriteLine($"  {L.T("cli.labelFile"),-11} {file}");
+        Console.WriteLine($"  {L.T("cli.labelCategory"),-11} {FileCategories.DisplayNameOf(Path.GetFileName(file).AsSpan())}");
+        Console.WriteLine($"  {L.T("cli.labelSource"),-11} {L.T(bitmap.IsContentThumbnail ? "cli.labelSourceContent" : "cli.labelSourceIcon")}");
+        Console.WriteLine($"  {L.T("cli.labelDimensions"),-11} {bitmap.Width} × {bitmap.Height} px");
+        Console.WriteLine($"  {L.T("cli.labelTime"),-11} {Formatting.Duration(sw.Elapsed)}");
+        Console.WriteLine($"  {L.T("cli.labelWrittenTo"),-11} {Path.GetFullPath(output)}");
         Console.WriteLine();
         return 0;
     }
@@ -384,7 +414,7 @@ static class Commands
         string? file = args.FirstOrDefault(a => !a.StartsWith('-'));
         if (file is null)
         {
-            Formatting.WriteError("Informe um caminho: vacuon reveal <arquivo>");
+            Formatting.WriteError(L.T("cli.needPath"));
             return 2;
         }
 
@@ -432,9 +462,8 @@ sealed class ConsoleProgress : IProgress<ScanProgress>
     public void Report(ScanProgress value)
     {
         string line = value.TotalBytes > 0
-            ? $"  {value.Percent,5:N1}%  {Formatting.Count(value.RecordsParsed)} registros  " +
-              $"{Formatting.Count(value.EntriesFound)} itens  {value.MegabytesPerSecond,6:N0} MB/s"
-            : $"  {Formatting.Count(value.RecordsParsed)} itens  {Formatting.Duration(value.Elapsed)}";
+            ? $"  {value.Percent,5:N1}%  {Formatting.Count(value.EntriesFound)} · {value.MegabytesPerSecond,6:N0} MB/s"
+            : $"  {Formatting.Count(value.RecordsParsed)} · {Formatting.Duration(value.Elapsed)}";
 
         Console.Write('\r');
         Console.Write(line.PadRight(Math.Max(_lastLength, line.Length)));

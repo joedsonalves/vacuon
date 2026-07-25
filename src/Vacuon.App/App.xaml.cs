@@ -1,6 +1,7 @@
 using System.Windows;
 using Microsoft.Win32;
 using Vacuon.App.Infra;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.App;
 
@@ -23,6 +24,11 @@ public partial class App : Application
             return; // esta instância encerra; a elevada assume
         }
 
+        // Idioma antes do tema e antes da janela: a barra lateral e o cabeçalho são
+        // construídos já com o texto certo, sem um piscar em inglês.
+        L.Use(Settings.Language);
+        LocalizationBridge.Attach();
+
         ThemeManager.Apply(Settings.Theme);
         SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
@@ -42,6 +48,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+        LocalizationBridge.Detach();
         Settings.Save();
         base.OnExit(e);
     }
