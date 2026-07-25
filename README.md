@@ -16,9 +16,75 @@ to delete, and never claims a number it did not measure.
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
+[**⬇ Download for Windows**](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe) · portable, 62 MB, nothing to install
+
 <img src="docs/img/02-explorer-escuro.png" width="900" alt="Vacuon Explorer showing the folder tree and the file list">
 
 </div>
+
+---
+
+## Getting started
+
+**[⬇ Download Vacuon for Windows](https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon-win-x64.exe)** — 62 MB, portable, nothing to install.
+
+1. Download the file above.
+2. Double-click it. Windows shows a blue **"Windows protected your PC"** screen — the app is
+   not code-signed, so that warning is expected. Click **More info**, then **Run anyway**.
+3. Pick a drive and click **Scan**.
+
+That is it. No installer, no .NET to install, no registry entries. It runs from a USB stick,
+and deleting the `.exe` uninstalls it. The only thing it writes outside itself is
+`%AppData%\Vacuon\settings.json`, which remembers your theme and language.
+
+> Prefer not to trust an unsigned binary from a stranger? Correct instinct — [build it
+> yourself](#build-it-yourself), it is three commands. The SHA256 of every published file is
+> in the [release notes](https://github.com/joedsonalves/vacuon/releases/tag/v0.3.0).
+
+### Run it as Administrator for the fast path
+
+Vacuon works without any privileges: click **Scan** and it reads the disk through the
+Windows API. On the machine it was developed on that took **34 seconds** for 2.6 million
+files.
+
+Reading the NTFS MFT directly takes **3–8 seconds for a million files**, and Windows only
+allows that to an elevated process. Two ways to get there:
+
+- click **Restart elevated** in the bottom-left corner, or
+- turn on **Always run as administrator** in Settings, and it does that on every launch.
+
+Either way Windows shows the UAC prompt. There is no way around it, and the app says so
+rather than pretending otherwise. Vacuon opens the volume **read-only** — `GENERIC_READ`,
+never `GENERIC_WRITE`.
+
+### Command line
+
+`vacuon-cli-win-x64.exe` is the same core without a window, for scripting. Rename it
+to `vacuon.exe`, put it somewhere on your `PATH`, and see [the CLI section](#gui-and-command-line).
+
+### Build it yourself
+
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
+```bash
+git clone https://github.com/joedsonalves/vacuon.git
+cd vacuon
+dotnet build -c Release
+dotnet test
+```
+
+The app lands in `src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe`. To produce the same
+self-contained single file that the release ships:
+
+```bash
+dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
+```
+
+### Requirements
+
+Windows 10 21H2 or newer, x64 (ARM64 builds from source). NTFS for the fast path; exFAT,
+FAT32, ReFS and network drives work through the slower traversal.
 
 ---
 
@@ -209,25 +275,6 @@ Run against a real machine, the first version spat out 21 registry findings and 
 Two signals survive all of those exclusions, because they have no innocent explanation anywhere: the **RLO** character in a name, and an **executable recently created in System32**.
 
 If Vacuon flags something legitimate on your machine, [open an issue](../../issues/new?template=falso-positivo.yml) — that template exists for nothing else.
-
-## Installation
-
-Grab the `.exe` from the [releases page](../../releases) — it is portable, runs from a USB stick, installs nothing.
-
-Or build it:
-
-```bash
-git clone https://github.com/joedsonalves/vacuon.git
-cd vacuon
-dotnet build -c Release
-dotnet test
-```
-
-### Requirements
-
-- Windows 10 21H2+ or Windows 11 (x64 / ARM64)
-- [.NET 10 Runtime](https://dotnet.microsoft.com/download)
-- **Administrator** only for the MFT read. The app opens without UAC and asks for elevation only when you turn the option on in Settings.
 
 ## GUI and command line
 
