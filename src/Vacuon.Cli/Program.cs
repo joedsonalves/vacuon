@@ -234,8 +234,15 @@ static class Commands
             Reconciliation check = index.CheckAgainstFileSystem();
             string line = $"  {L.T("reconcile.label"),-17} {check.Describe()}";
 
-            if (check.IsImpossible) Formatting.WriteWarning(line);
-            else Formatting.WriteMuted(line);
+            if (check.IsImpossible)
+            {
+                Formatting.WriteWarning(line);
+                ExplainInflatedTotal(index);
+            }
+            else
+            {
+                Formatting.WriteMuted(line);
+            }
         }
 
         // ------------------------------------------------------------------
@@ -442,6 +449,49 @@ static class Commands
 
         Shell32.RevealInExplorer(Path.GetFullPath(file));
         return 0;
+    }
+
+    /// <summary>
+    /// Lists what is driving an impossible total, once the cross-check has said the total
+    /// cannot be right.
+    /// <para>
+    /// Saying "do not trust this number" and stopping there leaves the person holding a
+    /// broken tool and no way to report why. These ten lines are the evidence: the entries
+    /// claiming the most space, with the logical size and the Alternate Data Stream bytes
+    /// separated, because the two get inflated for entirely different reasons.
+    /// </para>
+    /// </summary>
+    private static void ExplainInflatedTotal(VolumeIndex index)
+    {
+        var worst = new List<(int Index, long OnDisk)>();
+
+        for (int i = 0; i < index.Entries.Length; i++)
+        {
+            ref FileEntry e = ref index.Entries[i];
+            if (!e.IsInUse || e.IsDirectory) continue;
+            if (e.HardLinkCount > 1) continue; // mesma regra do total, senão não explica o total
+
+            long onDisk = index.GetSizeOnDisk(i);
+            if (onDisk > 0) worst.Add((i, onDisk));
+        }
+
+        worst.Sort((a, b) => b.OnDisk.CompareTo(a.OnDisk));
+
+        Console.WriteLine();
+        Formatting.WriteWarning($"  {L.T("reconcile.explainTitle")}");
+
+        foreach ((int i, long onDisk) in worst.Take(10))
+        {
+            long ads = index.GetAdsBytes(i);
+            string adsNote = ads > 0 ? $"  ADS {Formatting.Bytes(ads)}" : string.Empty;
+
+            Formatting.WriteMuted(
+                $"    {Formatting.Bytes(onDisk),12}  " +
+                $"({L.T("reconcile.explainLogical", Formatting.Bytes(index.Entries[i].LogicalSize))}){adsNote}  " +
+                $"{Formatting.Truncate(index.GetFullPath(i), 74)}");
+        }
+
+        Console.WriteLine();
     }
 
     /// <summary>"C:", "C:\" e "c" significam o volume inteiro; qualquer outra coisa é pasta.</summary>

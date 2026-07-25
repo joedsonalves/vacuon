@@ -41,6 +41,8 @@
   "reconcile.undercounted": "só {0}% do espaço usado está atribuído a arquivos — o resto pode ser cópias de sombra ou metadados do sistema de arquivos",
   "reconcile.undercountedWalk": "só {0}% do espaço usado está atribuído a arquivos — uma varredura sem Administrador não consegue abrir toda pasta",
   "reconcile.unknown": "o volume não informou espaço usado para comparar",
+  "reconcile.explainTitle": "O que está inflando o total (maiores ocupações declaradas):",
+  "reconcile.explainLogical": "lógico {0}",
   "reconcile.label": "Conferência",
   "fallback.needsElevation": "leitura da MFT exige executar como Administrador",
   "fallback.notNtfs": "o volume não é NTFS (exFAT/FAT32/ReFS não têm MFT)",

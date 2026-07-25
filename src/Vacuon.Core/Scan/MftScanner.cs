@@ -70,6 +70,8 @@ public sealed class MftScanner(MftScanOptions? options = null)
         LinkOrphans(entries);
 
         VolumeInfo info = VolumeProbe.Describe(driveLetter, device);
+        DropImpossibleSizes(entries, adsBytes, info);
+
         return new VolumeIndex(entries, names, info, ScanStrategy.Mft, adsBytes);
     }
 
@@ -250,6 +252,39 @@ public sealed class MftScanner(MftScanOptions? options = null)
             f |= EntryFlags.CloudPlaceholder;
 
         return f;
+    }
+
+    /// <summary>
+    /// Discards per-file occupancy figures that cannot be true.
+    /// <para>
+    /// One stream cannot occupy more than the whole volume currently has occupied. That is
+    /// not a heuristic, it is arithmetic, and NTFS does record such figures: a stream
+    /// declared over a range it never allocated reports the range. `$BadClus:$Bad` is
+    /// defined to span the entire disk and hold only the bad clusters, which on a healthy
+    /// volume is none — it reported 476 GiB on a 476 GiB drive.
+    /// </para>
+    /// <para>
+    /// The figure is dropped rather than clamped. Clamping would invent a number; zero says
+    /// what is actually known, which is that this stream's occupancy could not be read. The
+    /// logical size is left alone — it was never in doubt.
+    /// </para>
+    /// </summary>
+    internal static void DropImpossibleSizes(FileEntry[] entries, Dictionary<int, long> adsBytes,
+                                             VolumeInfo info)
+    {
+        long ceiling = info.UsedBytes;
+        if (ceiling <= 0) return; // sem referência confiável, não há o que checar
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            ref FileEntry e = ref entries[i];
+            if (!e.IsInUse) continue;
+
+            if (e.AllocatedSize > ceiling) e.AllocatedSize = 0;
+
+            if (adsBytes.TryGetValue(i, out long ads) && ads > ceiling)
+                adsBytes.Remove(i);
+        }
     }
 
     /// <summary>

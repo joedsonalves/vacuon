@@ -75,13 +75,19 @@ public sealed class MftRecordBuilder
     /// The value at 0x40, present only when the compressed or sparse flag is set, and then
     /// the only field that says how many bytes are really on disk.
     /// </param>
+    /// <param name="forceCompressedSizeField">
+    /// Emits the 0x48 header without setting the compressed/sparse flag, which is how
+    /// $BadClus:$Bad actually appears on disk.
+    /// </param>
     public MftRecordBuilder WithNonResidentData(long logicalSize, long allocatedSize,
                                                 string? streamName = null, ushort flags = 0,
                                                 long startVcn = 0, byte[]? dataRuns = null,
-                                                long compressedSize = 0)
+                                                long compressedSize = 0,
+                                                bool forceCompressedSizeField = false)
     {
         _attributes.Add(BuildNonResident(NtfsAttributeType.Data, logicalSize, allocatedSize,
-                                         streamName, flags, startVcn, dataRuns, compressedSize));
+                                         streamName, flags, startVcn, dataRuns, compressedSize,
+                                         forceCompressedSizeField));
         return this;
     }
 
@@ -169,10 +175,10 @@ public sealed class MftRecordBuilder
 
     private static byte[] BuildNonResident(NtfsAttributeType type, long logicalSize, long allocatedSize,
                                            string? name, ushort flags, long startVcn, byte[]? dataRuns,
-                                           long compressedSize = 0)
+                                           long compressedSize = 0, bool forceCompressedSizeField = false)
     {
         dataRuns ??= [0x00];
-        bool compressedOrSparse =
+        bool compressedOrSparse = forceCompressedSizeField ||
             (flags & (NtfsLayout.AttrFlagCompressed | NtfsLayout.AttrFlagSparse)) != 0;
 
         int nameBytes = name is null ? 0 : name.Length * 2;

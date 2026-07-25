@@ -264,19 +264,29 @@ public static class MftRecordParser
     {
         long logical, allocated;
 
-        bool compressedOrSparse =
-            (attrFlags & (NtfsLayout.AttrFlagCompressed | NtfsLayout.AttrFlagSparse)) != 0;
-
         if (nonResident)
         {
             if (attr.Length < 0x38) return;
             allocated = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResAllocatedSize..]);
             logical = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResRealSize..]);
 
-            // Compressed or sparse: 0x28 is the run space measured as if nothing had been
-            // compressed or punched out, and 0x40 is what is really on disk. Reading 0x28
-            // for these is how a volume ends up reporting more occupied space than it has.
-            if (compressedOrSparse && attr.Length >= 0x48)
+            // 0x28 is the run space measured as if nothing had been compressed or punched
+            // out; 0x40 is what is really on disk. Reading 0x28 when 0x40 exists is how a
+            // volume ends up claiming more occupied space than it physically has.
+            //
+            // Whether 0x40 exists is decided STRUCTURALLY, by where the header ends, not by
+            // the compressed/sparse flag at 0x0C. $BadClus:$Bad carries no such flag on a
+            // real volume and still spans the whole disk while occupying nothing — trusting
+            // the flag let 476 GiB of nothing through on a 476 GiB drive.
+            //
+            // The header runs to 0x40, or to 0x48 when it carries CompressedSize. Whatever
+            // comes next — the stream name if there is one, the data runs otherwise —
+            // starts exactly where the header stops, so its offset is the header's length.
+            int headerEnd = nameLength > 0
+                ? BinaryPrimitives.ReadUInt16LittleEndian(attr[NtfsLayout.AttrNameOffset..])
+                : BinaryPrimitives.ReadUInt16LittleEndian(attr[NtfsLayout.NonResDataRunsOffset..]);
+
+            if (headerEnd >= 0x48 && attr.Length >= 0x48)
                 allocated = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResCompressedSize..]);
 
             // Só o fragmento com StartingVCN == 0 carrega os tamanhos reais;

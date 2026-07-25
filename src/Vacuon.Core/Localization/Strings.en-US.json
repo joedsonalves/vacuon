@@ -42,6 +42,8 @@
   "reconcile.undercounted": "only {0}% of the used space is attributed to files — the rest may be shadow copies or filesystem metadata",
   "reconcile.undercountedWalk": "only {0}% of the used space is attributed to files — a scan without Administrator cannot open every folder",
   "reconcile.unknown": "the volume reported no used space to compare against",
+  "reconcile.explainTitle": "What is inflating the total (biggest claimed occupancy):",
+  "reconcile.explainLogical": "logical {0}",
   "reconcile.label": "Cross-check",
   "fallback.needsElevation": "reading the MFT requires running as Administrator",
   "fallback.notNtfs": "the volume is not NTFS (exFAT/FAT32/ReFS have no MFT)",
