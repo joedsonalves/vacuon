@@ -153,6 +153,39 @@ public class VolumeIndexTests
     }
 
     [Fact]
+    public void ChildIndex_ListsDirectChildrenOnly()
+    {
+        VolumeIndex index = BuildSample();
+
+        int[] videos = index.GetChildren(6).ToArray();
+        Assert.Equal([7, 8], videos);
+
+        int[] root = index.GetChildren(5).ToArray();
+        Assert.Equal([6, 9], root);
+
+        Assert.Empty(index.GetChildren(7).ToArray()); // arquivo não tem filhos
+    }
+
+    [Fact]
+    public void ChildIndex_RootIsNotItsOwnChild()
+    {
+        // A raiz da MFT aponta para si mesma; incluí-la nos próprios filhos faria
+        // a TreeView entrar em recursão infinita.
+        VolumeIndex index = BuildSample();
+        Assert.DoesNotContain(5, index.GetChildren(5).ToArray());
+    }
+
+    [Fact]
+    public void HasChildDirectories_DistinguishesFoldersFromFiles()
+    {
+        VolumeIndex index = BuildSample();
+
+        Assert.True(index.HasChildDirectories(5));   // raiz tem Videos e Documentos
+        Assert.False(index.HasChildDirectories(6));  // Videos só tem arquivos
+        Assert.Equal(2, index.GetChildCount(6));
+    }
+
+    [Fact]
     public void GetSizeOnDisk_AddsAlternateDataStreamsFromTheSideTable()
     {
         var names = new NameBlob(64);

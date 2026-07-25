@@ -1,0 +1,193 @@
+<UserControl x:Class="Vacuon.App.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <infra:GaugeBrushConverter x:Key="GaugeBrush"/>
+        <infra:BytesConverter x:Key="Bytes"/>
+        <infra:CountConverter x:Key="Count"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="InverseVisible"/>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
+        <StackPanel>
+
+            <!-- ==================== volumes ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Text="VOLUMES"/>
+
+            <ItemsControl ItemsSource="{Binding Volumes}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Width="320" Margin="0,0,14,14">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Style="{StaticResource Text.Metric}" Text="{Binding Header}"/>
+                                            <TextBlock Style="{StaticResource Text.Sub}" Margin="10,0,0,5"
+                                                       VerticalAlignment="Bottom" Text="{Binding Label}"/>
+                                        </StackPanel>
+                                        <TextBlock Style="{StaticResource Text.Sub}" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding ScanHintText}"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Style="{StaticResource Button.Base}"
+                                            Content="Varrer" FontSize="12" Padding="10,5"
+                                            VerticalAlignment="Top"
+                                            Command="{Binding DataContext.ScanVolumeCommand,
+                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+
+                                <!-- barra de ocupação -->
+                                <Border Height="8" CornerRadius="4" Margin="0,16,0,0"
+                                        Background="{DynamicResource Gauge.Track}">
+                                    <ProgressBar Height="8" Maximum="100" Value="{Binding UsedPercent, Mode=OneWay}"
+                                                 Background="Transparent" BorderThickness="0"
+                                                 Foreground="{Binding UsedPercent, Converter={StaticResource GaugeBrush}}"/>
+                                </Border>
+
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}">
+                                        <Run Text="{Binding UsedPercentText, Mode=OneWay}"/>
+                                        <Run Text="usado"/>
+                                    </TextBlock>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                                               Foreground="{DynamicResource Text.Secondary}">
+                                        <Run Text="{Binding FreeText, Mode=OneWay}"/>
+                                        <Run Text="livres de"/>
+                                        <Run Text="{Binding TotalText, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- ==================== agregados ==================== -->
+            <Grid Margin="0,14,0,0" Visibility="{Binding HasScanned, Converter={StaticResource Visible}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- por tipo -->
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="ONDE ESTÁ O ESPAÇO — POR TIPO"/>
+                        <ItemsControl ItemsSource="{Binding Extensions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="72"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                   FontFamily="{StaticResource Font.Mono}"
+                                                   Text="{Binding Extension}"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding Category}"/>
+                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}"
+                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- por tamanho -->
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="DISTRIBUIÇÃO POR TAMANHO"/>
+                        <ItemsControl ItemsSource="{Binding SizeBuckets}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                   Text="{Binding Label}"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                                   Margin="0,0,12,0" Width="66"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding Count, Converter={StaticResource Count}}"/>
+                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
+                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- por idade -->
+                <Border Grid.Column="2" Style="{StaticResource Card}" Margin="7,0,0,0">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="IDADE (ÚLTIMA MODIFICAÇÃO)"/>
+                        <ItemsControl ItemsSource="{Binding AgeBuckets}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                   Text="{Binding Label}"/>
+                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                                   Margin="0,0,12,0" Width="66"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding Count, Converter={StaticResource Count}}"/>
+                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
+                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ==================== estado inicial ==================== -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="26"
+                    Visibility="{Binding HasScanned, Converter={StaticResource InverseVisible}}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               Text="Nada varrido ainda."/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               MaxWidth="760"
+                               Text="Escolha uma unidade acima e clique em Varrer. Com privilégio de administrador o Vacuon lê a MFT do NTFS direto do volume e indexa um milhão de arquivos em segundos; sem elevação ele cai para a API do Windows, chega ao mesmo resultado e leva minutos."/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               MaxWidth="760" Foreground="{DynamicResource Text.Muted}"
+                               Text="Esta versão é somente leitura: mede, explica e mostra. Apagar, mover e a quarentena reversível chegam no marco M4."/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

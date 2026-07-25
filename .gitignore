@@ -33,14 +33,46 @@ packages/
 project.lock.json
 project.fragment.lock.json
 
-# Testes
+# ==================== artefatos de teste ====================
+# Os 74+ testes em tests/ CONTINUAM versionados — é o que a CI roda e o que
+# permite a quem clonar validar o parser de MFT. O que fica de fora é só o
+# lixo que a execução produz.
+
+# resultados de execução
 [Tt]est[Rr]esult*/
+TestResults/
+*.trx
+*.testlog
+*.VisualState.xml
+*.receipt
+test-output*.xml
+junit*.xml
+
+# cobertura
 coverage*.json
 coverage*.xml
 coverage*.info
+coverage*.cobertura.xml
+coverage*.opencover.xml
 *.coverage
 *.coveragexml
+lcov.info
+.coverlet/
+CoverletOutput*/
+[Cc]overage[Rr]eport*/
+
+# runners e caches
+.vstest/
+*.vsp
+*.vspx
+*.sap
 BenchmarkDotNet.Artifacts/
+.benchmarks/
+
+# imagens VHD sintéticas geradas em tempo de teste
+tests/**/fixtures/generated/
+tests/**/*.vhd
+tests/**/*.vhdx
 
 # Saídas do próprio Vacuon
 *.thumb.bmp

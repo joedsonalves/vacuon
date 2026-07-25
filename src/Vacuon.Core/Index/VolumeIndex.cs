@@ -194,6 +194,88 @@ public sealed class VolumeIndex
         _subtreeCount = count;
     }
 
+    // --- índice de filhos (CSR) -------------------------------------------
+    private int[]? _childStart;   // childStart[i]..childStart[i+1] delimita os filhos de i
+    private int[]? _childList;
+
+    /// <summary>
+    /// Constrói o índice de filhos em duas passadas O(n), no formato CSR
+    /// (dois arrays planos, como matriz esparsa).
+    /// <para>
+    /// Um <c>Dictionary&lt;int, List&lt;int&gt;&gt;</c> seria o caminho óbvio e custaria
+    /// centenas de MB em um volume com 2,8 milhões de entradas: um objeto
+    /// <c>List</c> por diretório, mais o overhead de bucket do dicionário. Aqui são
+    /// dois <c>int[]</c> — cerca de 23 MB para o mesmo volume.
+    /// </para>
+    /// </summary>
+    public void BuildChildIndex()
+    {
+        if (_childStart is not null) return;
+
+        int n = Entries.Length;
+        var counts = new int[n + 1];
+        int root = RootIndex;
+
+        // 1ª passada: quantos filhos cada diretório tem.
+        for (int i = 0; i < n; i++)
+        {
+            if (!Entries[i].IsInUse || i == root) continue;
+
+            uint parent = Entries[i].ParentIndex;
+            if (parent >= (uint)n || parent == (uint)i) continue;
+
+            counts[parent + 1]++;
+        }
+
+        // Soma de prefixo transforma as contagens em deslocamentos.
+        for (int i = 0; i < n; i++) counts[i + 1] += counts[i];
+
+        var list = new int[counts[n]];
+        var cursor = new int[n];
+
+        // 2ª passada: coloca cada filho na fatia do pai.
+        for (int i = 0; i < n; i++)
+        {
+            if (!Entries[i].IsInUse || i == root) continue;
+
+            uint parent = Entries[i].ParentIndex;
+            if (parent >= (uint)n || parent == (uint)i) continue;
+
+            list[counts[parent] + cursor[parent]++] = i;
+        }
+
+        _childStart = counts;
+        _childList = list;
+    }
+
+    /// <summary>Filhos diretos de uma entrada, como fatia do array compartilhado.</summary>
+    public ReadOnlySpan<int> GetChildren(int index)
+    {
+        BuildChildIndex();
+
+        if (index < 0 || index >= Entries.Length) return default;
+
+        int from = _childStart![index];
+        int to = _childStart[index + 1];
+        return _childList!.AsSpan(from, to - from);
+    }
+
+    /// <summary>Quantos filhos diretos, sem materializar nada.</summary>
+    public int GetChildCount(int index)
+    {
+        BuildChildIndex();
+        if (index < 0 || index >= Entries.Length) return 0;
+        return _childStart![index + 1] - _childStart[index];
+    }
+
+    /// <summary>Esta entrada tem ao menos um subdiretório? Decide se a árvore mostra a seta.</summary>
+    public bool HasChildDirectories(int index)
+    {
+        foreach (int child in GetChildren(index))
+            if (Entries[child].IsDirectory) return true;
+        return false;
+    }
+
     public long GetSubtreeSize(int index)
     {
         BuildSubtreeSizes();
