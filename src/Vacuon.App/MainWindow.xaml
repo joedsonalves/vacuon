@@ -83,6 +83,16 @@
                                Text="{Binding SelectedVolume.Header}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Text="{Binding SummaryText}"/>
+
+                    <!-- Aparece só quando os próprios números do app se contradizem, e nunca
+                         em cima do total como se ele fosse fato medido. -->
+                    <Border CornerRadius="4" Padding="8,6" Margin="0,10,0,0"
+                            Background="{DynamicResource Risk.Notable}"
+                            Visibility="{Binding HasWarning, Converter={StaticResource Visible}}">
+                        <TextBlock Text="{Binding WarningText}" TextWrapping="Wrap"
+                                   FontSize="11" FontWeight="SemiBold" Foreground="White"
+                                   FontFamily="{StaticResource Font.Ui}"/>
+                    </Border>
                 </StackPanel>
 
                 <!-- estado de elevação -->
