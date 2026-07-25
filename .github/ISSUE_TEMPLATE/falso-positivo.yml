@@ -1,0 +1,42 @@
+name: Falso positivo do módulo de segurança
+description: O Vacuon marcou como suspeito algo que é legítimo
+title: "[falso positivo] "
+labels: ["falso-positivo", "segurança"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Um falso positivo aqui é tratado como **defeito**, não como ruído aceitável.
+        Uma lista que alarma sempre é uma lista que o usuário aprende a ignorar.
+
+        Esta issue vira um caso de teste. Obrigado por abrir.
+
+  - type: textarea
+    id: linha
+    attributes:
+      label: A linha completa do relatório
+      description: Copie o bloco inteiro, incluindo o "→ motivo" e a linha "alvo:".
+      render: text
+      placeholder: |
+        [SUSPEITO] HKLM\Software\...
+            NomeDoValor = C:\caminho\programa.exe --flag
+            → Usa rundll32.exe como intermediário · Binário sem assinatura digital válida
+            alvo: C:\caminho\programa.exe (existe, sem assinatura embutida)
+    validations:
+      required: true
+
+  - type: textarea
+    id: realidade
+    attributes:
+      label: O que o item realmente é
+      placeholder: "É o autoinício do Steam, instalado pelo próprio Steam em Program Files."
+    validations:
+      required: true
+
+  - type: input
+    id: versao
+    attributes:
+      label: Versão
+      description: Saída de `vacuon version`
+    validations:
+      required: true

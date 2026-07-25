@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Vacuon.Core</RootNamespace>
+    <AssemblyName>Vacuon.Core</AssemblyName>
+    <!-- Núcleo sem WPF: a CLI, os testes e a futura GUI consomem exatamente isto. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vacuon.Native\Vacuon.Native.csproj" />
+  </ItemGroup>
+
+  <!-- Microsoft.Win32.Registry já vem no runtime quando o alvo é *-windows;
+       referenciar o pacote só adiciona ruído de restore. -->
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Vacuon.Core.Tests" />
+  </ItemGroup>
+
+</Project>

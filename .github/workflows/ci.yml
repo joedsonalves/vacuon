@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    name: Build e testes
+    # Windows-only por natureza: o motor lê a MFT do NTFS.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache do NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restaurar
+        run: dotnet restore Vacuon.sln
+
+      - name: Compilar
+        run: dotnet build Vacuon.sln -c Release --no-restore
+
+      # A suíte não exige elevação nem toca em disco real: o parser de MFT roda
+      # contra registros sintéticos, o que a torna determinística no runner.
+      - name: Testar
+        run: dotnet test Vacuon.sln -c Release --no-build --verbosity normal
+
+      - name: Verificar formatação
+        run: dotnet format Vacuon.sln --verify-no-changes --severity error
+        continue-on-error: true
+
+  publish:
+    name: Publicar executável portátil
+    needs: build
+    runs-on: windows-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publicar single-file
+        run: >
+          dotnet publish src/Vacuon.Cli/Vacuon.Cli.csproj
+          -c Release -r win-x64
+          -p:PublishSingleFile=true
+          -p:SelfContained=false
+          -o artifacts/win-x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vacuon-win-x64
+          path: artifacts/win-x64/vacuon.exe
+          if-no-files-found: error
