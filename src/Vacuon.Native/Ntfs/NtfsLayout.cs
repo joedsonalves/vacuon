@@ -52,6 +52,17 @@ public static class NtfsLayout
     public const int NonResRealSize = 0x30;
     public const int NonResInitializedSize = 0x38;
 
+    /// <summary>
+    /// Only present when the attribute is compressed or sparse, and then it — not
+    /// <see cref="NonResAllocatedSize"/> — is the real number of bytes on disk.
+    /// <para>
+    /// For those attributes 0x28 holds the size of the run space as if nothing had been
+    /// compressed or punched out. $BadClus:$Bad is sized to the entire volume and occupies
+    /// nothing; trusting 0x28 for it credits the whole disk twice.
+    /// </para>
+    /// </summary>
+    public const int NonResCompressedSize = 0x40;
+
     public const ushort AttrFlagCompressed = 0x0001;
     public const ushort AttrFlagEncrypted = 0x4000;
     public const ushort AttrFlagSparse = 0x8000;

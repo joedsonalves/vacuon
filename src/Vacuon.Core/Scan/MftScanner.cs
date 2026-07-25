@@ -211,18 +211,24 @@ public sealed class MftScanner(MftScanOptions? options = null)
         if (parsed.HasAds)
         {
             e.Flags |= EntryFlags.HasAds;
-            adsBytes.TryGetValue((int)target, out long previous);
-            adsBytes[(int)target] = previous + parsed.AdsBytes;
+
+            // Only streams that actually occupy clusters get a row. Sparse and resident
+            // streams contribute zero, and 137k zero-valued rows would be a side table
+            // that costs memory to say nothing.
+            if (parsed.AdsBytes > 0)
+            {
+                adsBytes.TryGetValue((int)target, out long previous);
+                adsBytes[(int)target] = previous + parsed.AdsBytes;
+            }
         }
 
         if (parsed.IsDirectory) e.Flags |= EntryFlags.Directory;
         if (parsed.IsReparsePoint) e.Flags |= EntryFlags.ReparsePoint;
 
-        if (parsed.BaseRecordNumber == 0)
-        {
-            e.HardLinkCount = parsed.HardLinkCount;
-            if (parsed.HardLinkCount > 1) e.Flags |= EntryFlags.HardLinked;
-        }
+        // $FILE_NAME attributes can be spread across extension records, so accumulate
+        // instead of assigning: each record contributes the names it holds.
+        e.HardLinkCount = (ushort)Math.Min(e.HardLinkCount + parsed.NameCount, ushort.MaxValue);
+        if (e.HardLinkCount > 1) e.Flags |= EntryFlags.HardLinked;
 
         return isNew && e.NameLength > 0;
     }

@@ -19,7 +19,22 @@ public ref struct ParsedMftRecord
     /// <summary>Se != 0, este é um registro de extensão; os atributos pertencem ao registro base.</summary>
     public uint BaseRecordNumber;
 
-    public ushort HardLinkCount;
+    /// <summary>
+    /// The link count straight from the record header (offset 0x12).
+    /// <para>
+    /// <b>This is not the number of hardlinks.</b> NTFS counts $FILE_NAME attributes here,
+    /// and the DOS 8.3 alias is one of them — so any file with a long name reports 2.
+    /// Use <see cref="NameCount"/> for the real thing.
+    /// </para>
+    /// </summary>
+    public ushort StatedLinkCount;
+
+    /// <summary>
+    /// $FILE_NAME attributes that represent an actual directory entry: everything except a
+    /// standalone DOS alias. This is the true hardlink count for this record.
+    /// </summary>
+    public ushort NameCount;
+
     public ushort SequenceNumber;
 
     // --- $FILE_NAME escolhido ---
@@ -115,7 +130,7 @@ public static class MftRecordParser
         ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(record[NtfsLayout.RecFlags..]);
         result.InUse = (flags & NtfsLayout.RecFlagInUse) != 0;
         result.IsDirectory = (flags & NtfsLayout.RecFlagDirectory) != 0;
-        result.HardLinkCount = BinaryPrimitives.ReadUInt16LittleEndian(record[NtfsLayout.RecHardLinkCount..]);
+        result.StatedLinkCount = BinaryPrimitives.ReadUInt16LittleEndian(record[NtfsLayout.RecHardLinkCount..]);
         result.SequenceNumber = BinaryPrimitives.ReadUInt16LittleEndian(record[NtfsLayout.RecSequenceNumber..]);
 
         // O campo RecordNumber só existe a partir do XP. Se estiver zerado ou divergir,
@@ -206,6 +221,13 @@ public static class MftRecordParser
         var nameType = (NtfsNameType)v[NtfsLayout.FnNameType];
         if (NtfsLayout.FnName + nameChars * 2 > v.Length) return;
 
+        // Count the links while we are here, because the record header cannot tell us.
+        // A standalone DOS alias is a second name for the SAME directory entry, not a
+        // second link — counting it is what made 75% of a real volume look hardlinked.
+        // Win32AndDos is one entry serving both namespaces, so it counts once.
+        if (nameType != NtfsNameType.Dos && result.NameCount < ushort.MaxValue)
+            result.NameCount++;
+
         // Um arquivo pode ter vários $FILE_NAME (um por hardlink, mais o 8.3).
         // Preferimos Win32/Win32AndDos; o namespace DOS puro é descartado para não
         // duplicar entradas com o nome curto (ex.: PROGRA~1).
@@ -242,11 +264,20 @@ public static class MftRecordParser
     {
         long logical, allocated;
 
+        bool compressedOrSparse =
+            (attrFlags & (NtfsLayout.AttrFlagCompressed | NtfsLayout.AttrFlagSparse)) != 0;
+
         if (nonResident)
         {
             if (attr.Length < 0x38) return;
             allocated = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResAllocatedSize..]);
             logical = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResRealSize..]);
+
+            // Compressed or sparse: 0x28 is the run space measured as if nothing had been
+            // compressed or punched out, and 0x40 is what is really on disk. Reading 0x28
+            // for these is how a volume ends up reporting more occupied space than it has.
+            if (compressedOrSparse && attr.Length >= 0x48)
+                allocated = BinaryPrimitives.ReadInt64LittleEndian(attr[NtfsLayout.NonResCompressedSize..]);
 
             // Só o fragmento com StartingVCN == 0 carrega os tamanhos reais;
             // fragmentos posteriores (arquivo muito fragmentado) trazem zeros.
@@ -277,7 +308,17 @@ public static class MftRecordParser
         {
             // $DATA nomeado = Alternate Data Stream. Invisível no Explorer, ocupa espaço real.
             result.HasAds = true;
-            result.AdsBytes += allocated > 0 ? allocated : logical;
+
+            // The on-disk size computed above, never the logical size. Falling back to
+            // logical when the allocation is 0 looks harmless — a resident stream reports
+            // 0 — but a SPARSE stream also occupies ~nothing while claiming an enormous
+            // logical size, and NTFS ships two of those on every volume: $BadClus:$Bad is
+            // sized to the whole disk and $UsnJrnl:$J to the journal's whole range. On a
+            // 476 GiB volume that fallback invented 568 GiB out of nothing.
+            //
+            // Resident named streams live inside the MFT record and cost no cluster, the
+            // same treatment the unnamed $DATA above already gets.
+            result.AdsBytes += allocated;
         }
     }
 }

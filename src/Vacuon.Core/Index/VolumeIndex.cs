@@ -360,6 +360,24 @@ public sealed class VolumeIndex
         }
     }
 
+    /// <summary>
+    /// How the measured total compares with what the filesystem reports as used.
+    /// <para>
+    /// The two can never match exactly — see <see cref="Reconciliation"/> — but they must
+    /// stay in the same neighbourhood. This check exists because they once did not: a
+    /// sparse Alternate Data Stream was counted at its logical size, and the app cheerfully
+    /// printed "758 GiB on disk" for a 476 GiB volume, right above the correct used figure.
+    /// Nothing complained, because nothing was comparing them.
+    /// </para>
+    /// </summary>
+    public Reconciliation CheckAgainstFileSystem()
+    {
+        long measured = TotalBytesOnDisk;
+        long reported = Volume.UsedBytes;
+
+        return new Reconciliation(measured, reported, Strategy);
+    }
+
     /// <summary>Desperdício entre o tamanho lógico e o múltiplo de cluster ocupado.</summary>
     public long TotalSlackBytes
     {
