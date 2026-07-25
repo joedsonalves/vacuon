@@ -1,0 +1,18 @@
+# Normaliza a linha em texto e evita o aviso de CRLF a cada `git add`.
+* text=auto eol=crlf
+
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+*.png  binary
+*.ico  binary
+*.bmp  binary
+*.jpg  binary
+*.gif  binary
+*.pdf  binary
+*.vhd  binary
+*.vhdx binary
+
+# O linguist conta o projeto como C#, não como PowerShell dos scripts de asset.
+assets/*.ps1 linguist-vendored

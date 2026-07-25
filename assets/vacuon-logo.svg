@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Vacuon">
+  <title>Vacuon</title>
+
+  <defs>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFC24B"/>
+      <stop offset="55%" stop-color="#FF9A1F"/>
+      <stop offset="100%" stop-color="#F2650A"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1C2030"/>
+      <stop offset="100%" stop-color="#0D0F16"/>
+    </linearGradient>
+    <radialGradient id="voidGlow" cx="50%" cy="76%" r="34%">
+      <stop offset="0%" stop-color="#FF9A1F" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#FF9A1F" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- placa -->
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#plate)"/>
+  <rect x="0.5" y="0.5" width="255" height="255" rx="55.5" fill="none" stroke="#2A3047" stroke-width="1"/>
+
+  <!-- brilho do vácuo -->
+  <circle cx="128" cy="194" r="76" fill="url(#voidGlow)"/>
+
+  <!-- os arquivos sendo puxados para dentro -->
+  <rect x="58"  y="52"  width="140" height="17" rx="8.5" fill="url(#amber)" opacity="0.45"/>
+  <rect x="76"  y="84"  width="104" height="17" rx="8.5" fill="url(#amber)" opacity="0.72"/>
+  <rect x="94"  y="116" width="68"  height="17" rx="8.5" fill="url(#amber)"/>
+
+  <!-- o funil: um V que também é o vácuo -->
+  <path d="M 74 146 L 182 146 L 128 226 Z" fill="url(#amber)"/>
+
+  <!-- o ponto de fuga -->
+  <circle cx="128" cy="202" r="9" fill="#0D0F16"/>
+</svg>

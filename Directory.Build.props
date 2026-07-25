@@ -1,0 +1,47 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Platforms>x64;ARM64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <NeutralLanguage>pt-BR</NeutralLanguage>
+
+    <!--
+      Sem isto, `dotnet build Vacuon.sln` grava em bin\x64\... e
+      `dotnet build src\Vacuon.Cli` grava em bin\... — e é fácil acabar
+      executando um binário velho sem perceber.
+    -->
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <BaseOutputPath>$(MSBuildProjectDirectory)\bin\</BaseOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>Vacuon</Product>
+    <Company>Vacuon</Company>
+    <Authors>Joedson</Authors>
+    <Copyright>Copyright (c) 2026 Vacuon contributors</Copyright>
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <!-- Server GC + PGO: o motor de varredura aloca em blocos grandes e vive de throughput. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+
+</Project>
