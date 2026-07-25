@@ -156,6 +156,56 @@ public class SuspiciousFileAnalyzerTests
         Assert.False(SuspiciousFileAnalyzer.IsInsideDependencyFolder(path));
     }
 
+    [Theory]
+    [InlineData("relatorio.pdf.lnk")]
+    [InlineData("planilha.csv.LNK")]
+    [InlineData("curriculo.doc.lnk")]
+    public void DoesNotFlagShortcutsAsDoubleExtension(string name)
+    {
+        // "documento.pdf.lnk" é exatamente como o Windows nomeia um atalho para
+        // "documento.pdf". A pasta Recentes é cheia deles; incluir .lnk na regra de
+        // extensão dupla marcava dezenas de atalhos normais em qualquer máquina.
+        VolumeIndex index = BuildIndex((name, 8, EntryFlags.None, 0));
+
+        Assert.Empty(new SuspiciousFileAnalyzer().Analyze(index));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\joao\AppData\Roaming\Microsoft\Windows\Recent\algo.pdf.lnk")]
+    [InlineData(@"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\app.lnk")]
+    public void RecognizesSystemGeneratedFolders(string path)
+    {
+        Assert.True(SuspiciousFileAnalyzer.IsSystemGenerated(path));
+    }
+
+    [Theory]
+    [InlineData(@"C:\Windows\System32\Bubbles.scr")]
+    [InlineData(@"C:\Windows\System32\Ribbons.scr")]
+    [InlineData(@"C:\Windows\SysWOW64\algo.scr")]
+    public void RecognizesFilesShippedWithWindows(string path)
+    {
+        // Bubbles.scr e Ribbons.scr são os protetores de tela do sistema. Marcá-los
+        // como phishing é ruído garantido em toda máquina.
+        Assert.True(SuspiciousFileAnalyzer.IsShippedWithWindows(path));
+    }
+
+    [Fact]
+    public void ScreensaverOutsideWindowsIsStillFlagged()
+    {
+        VolumeIndex index = BuildIndex(("protetor.scr", 8, EntryFlags.None, 0));
+        Assert.Single(new SuspiciousFileAnalyzer().Analyze(index));
+    }
+
+    [Fact]
+    public void StillFlagsRealDoubleExtension()
+    {
+        // A correção do .lnk não pode enfraquecer o caso que importa.
+        VolumeIndex index = BuildIndex(("fatura.pdf.exe", 8, EntryFlags.None, 0));
+
+        SuspiciousFile item = Assert.Single(new SuspiciousFileAnalyzer().Analyze(index));
+        Assert.Equal(Suspicion.HighlySuspicious, item.Level);
+    }
+
     [Fact]
     public void MarksTheEntryInTheIndex()
     {

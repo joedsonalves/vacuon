@@ -1,0 +1,56 @@
+<!--
+    Tema escuro — o padrão, porque o Vacuon é ferramenta de trabalho.
+
+    As cores de risco (verde/amarelo/laranja/vermelho) são EXCLUSIVAS da escala de
+    suspeita e de segurança. Nenhum outro elemento da interface usa esses matizes,
+    para que a cor nunca seja ambígua: se está vermelho, é risco, não decoração.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- superfícies -->
+    <SolidColorBrush x:Key="Surface.Window"    Color="#0D0F16"/>
+    <SolidColorBrush x:Key="Surface.Sidebar"   Color="#12141C"/>
+    <SolidColorBrush x:Key="Surface.Card"      Color="#181B25"/>
+    <SolidColorBrush x:Key="Surface.CardHover" Color="#1F2331"/>
+    <SolidColorBrush x:Key="Surface.Input"     Color="#0A0C12"/>
+    <SolidColorBrush x:Key="Surface.RowAlt"    Color="#14171F"/>
+    <SolidColorBrush x:Key="Surface.Selected"  Color="#2A2033"/>
+
+    <!-- traços -->
+    <SolidColorBrush x:Key="Stroke.Subtle"  Color="#232838"/>
+    <SolidColorBrush x:Key="Stroke.Strong"  Color="#333A50"/>
+
+    <!-- texto -->
+    <SolidColorBrush x:Key="Text.Primary"   Color="#E8EAF0"/>
+    <SolidColorBrush x:Key="Text.Secondary" Color="#9AA2B8"/>
+    <SolidColorBrush x:Key="Text.Muted"     Color="#5F677D"/>
+    <SolidColorBrush x:Key="Text.OnAccent"  Color="#1A1206"/>
+
+    <!-- acento âmbar: o "vácuo" da marca -->
+    <SolidColorBrush x:Key="Accent"        Color="#FF9A1F"/>
+    <SolidColorBrush x:Key="Accent.Hover"  Color="#FFB24D"/>
+    <SolidColorBrush x:Key="Accent.Muted"  Color="#3A2A10"/>
+
+    <!-- escala de risco — reservada -->
+    <SolidColorBrush x:Key="Risk.Safe"     Color="#3FB950"/>
+    <SolidColorBrush x:Key="Risk.Notable"  Color="#D9A214"/>
+    <SolidColorBrush x:Key="Risk.Warning"  Color="#DB6D28"/>
+    <SolidColorBrush x:Key="Risk.Danger"   Color="#F14C4C"/>
+    <SolidColorBrush x:Key="Risk.Blocked"  Color="#6E7681"/>
+
+    <!-- barras de ocupação -->
+    <SolidColorBrush x:Key="Gauge.Track"   Color="#20242F"/>
+    <SolidColorBrush x:Key="Gauge.Fill"    Color="#FF9A1F"/>
+    <SolidColorBrush x:Key="Gauge.Critical" Color="#F14C4C"/>
+
+    <!-- categorias de arquivo (treemap e coluna de tipo) -->
+    <SolidColorBrush x:Key="Cat.Video"     Color="#C56BFF"/>
+    <SolidColorBrush x:Key="Cat.Image"     Color="#4CC2FF"/>
+    <SolidColorBrush x:Key="Cat.Audio"     Color="#4ADEC0"/>
+    <SolidColorBrush x:Key="Cat.Document"  Color="#8FA8FF"/>
+    <SolidColorBrush x:Key="Cat.Archive"   Color="#FFB84C"/>
+    <SolidColorBrush x:Key="Cat.Code"      Color="#7EE787"/>
+    <SolidColorBrush x:Key="Cat.Other"     Color="#7C8497"/>
+
+</ResourceDictionary>

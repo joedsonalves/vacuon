@@ -1,0 +1,116 @@
+<UserControl x:Class="Vacuon.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <infra:EnumEqualsConverter x:Key="EnumEquals"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="InverseVisible"/>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24,20">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left">
+
+            <!-- ==================== aparência ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Text="APARÊNCIA"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold" Text="Tema"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,4,0,12"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="A troca é imediata, sem reiniciar. Escolhendo “acompanhar o sistema”, o Vacuon reage quando você muda o tema do Windows com o app aberto."/>
+
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton GroupName="Theme" Style="{StaticResource Radio}" Content="Escuro"
+                                     IsChecked="{Binding Theme, Converter={StaticResource EnumEquals},
+                                                 ConverterParameter=Dark, Mode=TwoWay}"/>
+                        <RadioButton GroupName="Theme" Style="{StaticResource Radio}" Content="Claro" Margin="22,0,0,0"
+                                     IsChecked="{Binding Theme, Converter={StaticResource EnumEquals},
+                                                 ConverterParameter=Light, Mode=TwoWay}"/>
+                        <RadioButton GroupName="Theme" Style="{StaticResource Radio}" Content="Acompanhar o sistema"
+                                     Margin="22,0,0,0"
+                                     IsChecked="{Binding Theme, Converter={StaticResource EnumEquals},
+                                                 ConverterParameter=System, Mode=TwoWay}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== privilégio ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Margin="0,22,0,8" Text="PRIVILÉGIO"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <CheckBox Style="{StaticResource Check}"
+                              Content="Sempre abrir como administrador"
+                              IsChecked="{Binding AlwaysRunAsAdministrator, Mode=TwoWay}"/>
+
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="27,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding AlwaysAdminHintText}"/>
+
+                    <Border Margin="27,14,0,0" Padding="12" CornerRadius="6"
+                            Background="{DynamicResource Accent.Muted}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" FontWeight="SemiBold"
+                                       Text="Por que a elevação muda tanto"/>
+                            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="A leitura da MFT precisa abrir o volume em modo bruto (\\.\C:), e isso só é permitido a um processo elevado. É a diferença entre indexar um milhão de arquivos em segundos e levar minutos pela API do Windows. O Vacuon abre o volume apenas para LEITURA — nunca para escrita."/>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" Margin="27,14,0,0"
+                                Visibility="{Binding IsElevated, Converter={StaticResource InverseVisible}}">
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="Reiniciar elevado agora"
+                                Command="{Binding RestartElevatedCommand}"/>
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="27,14,0,0"
+                               Foreground="{DynamicResource Risk.Safe}"
+                               Text="Este processo já está elevado."
+                               Visibility="{Binding IsElevated, Converter={StaticResource Visible}}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== miniaturas ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Margin="0,22,0,8" Text="MINIATURAS E LISTA"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold" Text="Tamanho do ícone"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,4,0,10"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="Também alterável na barra do Explorer. Nos tamanhos grandes, imagem e vídeo mostram o conteúdo real — é o que permite decidir o que apagar sem abrir o arquivo."/>
+                    <ComboBox Width="260" HorizontalAlignment="Left"
+                              ItemsSource="{Binding IconSizeOptions}"
+                              SelectedItem="{Binding SelectedIconSizeOption}"/>
+
+                    <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
+                              Content="Miniatura do conteúdo para imagem e vídeo"
+                              IsChecked="{Binding ContentThumbnails, Mode=TwoWay}"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="27,5,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="Desligado, tudo usa o ícone do tipo: instantâneo e sem tocar no conteúdo dos arquivos."/>
+
+                    <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
+                              Content="Mostrar arquivos ocultos e de sistema"
+                              IsChecked="{Binding ShowHiddenAndSystem, Mode=TwoWay}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== o que esta versão faz ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Margin="0,22,0,8" Text="ESTA VERSÃO"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               Text="Vacuon 0.2.0 — marcos M1 e M2"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Somente leitura. O Vacuon mede, explica e mostra; ele ainda não apaga nada. A exclusão chega no M4 junto com a quarentena reversível, porque um app que apaga arquivos tem exatamente uma chance de errar."/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="Nenhum byte sai desta máquina: não há servidor, conta nem telemetria. As preferências ficam em %AppData%\Vacuon\settings.json."/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
