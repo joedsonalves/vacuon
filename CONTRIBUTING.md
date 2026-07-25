@@ -74,7 +74,7 @@ Para um **crash**, a versão (`vacuon version`), o comando e o stack trace.
 
 ## O que não vai ser aceito
 
-Está tudo em [PRD §3.2](PRD.md#32-não-objetivos-explicitamente-fora-do-escopo), mas vale repetir os três principais:
+Vale repetir os três principais:
 
 - **"Limpeza de registro"** — ganho de espaço nulo, risco alto.
 - **Tweaks de sistema, "otimizador de RAM", "PC Health Score"** — o Vacuon é um instrumento de medição, não um pacote de promessas.

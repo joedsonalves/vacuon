@@ -12,7 +12,6 @@ to delete, and never claims a number it did not measure.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
-[![Tests](https://img.shields.io/badge/tests-187-3FB950.svg)](tests)
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
@@ -101,7 +100,7 @@ Three questions, answered in seconds:
 
 And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **v0.3.0 — milestones M1, M2 and deletion.** Vacuon measures, explains, shows — and now deletes, to the Recycle Bin by default and permanently only when you say so. The reversible quarantine of milestone M4 is still ahead, so the Recycle Bin is the only undo today, and the app says so where it matters. The full roadmap lives in [PRD.md](PRD.md) (written in Portuguese).
+> **v0.3.0 — milestones M1, M2 and deletion.** Vacuon measures, explains, shows — and now deletes, to the Recycle Bin by default and permanently only when you say so. The reversible quarantine of milestone M4 is still ahead, so the Recycle Bin is the only undo today, and the app says so where it matters.
 
 ---
 
@@ -365,7 +364,7 @@ Exit codes: `0` success · `1` partial success · `2` bad argument · `3` needs 
 - **The volume is opened read-only.** `GENERIC_READ`, never `GENERIC_WRITE`.
 - **The registry scanner does not write.** Every key is opened with `writable: false`.
 - **Nothing is executed.** Suspicious autoruns are displayed as text, never invoked.
-- **There will never be "registry cleaning"**: zero space gained, high risk. It is in the [non-goals](PRD.md#32-não-objetivos-explicitamente-fora-do-escopo), along with system tweaks and "PC Health Score".
+- **There will never be "registry cleaning"**: zero space gained, high risk. It is an explicit non-goal, along with system tweaks and "PC Health Score".
 
 Details in [SECURITY.md](SECURITY.md).
 
@@ -442,8 +441,6 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 19. **For a compressed or sparse attribute, the size on disk is at 0x40, not 0x28.** Field 0x28 holds the run space *as if nothing had been compressed or punched out*; `CompressedSize` at 0x40 — present only when the flag is set — is what is really occupied. And in those attributes the stream name starts at **0x48**, not 0x40.
 20. **`$BadClus:$Bad` is the size of the whole volume and occupies zero.** Every NTFS volume carries that sparse named stream, and `$Extend\$UsnJrnl:$J` is another. Using their logical size as occupancy added **568 GiB to a 476 GiB disk**. A fallback like `allocated > 0 ? allocated : logical` looks harmless — a resident stream does report 0 — and is exactly what turns them into hundreds of imaginary gigabytes.
 21. **Two totals that are never compared drift apart unnoticed.** The app printed `Size on disk 758 GiB` one line above `377 GiB used of 476 GiB` for an entire release. Measuring *more* than the volume reports as used is arithmetically impossible and always a bug; measuring slightly less is the healthy case, because directory indexes and metadata occupy clusters without being files. Hence `VolumeIndex.CheckAgainstFileSystem()`, the cross-check that would have caught traps 18, 19 and 20 on the first run.
-
-The full list lives in [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 
 ## Contributing
 

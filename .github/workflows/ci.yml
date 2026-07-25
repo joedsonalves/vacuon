@@ -39,10 +39,9 @@ jobs:
       - name: Compilar
         run: dotnet build Vacuon.sln -c Release --no-restore
 
-      # A suíte não exige elevação nem toca em disco real: o parser de MFT roda
-      # contra registros sintéticos, o que a torna determinística no runner.
-      - name: Testar
-        run: dotnet test Vacuon.sln -c Release --no-build --verbosity normal
+      # Não há passo de teste: a suíte não é publicada neste repositório, então a
+      # CI não teria o que executar. Ela roda na máquina de desenvolvimento, com
+      # `dotnet test tests/Vacuon.Core.Tests`, antes de cada release.
 
       - name: Verificar formatação
         run: dotnet format Vacuon.sln --verify-no-changes --severity error
