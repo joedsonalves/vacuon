@@ -1,4 +1,5 @@
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Security;
 using Xunit;
 
@@ -73,7 +74,7 @@ public class SuspiciousFileAnalyzerTests
 
         SuspiciousFile item = Assert.Single(found);
         Assert.Equal(Suspicion.HighlySuspicious, item.Level);
-        Assert.Contains("Extensão dupla", item.Reason);
+        Assert.Contains(L.T("file.doubleExtension", ".pdf", ".exe"), item.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,7 +87,7 @@ public class SuspiciousFileAnalyzerTests
 
         SuspiciousFile item = Assert.Single(found);
         Assert.Equal(Suspicion.HighlySuspicious, item.Level);
-        Assert.Contains("RLO", item.Reason);
+        Assert.Contains(L.T("file.rlo"), item.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -98,7 +99,7 @@ public class SuspiciousFileAnalyzerTests
 
         SuspiciousFile item = Assert.Single(found);
         Assert.True(item.Level >= Suspicion.Suspicious);
-        Assert.Contains("oculto", item.Reason);
+        Assert.Contains(L.T("file.hiddenExecutable", ".exe"), item.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -109,7 +110,7 @@ public class SuspiciousFileAnalyzerTests
         List<SuspiciousFile> found = new SuspiciousFileAnalyzer().Analyze(index);
 
         SuspiciousFile item = Assert.Single(found);
-        Assert.Contains("Alternate Data Stream", item.Reason);
+        Assert.Contains(L.T("file.executableWithAds", 1024), item.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

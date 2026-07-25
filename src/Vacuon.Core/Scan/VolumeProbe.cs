@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 using Vacuon.Native.Interop;
 
 namespace Vacuon.Core.Scan;
@@ -39,7 +40,7 @@ public static class VolumeProbe
 
         return new VolumeInfo(
             DriveLetter: char.ToUpperInvariant(d.Name[0]),
-            Label: string.IsNullOrWhiteSpace(d.VolumeLabel) ? "(sem rótulo)" : d.VolumeLabel,
+            Label: string.IsNullOrWhiteSpace(d.VolumeLabel) ? L.T("volumes.noLabel") : d.VolumeLabel,
             FileSystem: d.DriveFormat,
             TotalBytes: d.TotalSize,
             FreeBytes: d.TotalFreeSpace,
@@ -59,7 +60,7 @@ public static class VolumeProbe
 
         try
         {
-            label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? "(sem rótulo)" : d.VolumeLabel;
+            label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? L.T("volumes.noLabel") : d.VolumeLabel;
             fs = d.DriveFormat;
             total = d.TotalSize;
             free = d.TotalFreeSpace;

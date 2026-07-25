@@ -1,4 +1,6 @@
 using System.Globalization;
+using Vacuon.Core.Localization;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Security;
 
 namespace Vacuon.Cli;
@@ -109,11 +111,11 @@ public static class Formatting
         _ => ConsoleColor.DarkGray,
     };
 
-    public static string LabelFor(Suspicion level) => level switch
+    public static string LabelFor(Suspicion level) => L.T(level switch
     {
-        Suspicion.HighlySuspicious => "MUITO SUSPEITO",
-        Suspicion.Suspicious => "SUSPEITO",
-        Suspicion.Notable => "ATENÇÃO",
-        _ => "normal",
-    };
+        Suspicion.HighlySuspicious => "suspicion.highly",
+        Suspicion.Suspicious => "suspicion.suspicious",
+        Suspicion.Notable => "suspicion.notable",
+        _ => "suspicion.normal",
+    });
 }

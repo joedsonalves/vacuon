@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Preview;
 
 namespace Vacuon.App.Infra;
@@ -23,6 +24,16 @@ public enum ThemeChoice
 public sealed class AppSettings
 {
     public ThemeChoice Theme { get; set; } = ThemeChoice.System;
+
+    /// <summary>
+    /// Idioma da interface. Inglês é o padrão; o português é opcional.
+    /// <para>
+    /// Padrão explícito em vez de "seguir o sistema": o inglês é a única tradução
+    /// completa por definição (é a base de onde as outras herdam), então ele é a
+    /// escolha previsível para quem abre o app pela primeira vez.
+    /// </para>
+    /// </summary>
+    public AppLanguage Language { get; set; } = AppLanguage.English;
 
     /// <summary>
     /// Relança elevado no startup. Vale a pena porque só com elevação existe a

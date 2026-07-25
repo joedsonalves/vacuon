@@ -7,6 +7,7 @@ using Vacuon.App.Infra;
 using Vacuon.App.Services;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
@@ -90,9 +91,8 @@ public sealed class MainViewModel : Observable, IDisposable
 
     public bool IsElevated => ElevationService.IsElevated;
 
-    public string ElevationText => IsElevated
-        ? "Administrador — leitura da MFT disponível"
-        : "Sem elevação — a varredura vai usar a API do Windows (mais lenta)";
+    public string ElevationText =>
+        L.T(IsElevated ? "elevation.elevatedHint" : "elevation.notElevatedHint");
 
     public bool AlwaysRunAsAdministrator
     {
@@ -107,14 +107,13 @@ public sealed class MainViewModel : Observable, IDisposable
         }
     }
 
-    public string AlwaysAdminHintText => AlwaysRunAsAdministrator
-        ? "O Vacuon vai se relançar elevado a cada abertura. O Windows exibe o UAC — não há como suprimi-lo sem criar uma tarefa agendada, e isso não é feito às escondidas."
-        : "Ligue para abrir sempre elevado. Sem elevação a leitura da MFT não existe, e a varredura passa de segundos para minutos.";
+    public string AlwaysAdminHintText =>
+        L.T(AlwaysRunAsAdministrator ? "elevation.alwaysOn" : "elevation.alwaysOff");
 
     private void RestartElevated()
     {
         if (!ElevationService.RelaunchElevated())
-            StatusText = "Elevação recusada no UAC. O Vacuon continua funcionando, sem a leitura da MFT.";
+            StatusText = L.T("elevation.declined");
     }
 
     // ================= temas =================
@@ -134,13 +133,65 @@ public sealed class MainViewModel : Observable, IDisposable
 
     public bool IsDarkTheme => ThemeManager.Effective == ThemeChoice.Dark;
 
+    // ================= idioma =================
+
+    /// <summary>Versão exibida no rodapé e nas Configurações.</summary>
+    public static string AppVersion => "0.2.0";
+
+    public string FooterText => L.T("app.footer", AppVersion);
+    public string VersionTitleText => L.T("settings.versionTitle", AppVersion);
+    public string PrivacyNoteText => L.T("settings.privacyNote", AppSettings.FilePath);
+
+    public AppLanguage Language
+    {
+        get => _settings.Language;
+        set
+        {
+            if (_settings.Language == value) return;
+            _settings.Language = value;
+            _settings.Save();
+
+            // L.Use dispara L.Changed; a ponte reescreve os recursos S.* e o XAML
+            // se atualiza sozinho. Aqui só falta avisar as propriedades do próprio VM.
+            L.Use(value);
+            Raise();
+            RaiseLocalizedProperties();
+        }
+    }
+
+    /// <summary>
+    /// Reavalia todo texto que o VM produz em código.
+    /// <para>
+    /// O XAML se resolve pelos recursos <c>S.*</c>, mas o que passa por
+    /// <see cref="L.T"/> aqui dentro precisa de um empurrão explícito.
+    /// </para>
+    /// </summary>
+    private void RaiseLocalizedProperties()
+    {
+        foreach (string name in new[]
+        {
+            nameof(FooterText), nameof(VersionTitleText), nameof(PrivacyNoteText),
+            nameof(ElevationText), nameof(AlwaysAdminHintText), nameof(ThemeToggleTooltip),
+            nameof(ModeText), nameof(TruncationText), nameof(SummaryText),
+            nameof(SecurityStatusText), nameof(IconSizeOptions), nameof(SelectedIconSizeOption),
+        })
+        {
+            Raise(name);
+        }
+
+        // Cartões de volume e linhas da lista recalculam o texto ao serem relidos.
+        LoadVolumes();
+        foreach (FileRowViewModel row in Rows) row.RaiseLocalizedText();
+    }
+
     /// <summary>
     /// Botão de alternância rápida no cabeçalho. Glifos da fonte de ícones do Windows
     /// (E706 = brilho, E708 = lua): os equivalentes Unicode soltos não existem em
     /// Segoe UI Variable e saem como círculo vazio.
     /// </summary>
     public string ThemeToggleGlyph => IsDarkTheme ? "" : "";
-    public string ThemeToggleTooltip => IsDarkTheme ? "Mudar para o tema claro" : "Mudar para o tema escuro";
+    public string ThemeToggleTooltip =>
+        L.T(IsDarkTheme ? "theme.switchToLight" : "theme.switchToDark");
 
     public void ToggleTheme() => Theme = IsDarkTheme ? ThemeChoice.Light : ThemeChoice.Dark;
 
@@ -198,7 +249,7 @@ public sealed class MainViewModel : Observable, IDisposable
     private double _progress;
     public double Progress { get => _progress; private set => Set(ref _progress, value); }
 
-    private string _statusText = "Escolha uma unidade e clique em Varrer.";
+    private string _statusText = L.T("scan.prompt");
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
 
     private string _summaryText = string.Empty;
@@ -236,7 +287,7 @@ public sealed class MainViewModel : Observable, IDisposable
         IsScanning = true;
         Progress = 0;
         HasScanned = false;
-        StatusText = $"Varrendo {volume.Header}…";
+        StatusText = L.T("scan.running", volume.Header);
         Section = Section.Explorer;
 
         var stopwatch = Stopwatch.StartNew();
@@ -245,8 +296,9 @@ public sealed class MainViewModel : Observable, IDisposable
         {
             Progress = p.Percent;
             StatusText = p.TotalBytes > 0
-                ? $"{Format.Percent(p.Percent)} · {Format.Count(p.EntriesFound)} itens · {p.MegabytesPerSecond:N0} MB/s"
-                : $"{Format.Count(p.RecordsParsed)} itens · {Format.Duration(p.Elapsed)}";
+                ? L.T("scan.progress", Format.Percent(p.Percent), Format.Count(p.EntriesFound),
+                      p.MegabytesPerSecond.ToString("N0", L.Culture))
+                : L.T("scan.progressItems", Format.Count(p.RecordsParsed), Format.Duration(p.Elapsed));
         });
 
         try
@@ -262,7 +314,7 @@ public sealed class MainViewModel : Observable, IDisposable
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Varredura cancelada.";
+            StatusText = L.T("scan.cancelled");
         }
         catch (VolumeAccessException ex)
         {
@@ -284,17 +336,17 @@ public sealed class MainViewModel : Observable, IDisposable
         VolumeIndex index = result.Index;
         int files = index.FileCount;
 
-        string strategy = result.StrategyUsed == ScanStrategy.Mft
-            ? "leitura bruta da MFT"
-            : "travessia pela API do Windows";
+        string strategy = L.T(result.StrategyUsed == ScanStrategy.Mft
+            ? "scan.strategyMft" : "scan.strategyWalk");
 
         string fallback = result.FallbackReason is null ? string.Empty : $" — {result.FallbackReason}";
 
-        StatusText = $"{Format.Count(files)} arquivos em {Format.Duration(elapsed)} · {strategy}{fallback}";
+        StatusText = L.T("scan.summary", Format.Count(files), Format.Duration(elapsed), strategy + fallback);
 
         SummaryText = HasRealAllocation
-            ? $"{Format.Bytes(index.TotalLogicalBytes)} lógicos · {Format.Bytes(index.TotalBytesOnDisk)} em disco · {Format.Bytes(index.TotalSlackBytes)} de folga de cluster"
-            : $"{Format.Bytes(index.TotalLogicalBytes)} lógicos · tamanho em disco não medido (só a MFT expõe AllocatedSize)";
+            ? L.T("scan.logicalAndDisk", Format.Bytes(index.TotalLogicalBytes),
+                  Format.Bytes(index.TotalBytesOnDisk), Format.Bytes(index.TotalSlackBytes))
+            : L.T("scan.logicalOnly", Format.Bytes(index.TotalLogicalBytes));
 
         // Árvore
         Root = new FolderNodeViewModel(index, index.RootIndex, index.Volume.Root);
@@ -357,10 +409,10 @@ public sealed class MainViewModel : Observable, IDisposable
 
     public string ModeText => Mode switch
     {
-        ListMode.BiggestFiles => "Maiores arquivos do volume",
-        ListMode.BiggestFolders => "Maiores pastas do volume",
-        ListMode.Search => "Resultado da busca",
-        ListMode.Suspicious => "Arquivos marcados pelas heurísticas",
+        ListMode.BiggestFiles => L.T("list.biggestFiles"),
+        ListMode.BiggestFolders => L.T("list.biggestFolders"),
+        ListMode.Search => L.T("list.searchResults"),
+        ListMode.Suspicious => L.T("list.suspicious"),
         _ => CurrentFolderPath,
     };
 
@@ -377,8 +429,8 @@ public sealed class MainViewModel : Observable, IDisposable
     public bool IsTruncated => TotalMatches > Rows.Count;
 
     public string TruncationText => IsTruncated
-        ? $"Mostrando {Format.Count(Rows.Count)} de {Format.Count(TotalMatches)} — refine a busca para ver o resto"
-        : $"{Format.Count(Rows.Count)} itens";
+        ? L.T("list.truncated", Format.Count(Rows.Count), Format.Count(TotalMatches))
+        : L.T("list.itemCount", Format.Count(Rows.Count));
 
     private FileRowViewModel? _selectedRow;
     public FileRowViewModel? SelectedRow
@@ -442,7 +494,7 @@ public sealed class MainViewModel : Observable, IDisposable
         Fill(found.Select(f => f.Index), found.Count);
 
         if (found.Count == 0)
-            StatusText = "Nenhum arquivo bateu nas heurísticas. Isso é uma boa notícia.";
+            StatusText = L.T("status.noSuspicious");
     }
 
     private void Fill(IEnumerable<int> indices, int total)
@@ -683,7 +735,7 @@ public sealed class MainViewModel : Observable, IDisposable
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
         {
-            StatusText = $"Não foi possível abrir: {SelectedRow.Name}";
+            StatusText = L.T("status.cannotOpen", SelectedRow.Name);
         }
     }
 
@@ -697,7 +749,7 @@ public sealed class MainViewModel : Observable, IDisposable
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
         {
-            StatusText = "Não foi possível abrir a pasta de origem.";
+            StatusText = L.T("status.cannotReveal");
         }
     }
 
@@ -708,12 +760,12 @@ public sealed class MainViewModel : Observable, IDisposable
         try
         {
             Clipboard.SetText(SelectedRow.FullPath);
-            StatusText = "Caminho copiado.";
+            StatusText = L.T("status.pathCopied");
         }
         catch (System.Runtime.InteropServices.ExternalException)
         {
             // A área de transferência pode estar travada por outro processo.
-            StatusText = "A área de transferência está ocupada. Tente de novo.";
+            StatusText = L.T("status.clipboardBusy");
         }
     }
 
@@ -732,7 +784,7 @@ public sealed class MainViewModel : Observable, IDisposable
         }
     }
 
-    private string _securityStatusText = "Inspeciona 44 pontos do registro onde malware costuma se alojar. Somente leitura — nada é alterado.";
+    private string _securityStatusText = L.T("security.prompt");
     public string SecurityStatusText { get => _securityStatusText; private set => Set(ref _securityStatusText, value); }
 
     private bool _hasSecurityRun;
@@ -743,7 +795,7 @@ public sealed class MainViewModel : Observable, IDisposable
     private async Task RunSecurityScanAsync()
     {
         IsSecurityScanning = true;
-        SecurityStatusText = "Inspecionando…";
+        SecurityStatusText = L.T("security.running");
 
         try
         {
@@ -757,18 +809,17 @@ public sealed class MainViewModel : Observable, IDisposable
 
             int flagged = report.CountAtLeast(Suspicion.Notable);
 
-            string prefix = $"{report.LocationsInspected} locais e {Format.Count(report.EntriesInspected)} " +
-                            $"entradas em {Format.Duration(report.Elapsed)}";
+            string prefix = L.T("security.stats", report.LocationsInspected,
+                                Format.Count(report.EntriesInspected), Format.Duration(report.Elapsed));
 
             SecurityStatusText = flagged switch
             {
-                0 => $"{prefix} — nenhuma fugiu do padrão.",
-                1 => $"{prefix} — 1 merece um olhar.",
-                _ => $"{prefix} — {flagged} merecem um olhar.",
+                0 => L.T("security.noneFlagged", prefix),
+                1 => L.T("security.oneFlagged", prefix),
+                _ => L.T("security.manyFlagged", prefix, flagged),
             };
 
-            if (!report.WasElevated)
-                SecurityStatusText += " Sem elevação, chaves protegidas de HKLM e as Tarefas Agendadas ficam de fora.";
+            if (!report.WasElevated) SecurityStatusText += L.T("security.notElevatedSuffix");
         }
         finally
         {

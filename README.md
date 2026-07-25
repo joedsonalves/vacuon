@@ -4,151 +4,159 @@
 
 # Vacuon
 
-**Analisador e liberador de espaço em disco para Windows.**
-Lê a MFT do NTFS direto do volume, mostra o conteúdo real do que você vai apagar
-e nunca afirma um número que não mediu.
+**Disk space analyzer for Windows.**
+Reads the NTFS MFT straight off the volume, shows the real content of what you are about
+to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
-[![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-87-3FB950.svg)](tests)
+[![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
+[![Tests](https://img.shields.io/badge/tests-99-3FB950.svg)](tests)
 
-<img src="docs/img/02-explorer-escuro.png" width="900" alt="Explorer do Vacuon com a árvore de pastas e a lista de arquivos">
+**English** · [Português (Brasil)](README.pt-BR.md)
+
+<img src="docs/img/02-explorer-escuro.png" width="900" alt="Vacuon Explorer showing the folder tree and the file list">
 
 </div>
 
 ---
 
-## O que é
+## What it is
 
-Três perguntas, respondidas em segundos:
+Three questions, answered in seconds:
 
 | | |
 |---|---|
-| **Para onde foi meu espaço?** | Mapa completo: maiores arquivos, maiores pastas, distribuição por tipo, tamanho e idade. |
-| **O que é seguro apagar?** | Filtros compostos, arquivos esquecidos, e o catálogo de regras de limpeza (M5). |
-| **Isso aqui é o quê?** | Miniatura do **conteúdo real** — o frame do vídeo, a própria foto — em seis tamanhos. |
+| **Where did my space go?** | Full map: biggest files, biggest folders, breakdown by type, size and age. |
+| **What is safe to delete?** | Compound filters, forgotten files, and the cleanup rule catalog (M5). |
+| **What *is* this thing?** | A thumbnail of the **actual content** — the video frame, the photo itself — in six sizes. |
 
-E uma quarta, que quase nenhum utilitário de disco responde: **tem alguma coisa estranha se alojando na minha máquina?**
+And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **v0.2.0 — marcos M1 e M2.** Somente leitura: o Vacuon mede, explica e mostra. Ele **ainda não apaga nada** — exclusão e quarentena reversível chegam no M4, porque um app que apaga arquivos tem exatamente uma chance de errar. O roteiro completo está no [PRD.md](PRD.md).
-
----
-
-## As telas
-
-### Painel — onde está o espaço
-
-<img src="docs/img/01-painel-escuro.png" width="900" alt="Painel com cartão de volume e agregados por tipo, tamanho e idade">
-
-Cartão por volume com a barra de ocupação (vermelha acima de 90%), e três agregados que respondem perguntas diferentes:
-
-- **por tipo** — nesta máquina, 9 arquivos `.vhdx` somam 106 GiB. Discos virtuais de emulador e de WSL são o buraco negro mais comum e o mais invisível;
-- **por tamanho** — 4 arquivos acima de 8 GB ocupam 112 GiB, enquanto 1,85 milhão de arquivos abaixo de 4 KB somam 1,9 GiB. Responde de uma vez se o problema é "poucos gigantes" ou "muitos pequenos";
-- **por idade** — 177 GiB não são tocados há mais de 90 dias.
-
-### Explorer — a tela de trabalho
-
-<img src="docs/img/02-explorer-claro.png" width="900" alt="Explorer no tema claro">
-
-Árvore de pastas **ordenada por tamanho, não por nome** — quem abre a árvore quer achar o culpado. A barra âmbar sob cada pasta é a fatia do disco que aquela subárvore ocupa. Subpastas carregam sob demanda: a hierarquia inteira nunca é materializada.
-
-Busca instantânea sobre o índice em memória, mais filtros de tamanho mínimo, idade e extensão. Botões para **maiores arquivos**, **maiores pastas** e **suspeitos**.
-
-### Miniaturas — ver antes de apagar
-
-<img src="docs/img/03-miniaturas-escuro.png" width="900" alt="Lista com miniaturas de 256 px mostrando frames de vídeo e imagens">
-
-A razão de existir desta feature: decidir qual dos cinco renders de 9 GB é o final, **sem abrir nenhum deles**.
-
-Imagem e vídeo mostram o conteúdo; todo outro tipo mostra o ícone registrado dele. Seis tamanhos — 16, 32, 64, 128, 256 e 512 px — alternáveis na barra do Explorer ou nas Configurações.
-
-O rótulo "veio do conteúdo" é **fato verificado**, não palpite: o Vacuon pede `SIIGBF_THUMBNAILONLY` primeiro e só cai para `SIIGBF_ICONONLY` se o Shell não tiver miniatura. Sem essa separação, um `.md` sem handler de preview seria anunciado como se a miniatura fosse do arquivo.
-
-> Os arquivos deste print são sintéticos (`smptebars` e `testsrc` do ffmpeg, mais gradientes gerados), justamente para não publicar conteúdo de ninguém.
-
-### Segurança — pontos de persistência no registro
-
-<img src="docs/img/04-seguranca-escuro.png" width="900" alt="Tela de Segurança com o resultado da inspeção">
-
-44 chaves onde malware costuma se alojar — `Run`, `RunOnce`, `RunOnceEx`, `Winlogon` (Shell, Userinit, Taskman, Notify), `AppInit_DLLs`, `AppCertDlls`, `BootExecute`, `Image File Execution Options\Debugger`, `SilentProcessExit`, pacotes do `Lsa`, `Command Processor\AutoRun`, `UserInitMprLogonScript`, Active Setup, BHOs, `SharedTaskScheduler`, sequestro de associação de arquivo, pastas de Inicialização e Tarefas Agendadas.
-
-**Somente leitura.** Nenhuma chave é alterada, desabilitada ou removida. E o Vacuon **não é antivírus**: não existe base de assinaturas aqui, e sim heurística de comportamento com o motivo sempre à vista.
-
-O print acima é o resultado numa máquina limpa: **44 locais, 122 entradas, 51 ms, um único achado** — e ele é verdadeiro ("Tarefas Agendadas exigem Administrador para serem lidas"). Chegar a esse número deu trabalho; veja [falso positivo é bug](#falso-positivo-é-bug).
-
-### Suspeitos — arquivos disfarçados
-
-<img src="docs/img/06-suspeitos-claro.png" width="900" alt="Lista de arquivos marcados pelas heurísticas">
-
-Extensão dupla (`fatura.pdf.cmd`), caractere Unicode RLO invertendo a extensão visível, executável oculto, executável com Alternate Data Stream grande, extensões de phishing, executável recém-criado em System32.
-
-Os dois itens do print são chamarizes sintéticos criados para demonstrar a detecção. Antes da calibração, esta mesma lista trazia **45 itens, 43 deles falsos positivos**.
-
-### Configurações — tema e privilégio
-
-<img src="docs/img/05-config-claro.png" width="900" alt="Configurações com tema, privilégio e miniaturas">
-
-**Tema claro, escuro ou acompanhando o sistema.** A troca é imediata, sem reiniciar, e no modo "acompanhar" o app reage quando você muda o tema do Windows com ele aberto. A barra de título acompanha (ela é desenhada pelo Windows, não pelo WPF — sem tratar isso, o tema escuro fica com uma faixa branca no topo).
-
-**Sempre abrir como administrador.** Ligue e o Vacuon se relança elevado a cada abertura. O UAC aparece — e o app diz isso na cara, em vez de fingir que dá para suprimir. Vale a pena porque **só com elevação existe a leitura da MFT**: é a diferença entre segundos e minutos.
+> **v0.2.0 — milestones M1 and M2.** Read-only: Vacuon measures, explains and shows. It **does not delete anything yet** — deletion and the reversible quarantine arrive in M4, because an app that deletes files gets exactly one chance to be wrong. The full roadmap lives in [PRD.md](PRD.md) (written in Portuguese).
 
 ---
 
-## Por que existe
+## The screens
 
-As ferramentas atuais escolhem um lado: ou medem rápido e não limpam (WizTree), ou limpam e não medem (CCleaner). Nenhuma deixa você **ver o conteúdo** antes de decidir.
+> The screenshots are in Portuguese because that is the language the app was first built
+> in. English is now the default; every string shown below has an English counterpart, and
+> the language switch is in Settings.
 
-E nenhuma é honesta com números. O Vacuon é:
+### Dashboard — where the space is
 
-- **hardlink conta uma vez** — senão `WinSxS` "ocuparia" o triplo do real;
-- **junction nunca é atravessada** — `C:\Documents and Settings` → `C:\Users` é um ciclo infinito;
-- **tamanho lógico ≠ tamanho em disco** — os dois aparecem, com rótulo;
-- **placeholder do OneDrive é intocável** — ler *baixa* o arquivo (enche o disco em vez de liberar) e apagar remove **da nuvem**;
-- **o que não foi medido é declarado como não medido.** Este é o ponto: na travessia pela API do Windows não existe `AllocatedSize`, então o Vacuon escreve *"tamanho em disco não medido"* em vez de repetir o tamanho lógico e imprimir "desperdício: 0 B". Repare nos prints — é exatamente o que a barra lateral mostra.
+<img src="docs/img/01-painel-escuro.png" width="900" alt="Dashboard with volume card and breakdowns by type, size and age">
 
-## Velocidade
+One card per volume with a usage bar (red above 90%), plus three breakdowns that answer different questions:
 
-O ganho não vem de "mais threads". Vem de **não usar a API do Windows**:
+- **by type** — on this machine, 9 `.vhdx` files add up to 106 GiB. Emulator and WSL virtual disks are the most common black hole and the most invisible one;
+- **by size** — 4 files above 8 GB take 112 GiB, while 1.85 million files under 4 KB add up to 1.9 GiB. Answers in one glance whether the problem is "a few giants" or "many small ones";
+- **by age** — 177 GiB have not been touched in over 90 days.
 
-| Estratégia | 1 M de arquivos | Requisitos |
+### Explorer — the working screen
+
+<img src="docs/img/02-explorer-claro.png" width="900" alt="Explorer in the light theme">
+
+Folder tree sorted **by size, not by name** — whoever opens the tree wants to find the culprit. The amber bar under each folder is the share of the disk that subtree occupies. Subfolders load on demand: the full hierarchy is never materialized.
+
+Instant search over the in-memory index, plus filters for minimum size, age and extension. Buttons for **biggest files**, **biggest folders** and **suspicious**.
+
+### Thumbnails — see before you delete
+
+<img src="docs/img/03-miniaturas-escuro.png" width="900" alt="List with 256 px thumbnails showing video frames and images">
+
+The reason this feature exists: deciding which of five 9 GB renders is the final one, **without opening any of them**.
+
+Images and videos show their content; every other type shows its registered icon. Six sizes — 16, 32, 64, 128, 256 and 512 px — switchable from the Explorer toolbar or from Settings.
+
+The "came from the content" label is a **verified fact**, not a guess: Vacuon asks for `SIIGBF_THUMBNAILONLY` first and only falls back to `SIIGBF_ICONONLY` when the Shell has no thumbnail. Without that split, a `.md` file with no preview handler would be announced as if the thumbnail were its content.
+
+> The files in this screenshot are synthetic (ffmpeg's `smptebars` and `testsrc`, plus generated gradients), precisely so no one's content gets published.
+
+### Security — registry persistence points
+
+<img src="docs/img/04-seguranca-escuro.png" width="900" alt="Security screen with the inspection result">
+
+44 keys where malware commonly takes root — `Run`, `RunOnce`, `RunOnceEx`, `Winlogon` (Shell, Userinit, Taskman, Notify), `AppInit_DLLs`, `AppCertDlls`, `BootExecute`, `Image File Execution Options\Debugger`, `SilentProcessExit`, LSA packages, `Command Processor\AutoRun`, `UserInitMprLogonScript`, Active Setup, BHOs, `SharedTaskScheduler`, file association hijacks, Startup folders and Scheduled Tasks.
+
+**Read-only.** No key is modified, disabled or removed. And Vacuon is **not an antivirus**: there is no signature database here, only behavioural heuristics with the reason always in plain sight.
+
+The screenshot above is the result on a clean machine: **44 locations, 122 entries, 51 ms, one single finding** — and it is a true one ("Scheduled Tasks require Administrator to be read"). Getting to that number took work; see [false positives are bugs](#false-positives-are-bugs).
+
+### Suspicious — disguised files
+
+<img src="docs/img/06-suspeitos-claro.png" width="900" alt="List of files flagged by the heuristics">
+
+Double extension (`invoice.pdf.cmd`), Unicode RLO character reversing the visible extension, hidden executable, executable carrying a large Alternate Data Stream, phishing extensions, executable recently created in System32.
+
+The two items in the screenshot are synthetic decoys created to demonstrate the detection. Before calibration, this same list held **45 items, 43 of them false positives**.
+
+### Settings — theme, language and privilege
+
+<img src="docs/img/05-config-claro.png" width="900" alt="Settings with theme, privilege and thumbnails">
+
+**Light, dark, or following the system.** The switch is immediate, no restart, and in "follow" mode the app reacts when you change the Windows theme with it open. The title bar follows too (it is drawn by Windows, not by WPF — without handling that, the dark theme keeps a white strip at the top).
+
+**English by default, Portuguese optional.** The switch is immediate as well: the UI strings live in the application resources and the language change rewrites them, the same mechanism the theme uses. Any string not translated yet falls back to English instead of showing a placeholder — a partial translation stays usable.
+
+**Always run as administrator.** Turn it on and Vacuon relaunches elevated every time. The UAC prompt appears — and the app says so upfront instead of pretending it can be suppressed. It is worth it because **the MFT read only exists with elevation**: that is the difference between seconds and minutes.
+
+---
+
+## Why it exists
+
+Existing tools pick a side: either they measure fast and do not clean (WizTree), or they clean and do not measure (CCleaner). None of them lets you **see the content** before deciding.
+
+And none of them is honest with numbers. Vacuon is:
+
+- **a hardlink counts once** — otherwise `WinSxS` would "take" three times its real size;
+- **junctions are never traversed** — `C:\Documents and Settings` → `C:\Users` is an infinite loop;
+- **logical size ≠ size on disk** — both are shown, labelled;
+- **OneDrive placeholders are untouchable** — reading one *downloads* the file (filling the disk instead of freeing it) and deleting it removes it **from the cloud**;
+- **whatever was not measured is reported as not measured.** This is the point: the Windows API traversal has no `AllocatedSize`, so Vacuon writes *"size on disk not measured"* instead of repeating the logical size and printing "wasted: 0 B". Look at the screenshots — that is exactly what the sidebar shows.
+
+## Speed
+
+The gain does not come from "more threads". It comes from **not using the Windows API**:
+
+| Strategy | 1 M files | Requirements |
 |---|---|---|
-| **Leitura bruta da MFT** | **3–8 s** | NTFS + Administrador |
-| USN + tamanhos sob demanda | 15–40 s | NTFS + Administrador |
-| `FindFirstFileEx` paralelo | 60–200 s | qualquer filesystem |
-| Atualização incremental (USN) | **< 1 s** | snapshot anterior |
+| **Raw MFT read** | **3–8 s** | NTFS + Administrator |
+| USN + sizes on demand | 15–40 s | NTFS + Administrator |
+| Parallel `FindFirstFileEx` | 60–200 s | any filesystem |
+| Incremental update (USN) | **< 1 s** | previous snapshot |
 
-A escolha é automática e cai em cascata: sem elevação ou fora do NTFS, o Vacuon usa a travessia por API e **diz que caiu, e por quê** — está escrito no cabeçalho de todos os prints acima.
+The choice is automatic and cascades: without elevation or outside NTFS, Vacuon uses the API traversal and **says that it fell back, and why** — it is written in the header of every screenshot above.
 
-**Medido nesta máquina** (2,86 M de arquivos, 459 GiB, SSD SATA): travessia pela API em **34 s** com cache do sistema quente, **4 min 33 s** a frio, com a interface respondendo durante toda a varredura. A leitura da MFT precisa de um processo elevado.
+**Measured on this machine** (2.86 M files, 459 GiB, SATA SSD): API traversal in **34 s** with a warm system cache, **4 min 33 s** cold, with the UI responsive throughout. The MFT read needs an elevated process.
 
-## Falso positivo é bug
+## False positives are bugs
 
-No módulo de segurança, uma lista que alarma sempre é uma lista que o usuário aprende a ignorar. Por isso um falso positivo aqui é tratado como **defeito**, não como ruído aceitável — e cada correção virou teste positivo + negativo.
+In the security module, a list that always alarms is a list the user learns to ignore. So a false positive here is treated as a **defect**, not as acceptable noise — and every fix became a positive plus a negative test.
 
-Rodando contra uma máquina real, a primeira versão cuspiu 21 achados no registro e 45 arquivos suspeitos. Hoje são **1 e 2**. O que estava errado:
+Run against a real machine, the first version spat out 21 registry findings and 45 suspicious files. Today it is **1 and 2**. What was wrong:
 
-| Sinal ingênuo | Por que estava errado |
+| Naive signal | Why it was wrong |
 |---|---|
-| "binário sem assinatura digital" | Binários do Windows são assinados por **catálogo** (`.cat`), não com assinatura embutida no PE. Cobrar assinatura embutida marcava `rundll32.exe`, `unregmp2.exe` e `ie4uinit.exe` |
-| "arquivo apontado não existe" | `msv1_0`, `scecli`, `{CLSID}` e `IEToEdge BHO` são **nomes**, não caminhos |
-| "usa rundll32 (LOLBin)" | O Active Setup do próprio Windows chama `rundll32` o tempo todo. Só conta fora do diretório do sistema |
-| "executável em pasta volátil: AppData\Local" | Chrome, Discord, Opera e Roblox **instalam ali por padrão**. Eram 4 alarmes falsos em qualquer máquina |
-| "autorun órfão: `/UserInstall`" | Um switch de linha de comando não é caminho. Normalizar `/` para `\` inventava um arquivo |
-| "extensão dupla: `Iterator.zip.js`" | É um arquivo de teste do pacote npm `es-iterator-helpers`. Árvores de dependência ficaram de fora |
-| "extensão dupla: `relatorio.pdf.lnk`" | É **exatamente como o Windows nomeia um atalho** para `relatorio.pdf`. A pasta Recentes é cheia deles |
-| "extensão de phishing: `Bubbles.scr`" | É o protetor de tela que vem com o Windows |
+| "binary without a digital signature" | Windows binaries are signed by **catalog** (`.cat`), not with a signature embedded in the PE. Demanding an embedded signature flagged `rundll32.exe`, `unregmp2.exe` and `ie4uinit.exe` |
+| "the file it points to does not exist" | `msv1_0`, `scecli`, `{CLSID}` and `IEToEdge BHO` are **names**, not paths |
+| "uses rundll32 (LOLBin)" | Windows' own Active Setup calls `rundll32` all the time. It only counts outside the system directory |
+| "executable in a volatile folder: AppData\Local" | Chrome, Discord, Opera and Roblox **install there by default**. That was 4 false alarms on any machine |
+| "orphaned autorun: `/UserInstall`" | A command-line switch is not a path. Normalizing `/` to `\` invented a file |
+| "double extension: `Iterator.zip.js`" | It is a test file from the npm package `es-iterator-helpers`. Dependency trees were excluded |
+| "double extension: `report.pdf.lnk`" | That is **exactly how Windows names a shortcut** to `report.pdf`. The Recent folder is full of them |
+| "phishing extension: `Bubbles.scr`" | It is the screensaver that ships with Windows |
 
-Dois sinais atravessam todas essas exclusões, porque não têm explicação inocente em lugar nenhum: o caractere **RLO** no nome e um **executável recém-criado em System32**.
+Two signals survive all of those exclusions, because they have no innocent explanation anywhere: the **RLO** character in a name, and an **executable recently created in System32**.
 
-Se o Vacuon marcar algo legítimo na sua máquina, [abra uma issue](../../issues/new?template=falso-positivo.yml) — o template existe só para isso.
+If Vacuon flags something legitimate on your machine, [open an issue](../../issues/new?template=falso-positivo.yml) — that template exists for nothing else.
 
-## Instalação
+## Installation
 
-Baixe o `.exe` da [página de releases](../../releases) — é portátil, roda de um pendrive, não instala nada.
+Grab the `.exe` from the [releases page](../../releases) — it is portable, runs from a USB stick, installs nothing.
 
-Ou compile:
+Or build it:
 
 ```bash
 git clone https://github.com/joedsonalves/vacuon.git
@@ -157,141 +165,146 @@ dotnet build -c Release
 dotnet test
 ```
 
-### Requisitos
+### Requirements
 
-- Windows 10 21H2+ ou Windows 11 (x64 / ARM64)
+- Windows 10 21H2+ or Windows 11 (x64 / ARM64)
 - [.NET 10 Runtime](https://dotnet.microsoft.com/download)
-- **Administrador** apenas para a leitura da MFT. O app abre sem UAC e só pede elevação quando você liga a opção nas Configurações.
+- **Administrator** only for the MFT read. The app opens without UAC and asks for elevation only when you turn the option on in Settings.
 
-## Interface gráfica e linha de comando
+## GUI and command line
 
-O mesmo núcleo atende as duas. `Vacuon.exe` abre a interface; `vacuon.exe` é a CLI:
+The same core serves both. `Vacuon.exe` opens the interface; `vacuon.exe` is the CLI:
 
 ```bash
-vacuon volumes                     # o que existe e quanto está cheio
-vacuon scan C:                     # mapa completo do volume
-vacuon scan "D:\Projetos" --top=50 # escopo de pasta
-vacuon scan C: --suspicious        # inclui a caça a arquivos disfarçados
-vacuon security                    # chaves de persistência do registro
-vacuon thumb video.mkv --size=256  # extrai a miniatura do conteúdo
-vacuon reveal "C:\caminho\arq.mp4" # abre o Explorer com o arquivo selecionado
+vacuon volumes                      # what exists and how full it is
+vacuon scan C:                      # full volume map
+vacuon scan "D:\Projects" --top=50  # folder scope
+vacuon scan C: --suspicious         # also hunt for disguised files
+vacuon security                     # registry persistence keys
+vacuon thumb video.mkv --size=256   # extract the content thumbnail
+vacuon reveal "C:\path\file.mp4"    # open Explorer with the file selected
+vacuon scan C: --language=pt-BR     # output in Portuguese
 ```
 
 <details>
-<summary><b>Exemplo de saída — <code>vacuon scan C:</code></b></summary>
+<summary><b>Sample output — <code>vacuon scan C:</code></b></summary>
 
 ```
-VARREDURA — C:
-──────────────
-  Estratégia        travessia pela API do Windows
-                    (caiu para o fallback: leitura da MFT exige executar como Administrador)
-  Tempo             4 min 33 s
-  Arquivos          2.861.572
-  Pastas            604.583
-  Velocidade        10.477 arquivos/s
+SCAN — C:
+─────────
+  Strategy          Windows API traversal
+                    (fell back: reading the MFT requires running as Administrator)
+  Time              4 min 33 s
+  Files             2,861,572
+  Folders           604,583
+  Speed             10,477 files/s
 
-  Tamanho lógico    459 GiB
-  Tamanho em disco  não medido (só a leitura da MFT expõe AllocatedSize)
-  Desperdício       não medido pelo mesmo motivo
+  Logical size      459 GiB
+  Size on disk      not measured (only the MFT read exposes AllocatedSize)
+  Wasted            not measured for the same reason
 
-MAIORES ARQUIVOS (top 5)
-────────────────────────
-      67,1 GiB  C:\ProgramData\BlueStacks_nxt\Engine\Pie64\Data.vhdx
-      23,7 GiB  C:\...\AppData\Local\Docker\wsl\disk\docker_data.vhdx
-      12,7 GiB  C:\hiberfil.sys
-       8,6 GiB  C:\...\vm_bundles\claudevm.bundle\rootfs.vhdx
-       6,9 GiB  C:\...\.ollama\models\blobs\sha256-1...
+BIGGEST FILES (top 5)
+─────────────────────
+      67.1 GiB  C:\ProgramData\BlueStacks_nxt\Engine\Pie64\Data.vhdx
+      23.7 GiB  C:\...\AppData\Local\Docker\wsl\disk\docker_data.vhdx
+      12.7 GiB  C:\hiberfil.sys
+       8.6 GiB  C:\...\vm_bundles\claudevm.bundle\rootfs.vhdx
+       6.9 GiB  C:\...\.ollama\models\blobs\sha256-1...
 
-DISTRIBUIÇÃO POR TAMANHO
-────────────────────────
-  1 B – 4 KB          1.856.643 arq.      1,9 GiB
-  128 MB – 1 GB             367 arq.     91,6 GiB
-  1 GB – 8 GB                17 arq.     48,2 GiB
-  acima de 8 GB               4 arq.      112 GiB
+SIZE DISTRIBUTION
+─────────────────
+  1 B – 4 KB          1,856,643 files      1.9 GiB
+  128 MB – 1 GB             367 files     91.6 GiB
+  1 GB – 8 GB                17 files     48.2 GiB
+  above 8 GB                  4 files      112 GiB
 ```
 
 </details>
 
-Códigos de saída: `0` sucesso · `1` sucesso parcial · `2` erro de argumento · `3` precisa de elevação · `4` volume inacessível · `5` cancelado.
+Exit codes: `0` success · `1` partial success · `2` bad argument · `3` needs elevation · `4` volume unreachable · `5` cancelled.
 
-## Segurança e privacidade
+## Security and privacy
 
-- **Nenhum byte sai da máquina.** Sem servidor, sem conta, sem telemetria, sem checagem automática de atualização. As preferências ficam em `%AppData%\Vacuon\settings.json`.
-- **O volume é aberto somente para leitura.** `GENERIC_READ`, nunca `GENERIC_WRITE`.
-- **O scanner de registro não escreve.** Todas as chaves são abertas com `writable: false`.
-- **Nada é executado.** Autoruns suspeitos são exibidos como texto, jamais invocados.
-- **Nunca haverá "limpeza de registro"**: ganho de espaço nulo, risco alto. Está nos [não-objetivos](PRD.md#32-não-objetivos-explicitamente-fora-do-escopo), junto com tweaks de sistema e "PC Health Score".
+- **Not a single byte leaves the machine.** No server, no account, no telemetry, no automatic update check. Preferences live in `%AppData%\Vacuon\settings.json`.
+- **The volume is opened read-only.** `GENERIC_READ`, never `GENERIC_WRITE`.
+- **The registry scanner does not write.** Every key is opened with `writable: false`.
+- **Nothing is executed.** Suspicious autoruns are displayed as text, never invoked.
+- **There will never be "registry cleaning"**: zero space gained, high risk. It is in the [non-goals](PRD.md#32-não-objetivos-explicitamente-fora-do-escopo), along with system tweaks and "PC Health Score".
 
-Detalhes em [SECURITY.md](SECURITY.md).
+Details in [SECURITY.md](SECURITY.md).
 
-## Marcos
+## Milestones
 
-| Marco | O que entrega | Estado |
+| Milestone | What it delivers | Status |
 |---|---|:-:|
-| M0 | Solução, núcleo sem UI, testes | ✅ |
-| M1 | Leitura bruta da MFT, índice, travessia de fallback, CLI | ✅ |
-| M1b | Scanner de persistência no registro + arquivos suspeitos | ✅ |
-| M1c | Miniaturas do Shell em seis tamanhos | ✅ |
-| **M2** | **GUI: painel, explorer virtualizado, busca, temas claro/escuro, elevação** | ✅ |
-| M1d | Snapshot binário + atualização incremental por USN | ⬜ |
-| M3 | Player embutido (LibVLCSharp) e preview de mídia | ⬜ |
-| M4 | Quarentena reversível, histórico, desfazer | ⬜ |
-| M5 | Catálogo de 120+ regras de limpeza | ⬜ |
-| M6 | Duplicados exatos e quase-duplicados | ⬜ |
+| M0 | Solution, UI-free core, tests | ✅ |
+| M1 | Raw MFT read, index, fallback traversal, CLI | ✅ |
+| M1b | Registry persistence scanner + suspicious files | ✅ |
+| M1c | Shell thumbnails in six sizes | ✅ |
+| **M2** | **GUI: dashboard, virtualized explorer, search, light/dark themes, elevation, i18n** | ✅ |
+| M1d | Binary snapshot + incremental USN update | ⬜ |
+| M3 | Embedded player (LibVLCSharp) and media preview | ⬜ |
+| M4 | Reversible quarantine, history, undo | ⬜ |
+| M5 | Catalog of 120+ cleanup rules | ⬜ |
+| M6 | Exact and near duplicates | ⬜ |
 | M7 | Treemap | ⬜ |
 
-## Arquitetura
+## Architecture
 
 ```
 src/
-├─ Vacuon.Native/   P/Invoke Win32 + parser on-disk do NTFS
+├─ Vacuon.Native/   Win32 P/Invoke + NTFS on-disk parser
 │  ├─ Interop/      VolumeDevice · Shell32 · Gdi32 · Kernel32
 │  └─ Ntfs/         MftRecordParser · DataRunList · MftStream · NtfsLayout
-├─ Vacuon.Core/     núcleo SEM UI — CLI, testes e GUI consomem isto
+├─ Vacuon.Core/     UI-FREE core — CLI, tests and GUI all consume this
 │  ├─ Index/        FileEntry (64 bytes) · NameBlob · VolumeIndex
 │  ├─ Scan/         ScanOrchestrator · MftScanner · Win32Walker · VolumeProbe
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
+│  ├─ Localization/ L (en-US base + optional pt-BR, embedded JSON)
 │  └─ Preview/      ThumbnailProvider · BmpWriter
-├─ Vacuon.App/      WPF — MVVM escrito à mão, sem dependência externa
+├─ Vacuon.App/      WPF — hand-written MVVM, no external dependency
 │  ├─ Themes/       Dark.xaml · Light.xaml · Controls.xaml
 │  ├─ ViewModels/   MainViewModel · FileRowViewModel · FolderNodeViewModel
 │  └─ Views/        Dashboard · Explorer · Security · Settings
-└─ Vacuon.Cli/      subcomandos scan/volumes/security/thumb/reveal
+└─ Vacuon.Cli/      subcommands scan/volumes/security/thumb/reveal
 ```
 
-O índice são **arrays planos de `struct`**, não um grafo de objetos: 1 milhão de arquivos = **64 MB previsíveis**, sem um objeto no heap por arquivo. Um grafo de `class FileNode` com `Parent`/`Children` custaria ~400 MB e manteria a Gen2 sofrendo durante toda a varredura. O teste `FileEntry_IsExactlySixtyFourBytes` existe para que ninguém encoste nesse contrato sem perceber — foi ele que empurrou os bytes de Alternate Data Stream para uma tabela lateral, já que ADS é raro e um campo em toda entrada guardaria zeros.
+The index is made of **flat `struct` arrays**, not an object graph: 1 million files = **64 predictable MB**, with no per-file heap object. A `class FileNode` graph with `Parent`/`Children` would cost ~400 MB and keep Gen2 suffering for the whole scan. The `FileEntry_IsExactlySixtyFourBytes` test exists so nobody touches that contract by accident — it is what pushed the Alternate Data Stream bytes into a side table, since ADS is rare and a field on every entry would store zeros.
 
-A hierarquia usa um índice de filhos em formato **CSR** (dois `int[]`, como matriz esparsa): ~23 MB para 2,8 milhões de entradas, contra centenas de MB de um `Dictionary<int, List<int>>`.
+The hierarchy uses a child index in **CSR** form (two `int[]`, like a sparse matrix): ~23 MB for 2.8 million entries, against hundreds of MB for a `Dictionary<int, List<int>>`.
 
-## Armadilhas que este código já resolve
+Localization keys are **stable identifiers**, not display text: `FileCategories.Of()` returns `category.video`, and only `DisplayName()` resolves it. That way colors, comparisons and tests never depend on which translation is loaded.
 
-Se você for escrever um leitor de MFT ou temas em WPF, estas custam caro:
+## Traps this code already solves
 
-1. **A MFT é fragmentada.** Lê-la como bloco contíguo funciona em disco novo e perde arquivos **silenciosamente** em disco usado. É obrigatório decodificar os data runs do registro 0.
-2. **Fixups do Update Sequence Array.** Sem aplicá-los, os dois últimos bytes de cada setor vêm errados — o parser "quase funciona", que é pior que falhar.
-3. **`FSCTL_ENUM_USN_DATA` não traz tamanho.** Quem monta o pipeline em cima disso refaz tudo depois.
-4. **Nomes 8.3 duplicam entradas.** Um arquivo com nome longo tem dois `$FILE_NAME`; contar os dois dobra a contagem do volume.
-5. **`MAX_PATH`.** Acima de 260 caracteres exige `\\?\` em toda chamada Win32 — e é exatamente em `node_modules` profundo que isso dói.
-6. **`LibraryImport` não marshala interface COM** (SYSLIB1052) e **não acrescenta o sufixo W**: `GetObject` precisa ser `GetObjectW`.
-7. **`ProgressBar.Value` liga TwoWay por padrão** e explode em propriedade somente-leitura.
-8. **Um `Style` com `TargetType="CheckBox"` aplicado a um `RadioButton`** derruba a janela na carga do XAML.
-9. **O template padrão do `ComboBox` ignora `Background`** — no tema escuro ele aparece branco. Precisa de template próprio, e o mesmo vale para `ProgressBar` (o brilho animado sobre fundo escuro vira uma barra esbranquiçada).
-10. **A barra de título é do Windows.** Sem `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, o tema escuro fica com uma faixa branca no topo.
-11. **`GridViewRowPresenter` exige um `GridView`.** Reusar o estilo de linha de um `ListView` com colunas em outro sem `View` faz o item simplesmente não aparecer.
+If you are going to write an MFT reader, or themes and i18n in WPF, these cost real time:
 
-A lista completa está no [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
+1. **The MFT is fragmented.** Reading it as one contiguous block works on a fresh disk and **silently loses files** on a used one. Decoding record 0's data runs is mandatory.
+2. **Update Sequence Array fixups.** Without applying them, the last two bytes of every sector come back wrong — the parser "almost works", which is worse than failing.
+3. **`FSCTL_ENUM_USN_DATA` does not return size.** Whoever builds the pipeline on it rewrites it later.
+4. **8.3 names duplicate entries.** A file with a long name has two `$FILE_NAME` attributes; counting both doubles the volume's file count.
+5. **`MAX_PATH`.** Above 260 characters every Win32 call needs the `\\?\` prefix — and deep `node_modules` is exactly where that hurts.
+6. **`LibraryImport` does not marshal COM interfaces** (SYSLIB1052) and **does not append the W suffix**: `GetObject` must be `GetObjectW`.
+7. **`ProgressBar.Value` binds TwoWay by default** and throws on a read-only property.
+8. **A `Style` with `TargetType="CheckBox"` applied to a `RadioButton`** brings the window down while the XAML loads.
+9. **The default `ComboBox` template ignores `Background`** — in the dark theme it renders white. It needs its own template, and so does `ProgressBar` (its animated glow reads as a whitish bar over a dark background).
+10. **The title bar belongs to Windows.** Without `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, the dark theme keeps a white strip at the top.
+11. **`GridViewRowPresenter` requires a `GridView`.** Reusing a column-based `ListView` row style in one without a `View` makes the item simply not render.
+12. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
 
-## Contribuindo
+The full list lives in [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 
-Leia o [CONTRIBUTING.md](CONTRIBUTING.md). Em resumo: `Vacuon.Core` não referencia UI, `Safety/` e `Actions/` exigem 100% de cobertura, e **nenhuma mudança pode fazer o app afirmar um número que ele não mediu**.
+## Contributing
 
-## Licença
+Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: `Vacuon.Core` never references UI, `Safety/` and `Actions/` require 100% coverage, and **no change may make the app claim a number it did not measure**.
+
+## License
 
 [MIT](LICENSE).
 
 ---
 
 <div align="center">
-<sub>O nome vem do vácuo — o espaço que volta a ser seu.</sub>
+<sub>The name comes from vacuum — the space that becomes yours again.</sub>
 </div>

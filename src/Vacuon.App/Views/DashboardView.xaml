@@ -15,7 +15,7 @@
         <StackPanel>
 
             <!-- ==================== volumes ==================== -->
-            <TextBlock Style="{StaticResource Text.Section}" Text="VOLUMES"/>
+            <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.volumes.title}"/>
 
             <ItemsControl ItemsSource="{Binding Volumes}">
                 <ItemsControl.ItemsPanel>
@@ -43,7 +43,7 @@
                                                    Text="{Binding ScanHintText}"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Style="{StaticResource Button.Base}"
-                                            Content="Varrer" FontSize="12" Padding="10,5"
+                                            Content="{DynamicResource S.action.scan}" FontSize="12" Padding="10,5"
                                             VerticalAlignment="Top"
                                             Command="{Binding DataContext.ScanVolumeCommand,
                                                       RelativeSource={RelativeSource AncestorType=UserControl}}"
@@ -65,12 +65,12 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}">
                                         <Run Text="{Binding UsedPercentText, Mode=OneWay}"/>
-                                        <Run Text="usado"/>
+                                        <Run Text="{DynamicResource S.volumes.used}"/>
                                     </TextBlock>
                                     <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
                                                Foreground="{DynamicResource Text.Secondary}">
                                         <Run Text="{Binding FreeText, Mode=OneWay}"/>
-                                        <Run Text="livres de"/>
+                                        <Run Text="{DynamicResource S.volumes.freeOf}"/>
                                         <Run Text="{Binding TotalText, Mode=OneWay}"/>
                                     </TextBlock>
                                 </Grid>
@@ -91,7 +91,7 @@
                 <!-- por tipo -->
                 <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource Text.Section}" Text="ONDE ESTÁ O ESPAÇO — POR TIPO"/>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.dashboard.byType}"/>
                         <ItemsControl ItemsSource="{Binding Extensions}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -119,7 +119,7 @@
                 <!-- por tamanho -->
                 <Border Grid.Column="1" Style="{StaticResource Card}" Margin="7,0">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource Text.Section}" Text="DISTRIBUIÇÃO POR TAMANHO"/>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.dashboard.bySize}"/>
                         <ItemsControl ItemsSource="{Binding SizeBuckets}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -147,7 +147,7 @@
                 <!-- por idade -->
                 <Border Grid.Column="2" Style="{StaticResource Card}" Margin="7,0,0,0">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource Text.Section}" Text="IDADE (ÚLTIMA MODIFICAÇÃO)"/>
+                        <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.dashboard.byAge}"/>
                         <ItemsControl ItemsSource="{Binding AgeBuckets}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -178,13 +178,13 @@
                     Visibility="{Binding HasScanned, Converter={StaticResource InverseVisible}}">
                 <StackPanel>
                     <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                               Text="Nada varrido ainda."/>
+                               Text="{DynamicResource S.scan.nothingYet}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
                                MaxWidth="760"
-                               Text="Escolha uma unidade acima e clique em Varrer. Com privilégio de administrador o Vacuon lê a MFT do NTFS direto do volume e indexa um milhão de arquivos em segundos; sem elevação ele cai para a API do Windows, chega ao mesmo resultado e leva minutos."/>
+                               Text="{DynamicResource S.scan.nothingYetHint}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
                                MaxWidth="760" Foreground="{DynamicResource Text.Muted}"
-                               Text="Esta versão é somente leitura: mede, explica e mostra. Apagar, mover e a quarentena reversível chegam no marco M4."/>
+                               Text="{DynamicResource S.app.readOnlyNotice}"/>
                 </StackPanel>
             </Border>
 

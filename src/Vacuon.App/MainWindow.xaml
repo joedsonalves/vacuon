@@ -61,16 +61,16 @@
 
                 <!-- navegação -->
                 <StackPanel Grid.Row="1">
-                    <RadioButton Style="{StaticResource NavItem}" Content="Painel" Tag=""
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.dashboard}" Tag=""
                                  IsChecked="{Binding IsDashboard, Mode=OneWay}"
                                  Checked="OnNavDashboard"/>
-                    <RadioButton Style="{StaticResource NavItem}" Content="Explorer" Tag=""
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.explorer}" Tag=""
                                  IsChecked="{Binding IsExplorer, Mode=OneWay}"
                                  Checked="OnNavExplorer"/>
-                    <RadioButton Style="{StaticResource NavItem}" Content="Segurança" Tag=""
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.security}" Tag=""
                                  IsChecked="{Binding IsSecurity, Mode=OneWay}"
                                  Checked="OnNavSecurity"/>
-                    <RadioButton Style="{StaticResource NavItem}" Content="Configurações" Tag=""
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.settings}" Tag=""
                                  IsChecked="{Binding IsSettings, Mode=OneWay}"
                                  Checked="OnNavSettings"/>
                 </StackPanel>
@@ -78,7 +78,7 @@
                 <!-- resumo do volume varrido -->
                 <StackPanel Grid.Row="2" Margin="18,26,18,0"
                             Visibility="{Binding HasScanned, Converter={StaticResource Visible}}">
-                    <TextBlock Style="{StaticResource Text.Section}" Text="VARREDURA ATUAL"/>
+                    <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.scan.currentTitle}"/>
                     <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
                                Text="{Binding SelectedVolume.Header}"/>
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
@@ -101,16 +101,16 @@
                                        Visibility="{Binding IsElevated, Converter={StaticResource NotVisible}}"/>
                             <TextBlock Margin="7,0,0,0" Style="{StaticResource Text.Sub}"
                                        FontWeight="SemiBold" VerticalAlignment="Center"
-                                       Text="Administrador"
+                                       Text="{DynamicResource S.elevation.elevated}"
                                        Visibility="{Binding IsElevated, Converter={StaticResource Visible}}"/>
                             <TextBlock Margin="7,0,0,0" Style="{StaticResource Text.Sub}"
                                        FontWeight="SemiBold" VerticalAlignment="Center"
-                                       Text="Sem elevação"
+                                       Text="{DynamicResource S.elevation.notElevated}"
                                        Visibility="{Binding IsElevated, Converter={StaticResource NotVisible}}"/>
                         </StackPanel>
 
                         <Button Style="{StaticResource Button.Base}" Margin="0,10,0,0"
-                                Content="Reiniciar elevado"
+                                Content="{DynamicResource S.action.restartElevated}"
                                 FontSize="12" Padding="8,6"
                                 Command="{Binding RestartElevatedCommand}"
                                 Visibility="{Binding IsElevated, Converter={StaticResource NotVisible}}"/>
@@ -137,7 +137,7 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeaderTitle" Style="{StaticResource Text.Title}" Text="Painel"/>
+                        <TextBlock x:Name="HeaderTitle" Style="{StaticResource Text.Title}" Text="{DynamicResource S.nav.dashboard}"/>
                         <TextBlock Style="{StaticResource Text.Sub}" Margin="0,3,0,0"
                                    Text="{Binding StatusText}"/>
                     </StackPanel>
@@ -149,11 +149,11 @@
                                 ToolTip="{Binding ThemeToggleTooltip}"
                                 Click="OnToggleTheme"/>
                         <Button Style="{StaticResource Button.Base}" Margin="8,0,0,0"
-                                Content="Cancelar"
+                                Content="{DynamicResource S.action.cancel}"
                                 Command="{Binding CancelScanCommand}"
                                 Visibility="{Binding IsScanning, Converter={StaticResource Visible}}"/>
                         <Button Style="{StaticResource Button.Primary}" Margin="8,0,0,0"
-                                Content="Varrer  (F5)"
+                                Content="{DynamicResource S.action.scanKey}"
                                 Command="{Binding ScanCommand}"/>
                     </StackPanel>
                 </Grid>
@@ -187,7 +187,7 @@
                                    MaxHeight="34" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
                                    Foreground="{DynamicResource Text.Muted}"
-                                   Text="Vacuon 0.2.0 · nada foi apagado"/>
+                                   Text="{Binding FooterText}"/>
                     </Grid>
                 </Grid>
             </Border>

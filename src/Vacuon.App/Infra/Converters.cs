@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using Vacuon.Core.Analyzers;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Security;
 
 namespace Vacuon.App.Infra;
@@ -69,13 +70,13 @@ public sealed class SuspicionLabelConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
         value is Suspicion level
-            ? level switch
+            ? L.T(level switch
             {
-                Suspicion.HighlySuspicious => "MUITO SUSPEITO",
-                Suspicion.Suspicious => "SUSPEITO",
-                Suspicion.Notable => "ATENÇÃO",
-                _ => "NORMAL",
-            }
+                Suspicion.HighlySuspicious => "suspicion.highly",
+                Suspicion.Suspicious => "suspicion.suspicious",
+                Suspicion.Notable => "suspicion.notable",
+                _ => "suspicion.normal",
+            })
             : string.Empty;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>

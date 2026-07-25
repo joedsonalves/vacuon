@@ -14,6 +14,25 @@
   <!-- Microsoft.Win32.Registry já vem no runtime quando o alvo é *-windows;
        referenciar o pacote só adiciona ruído de restore. -->
 
+  <!--
+    Dicionários de idioma embutidos: o assembly carrega sozinho, sem arquivo solto
+    ao lado do .exe para o usuário perder.
+
+    WithCulture="false" é OBRIGATÓRIO. "Strings.en-US.json" casa com o padrão
+    nome.cultura.extensão, então o MSBuild infere a cultura e manda o arquivo para um
+    assembly SATÉLITE (bin\en-US\Vacuon.Core.resources.dll) em vez do principal — e
+    GetManifestResourceStream não acha nada, sem erro nenhum no build.
+    LogicalName fixa o nome para não depender de RootNamespace nem do caminho.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Localization\Strings.en-US.json"
+                      WithCulture="false"
+                      LogicalName="Vacuon.Core.Localization.Strings.en-US.json" />
+    <EmbeddedResource Include="Localization\Strings.pt-BR.json"
+                      WithCulture="false"
+                      LogicalName="Vacuon.Core.Localization.Strings.pt-BR.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Vacuon.Core.Tests" />
   </ItemGroup>
