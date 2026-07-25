@@ -26,6 +26,18 @@ that drifts:
 
 ## Releasing a version
 
+Before anything else, check that what you are about to publish survives being moved:
+
+```powershell
+.\verify-portable.ps1 -PublishDir ..\artifacts\gui -Executable Vacuon.exe -ExpectWindow
+.\verify-portable.ps1 -PublishDir ..\artifacts\cli -Executable vacuon.exe -Arguments version
+```
+
+This is not ceremony. Version 0.3.1 was nearly published with the WPF native libraries left
+loose beside the executable instead of inside it: running it from the publish folder worked,
+and copying the single file anywhere else — which is exactly what downloading it does — killed
+the process before the window appeared, with no message.
+
 The manifest can only be written **after** the release exists, because the SHA256 has to match
 the published bytes.
 

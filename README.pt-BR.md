@@ -12,7 +12,7 @@ e nunca afirma um número que não mediu.
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
-[![Testes](https://img.shields.io/badge/testes-183-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-187-3FB950.svg)](tests)
 
 **Português (Brasil)** · [English](README.md)
 
@@ -48,8 +48,9 @@ O Vacuon funciona sem privilégio nenhum: clique em **Scan** e ele lê o disco p
 Windows. Na máquina onde foi desenvolvido isso levou **34 segundos** para 2,6 milhões de
 arquivos.
 
-Ler a MFT do NTFS direto leva **3 a 8 segundos por milhão de arquivos**, e o Windows só
-permite isso a um processo elevado. Dois caminhos:
+Ler a MFT do NTFS direto indexou **2,34 milhões de arquivos em 11,5 segundos** na máquina em
+que isto foi desenvolvido — cerca de 203 mil arquivos por segundo — e o Windows só permite
+isso a um processo elevado. Dois caminhos:
 
 - clique em **Restart elevated** no canto inferior esquerdo, ou
 - ligue **Sempre abrir como administrador** nas Configurações, e ele faz isso a cada abertura.
@@ -216,6 +217,16 @@ Isso existe porque faltava. A versão 0.3.0 informou `Size on disk 758 GiB` num 
 476 GiB, uma linha acima do correto `377 GiB used of 476 GiB`, e nada reclamou — porque nada
 estava comparando. Três defeitos distintos alimentavam o número, todos da mesma família: ler um
 campo cujo significado é próximo, mas não igual, ao que o nome sugere. Ver armadilhas 18 a 21.
+
+E então ela pegou a primeira tentativa de consertar a si mesma. Aquela tentativa lia o tamanho
+em disco do `CompressedSize` só quando o atributo carregava a flag de comprimido ou esparso — e
+o `$BadClus:$Bad` não carrega flag nenhuma num volume real, então o total foi de 758 GiB para
+834 GiB. Qual campo ler agora é decidido por onde o cabeçalho do atributo termina, e uma
+segunda regra recusa qualquer stream que declare mais espaço do que o volume tem ocupado.
+
+Medido num volume de 476 GiB com 2,34 milhões de arquivos: **359 GiB atribuídos a arquivos
+contra 376 GiB declarados em uso, 95,4%.** Os 4,6% que faltam são índices de diretório,
+`$LogFile`, `$Bitmap` e cópias de sombra — clusters que não pertencem a arquivo nenhum.
 
 ### Segurança — pontos de persistência no registro
 

@@ -14,6 +14,22 @@
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>false</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+    <!--
+      WPF carrega cinco DLLs nativas (wpfgfx_cor3, PresentationNative_cor3,
+      D3DCompiler_47_cor3, PenImc_cor3, vcruntime140_cor3). Sem isto elas ficam
+      SOLTAS ao lado do .exe em vez de entrar nele, e o "arquivo único" só funciona
+      enquanto ninguém o move para outro lugar — que é justamente o que a pessoa faz
+      ao baixar um portátil.
+
+      A falha não parece falta de DLL: a janela nem abre e o processo morre com
+      0xC000041D, porque a exceção estoura dentro do WndProc e vira fail-fast, o que
+      passa por cima de qualquer handler de exceção não tratada. O erro real,
+      "DllNotFoundException em SetWindowLongPtrWndProc", só aparece no stderr.
+
+      Esta linha existia desde o M0+M1 e foi perdida no commit do M2.
+    -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 
   <ItemGroup>

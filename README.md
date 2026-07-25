@@ -12,7 +12,7 @@ to delete, and never claims a number it did not measure.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
-[![Tests](https://img.shields.io/badge/tests-183-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-187-3FB950.svg)](tests)
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
@@ -47,8 +47,9 @@ Vacuon works without any privileges: click **Scan** and it reads the disk throug
 Windows API. On the machine it was developed on that took **34 seconds** for 2.6 million
 files.
 
-Reading the NTFS MFT directly takes **3–8 seconds for a million files**, and Windows only
-allows that to an elevated process. Two ways to get there:
+Reading the NTFS MFT directly indexed **2.34 million files in 11.5 seconds** on the machine
+this was developed on — about 203,000 files per second — and Windows only allows that to an
+elevated process. Two ways to get there:
 
 - click **Restart elevated** in the bottom-left corner, or
 - turn on **Always run as administrator** in Settings, and it does that on every launch.
@@ -216,6 +217,16 @@ volume, one line above the correct `377 GiB used of 476 GiB`, and nothing object
 nothing was comparing them. Three separate defects were feeding it, all in the same family:
 reading a field whose meaning is close to, but not the same as, what its name suggests. See
 traps 18 to 21.
+
+It then caught the first attempt at fixing itself. That attempt read the on-disk size from
+`CompressedSize` only when the attribute carried the compressed or sparse flag — and
+`$BadClus:$Bad` carries no such flag on a real volume, so the total went from 758 GiB to
+834 GiB. Which field to read is now decided by where the attribute header ends, and a second
+rule refuses any single stream claiming more space than the volume has occupied.
+
+Measured on a 476 GiB volume with 2.34 million files: **359 GiB attributed to files against
+376 GiB reported as used, 95.4%.** The missing 4.6% is directory indexes, `$LogFile`, `$Bitmap`
+and shadow copies — clusters that belong to no file.
 
 ### Security — registry persistence points
 
