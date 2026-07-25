@@ -1,4 +1,5 @@
 using Vacuon.Core.Index;
+using Vacuon.Core.Scan;
 using Vacuon.Core.Tests.Fixtures;
 using Vacuon.Native.Ntfs;
 using Xunit;
@@ -172,6 +173,76 @@ public class SizeAccountingTests
         ParsedMftRecord parsed = ParseOf(builder, 14);
 
         Assert.Equal(3, parsed.NameCount);
+    }
+
+    [Fact]
+    public void CompressedSizeIsFoundByHeaderLength_NotByTheFlag()
+    {
+        // The real $BadClus:$Bad carries no compressed/sparse flag and still spans the whole
+        // volume. Keying off the flag let 476 GiB of nothing through on a 476 GiB drive, so
+        // the field's presence is decided by where the header ends instead.
+        var builder = new MftRecordBuilder { RecordNumber = 17 };
+        builder.WithFileName("semflag.bin", 5, NtfsNameType.Win32);
+        builder.WithNonResidentData(logicalSize: 510_950_866_944, allocatedSize: 510_950_866_944,
+                                    flags: 0, compressedSize: 65_536,
+                                    forceCompressedSizeField: true);
+
+        ParsedMftRecord parsed = ParseOf(builder, 17);
+
+        Assert.False(parsed.IsSparse);
+        Assert.False(parsed.IsCompressed);
+        Assert.Equal(65_536, parsed.AllocatedSize);
+    }
+
+    // ==================== the backstop, for when the parse is still wrong ====================
+
+    private static VolumeInfo Volume(long total, long free) =>
+        new('C', "Test", "NTFS", total, free, 4096, false);
+
+    [Fact]
+    public void AStreamClaimingMoreThanTheDiskHolds_IsDropped()
+    {
+        // Arithmetic, not heuristics: one file cannot occupy more than the volume currently
+        // has occupied. NTFS does record such figures, so this is the net under the parse —
+        // it caught $BadClus:$Bad claiming 476 GiB on a volume using 376 GiB, twice, after
+        // two different attempts at reading the right field.
+        var entries = new FileEntry[3];
+        entries[1] = new FileEntry { NameLength = 4, AllocatedSize = 510_950_866_944 };
+        entries[2] = new FileEntry { NameLength = 4, AllocatedSize = 67_000_000_000 };
+
+        var ads = new Dictionary<int, long> { [1] = 510_950_866_944, [2] = 1_048_576 };
+
+        MftScanner.DropImpossibleSizes(entries, ads, Volume(510_950_866_944, 107_374_182_400));
+
+        Assert.Equal(0, entries[1].AllocatedSize);   // impossível: maior que o usado
+        Assert.False(ads.ContainsKey(1));
+        Assert.Equal(67_000_000_000, entries[2].AllocatedSize); // grande, mas possível
+        Assert.Equal(1_048_576, ads[2]);
+    }
+
+    [Fact]
+    public void ABigFileOnAFullDisk_SurvivesTheBackstop()
+    {
+        // The bound is the used space, not some fraction of it. A 60 GiB file on a disk with
+        // 400 GiB in use is entirely ordinary and must not be thrown away.
+        var entries = new FileEntry[2];
+        entries[1] = new FileEntry { NameLength = 4, AllocatedSize = 64_424_509_440 };
+
+        MftScanner.DropImpossibleSizes(entries, [], Volume(510_950_866_944, 81_604_378_624));
+
+        Assert.Equal(64_424_509_440, entries[1].AllocatedSize);
+    }
+
+    [Fact]
+    public void WithoutAUsableVolumeFigure_NothingIsDropped()
+    {
+        // No reference to check against is a reason to stay quiet, not to delete data.
+        var entries = new FileEntry[2];
+        entries[1] = new FileEntry { NameLength = 4, AllocatedSize = 999_999_999_999 };
+
+        MftScanner.DropImpossibleSizes(entries, [], Volume(0, 0));
+
+        Assert.Equal(999_999_999_999, entries[1].AllocatedSize);
     }
 
     // ==================== the cross-check that would have caught it ====================
