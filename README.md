@@ -12,7 +12,7 @@ to delete, and never claims a number it did not measure.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
-[![Tests](https://img.shields.io/badge/tests-136-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-170-3FB950.svg)](tests)
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
@@ -98,6 +98,39 @@ you must not be able to delete Videos itself.
 
 This arrived before milestone M4, so **the Recycle Bin is currently the only undo**, and
 the dialog says exactly that instead of implying a safety net that does not exist yet.
+
+### Reopening — snapshot plus the change journal
+
+The index is saved as a binary snapshot: a header, then the `FileEntry` array and the name
+blob written as raw blocks. Loading is a block read plus a `MemoryMarshal.Cast` — no
+per-entry parsing, no allocation per file. Serializing to JSON would have defeated the
+point entirely: 2.8 million entries would cost more to parse than the traversal that
+produced them.
+
+On the next open, Vacuon asks NTFS **what changed** through the USN change journal instead
+of walking the volume again. On an idle machine that is a handful of records.
+
+The journal reports what changed but never **how big** anything became, so created and
+modified files still need one size lookup each — deferred to the end, so a file written a
+hundred times in the delta is measured once, at its final size.
+
+**Every refusal is spelled out**, because they lead to different conclusions and only one
+of them is something you can fix:
+
+| Refusal | Meaning |
+|---|---|
+| no snapshot for this volume yet | first run |
+| the snapshot is from another format version | `FileEntry` changed; reinterpreting old bytes as a new struct would produce a plausible-looking index full of garbage |
+| the change journal was recreated | its numbering no longer matches ours |
+| the change journal discarded the records we needed | it wrapped; the delta is unknowable |
+| reading the change journal requires running as Administrator | **the actionable one** |
+
+Snapshots are keyed by **volume serial, not drive letter** — letters get reassigned, and
+reading D:'s index as E: would be worse than having none. `--fresh` forces a full scan.
+
+> Like the MFT read, the journal needs elevation. Without it Vacuon writes no snapshot at
+> all: an index with no journal position could never be brought up to date, so leaving one
+> behind would only ever force a rescan while looking like a cache.
 
 ### Security — registry persistence points
 
@@ -208,6 +241,7 @@ vacuon scan C: --suspicious         # also hunt for disguised files
 vacuon security                     # registry persistence keys
 vacuon thumb video.mkv --size=256   # extract the content thumbnail
 vacuon reveal "C:\path\file.mp4"    # open Explorer with the file selected
+vacuon scan C: --fresh              # ignore the snapshot, measure the disk again
 vacuon scan C: --language=pt-BR     # output in Portuguese
 ```
 
@@ -267,7 +301,7 @@ Details in [SECURITY.md](SECURITY.md).
 | M1b | Registry persistence scanner + suspicious files | ✅ |
 | M1c | Shell thumbnails in six sizes | ✅ |
 | **M2** | **GUI: dashboard, virtualized explorer, search, light/dark themes, elevation, i18n** | ✅ |
-| M1d | Binary snapshot + incremental USN update | ⬜ |
+| **M1d** | **Binary snapshot + incremental USN update** | ✅ |
 | M3 | Embedded player (LibVLCSharp) and media preview | ⬜ |
 | M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
 | M4 | Reversible quarantine, history, undo | ⬜ |
@@ -281,10 +315,11 @@ Details in [SECURITY.md](SECURITY.md).
 src/
 ├─ Vacuon.Native/   Win32 P/Invoke + NTFS on-disk parser
 │  ├─ Interop/      VolumeDevice · Shell32 · Gdi32 · Kernel32
-│  └─ Ntfs/         MftRecordParser · DataRunList · MftStream · NtfsLayout
+│  └─ Ntfs/         MftRecordParser · DataRunList · MftStream · UsnJournal
 ├─ Vacuon.Core/     UI-FREE core — CLI, tests and GUI all consume this
-│  ├─ Index/        FileEntry (64 bytes) · NameBlob · VolumeIndex
+│  ├─ Index/        FileEntry (64 bytes) · NameBlob · VolumeIndex · IndexSnapshot
 │  ├─ Scan/         ScanOrchestrator · MftScanner · Win32Walker · VolumeProbe
+│  │                IncrementalUpdater (snapshot + USN delta)
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
 │  ├─ Actions/      DeleteService (Recycle Bin · permanent · dry-run)
 │  ├─ Safety/       ProtectedPaths — the list nothing overrides
@@ -321,8 +356,10 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 11. **`GridViewRowPresenter` requires a `GridView`.** Reusing a column-based `ListView` row style in one without a `View` makes the item simply not render.
 12. **`SHFILEOPSTRUCT.pFrom` is a double-null-terminated list**, not a string. One terminator silently truncates the batch.
 13. **`Path.GetFullPath("C:")` returns the process's current directory on C:**, not the root — a drive spec without a separator is drive-*relative*. As a deletion target that is a trap, so `C:` is read as the volume root and refused.
-14. **`ListView.SelectedItems` is not a bindable dependency property.** Multi-selection has to be pushed to the view model from code-behind.
-15. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
+14. **`FSCTL_READ_USN_JOURNAL` is `METHOD_NEITHER`,** which is why its control code ends in `0xBB` and not `0xB8`. A wrong code fails with a generic "invalid function".
+15. **A USN file reference is not an MFT record number.** The high 16 bits are the sequence number; using the whole 64-bit value as an array index would be catastrophic.
+16. **`ListView.SelectedItems` is not a bindable dependency property.** Multi-selection has to be pushed to the view model from code-behind.
+17. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
 
 The full list lives in [PRD §17](PRD.md#172-armadilhas-técnicas-aprender-aqui-não-em-produção).
 

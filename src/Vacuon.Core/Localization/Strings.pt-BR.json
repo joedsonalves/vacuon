@@ -354,5 +354,22 @@
   "security.experimentalBadge": "EXPERIMENTAL",
   "security.falsePositiveNote": "Falso positivo aqui é tratado como bug. Se algo legítimo aparecer, por favor relate.",
   "security.foundCount": "{0} arquivos marcados",
-  "app.footerAfterDelete": "Vacuon {0}"
+  "app.footerAfterDelete": "Vacuon {0}",
+  "snapshot.usedTitle": "atualizado do snapshot",
+  "snapshot.used": "{0} mudanças aplicadas do diário de alterações · snapshot tinha {1}",
+  "snapshot.usedNoChanges": "nada mudou desde o snapshot, tirado há {0}",
+  "snapshot.saved": "snapshot salvo — a próxima abertura começa de um delta do diário",
+  "snapshot.refusedNoSnapshot": "ainda não há snapshot deste volume",
+  "snapshot.refusedUnusable": "o snapshot é de outra versão do formato",
+  "snapshot.refusedNoJournal": "o volume não tem diário de alterações ativo",
+  "snapshot.refusedJournalReplaced": "o diário de alterações foi recriado — a numeração não bate mais",
+  "snapshot.refusedJournalWrapped": "o diário de alterações descartou os registros de que precisávamos",
+  "snapshot.refusedNeedsElevation": "ler o diário de alterações exige executar como Administrador",
+  "snapshot.age.seconds": "{0} s",
+  "snapshot.age.minutes": "{0} min",
+  "snapshot.age.hours": "{0} h",
+  "snapshot.age.days": "{0} dias",
+  "cli.optFresh": "Força varredura completa, ignorando o snapshot",
+  "cli.sourceSnapshot": "snapshot + delta do diário",
+  "cli.sourceScan": "varredura completa"
 }

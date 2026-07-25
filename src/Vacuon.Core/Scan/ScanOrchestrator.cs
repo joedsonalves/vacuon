@@ -15,7 +15,15 @@ public enum StrategyPreference
     ForceWalk,
 }
 
-public sealed record ScanResult(VolumeIndex Index, ScanStrategy StrategyUsed, string? FallbackReason);
+public sealed record ScanResult(
+    VolumeIndex Index,
+    ScanStrategy StrategyUsed,
+    string? FallbackReason,
+    /// <summary>Set when the index came from a snapshot plus a journal delta.</summary>
+    IncrementalResult? Incremental = null)
+{
+    public bool CameFromSnapshot => Incremental?.Succeeded == true;
+}
 
 /// <summary>
 /// Escolhe a estratégia de varredura por volume e cai em cascata quando a preferida
@@ -25,6 +33,39 @@ public sealed record ScanResult(VolumeIndex Index, ScanStrategy StrategyUsed, st
 public sealed class ScanOrchestrator(MftScanOptions? options = null)
 {
     private readonly MftScanOptions _options = options ?? new MftScanOptions();
+
+    /// <summary>
+    /// Brings the index up to date the cheapest way available: a saved snapshot plus the
+    /// journal delta when that is trustworthy, a full scan when it is not.
+    /// </summary>
+    /// <param name="allowSnapshot">
+    /// <c>false</c> forces a full scan — the <c>--fresh</c> escape hatch, and what to use
+    /// when the numbers are ever in doubt.
+    /// </param>
+    public ScanResult Refresh(char driveLetter, StrategyPreference preference = StrategyPreference.Auto,
+                              bool allowSnapshot = true, CancellationToken cancellationToken = default)
+    {
+        IncrementalResult? attempt = null;
+
+        if (allowSnapshot && preference != StrategyPreference.ForceWalk)
+        {
+            attempt = new IncrementalUpdater().TryUpdate(driveLetter, cancellationToken);
+
+            if (attempt.Succeeded)
+                return new ScanResult(attempt.Index!, attempt.Index!.Strategy, null, attempt);
+        }
+
+        ScanResult result = ScanVolume(driveLetter, preference, cancellationToken);
+
+        // Record the journal position that goes with this index, so the next open can
+        // start from a delta. Needs elevation; silently skipped without it.
+        new IncrementalUpdater().SaveSnapshot(result.Index, driveLetter);
+
+        // The refusal travels with the result. Discarding it would hide the one case the
+        // user can actually fix — "the journal needs Administrator" is actionable,
+        // an unexplained full scan is not.
+        return attempt is null ? result : result with { Incremental = attempt };
+    }
 
     public ScanResult ScanVolume(char driveLetter, StrategyPreference preference = StrategyPreference.Auto,
                                  CancellationToken cancellationToken = default)

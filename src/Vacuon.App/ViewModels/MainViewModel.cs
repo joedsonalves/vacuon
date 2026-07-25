@@ -281,7 +281,7 @@ public sealed class MainViewModel : Observable, IDisposable
     public ICommand ScanVolumeCommand { get; }
     public ICommand RestartElevatedCommand { get; }
 
-    private async Task ScanAsync(VolumeCardViewModel? volume = null)
+    private async Task ScanAsync(VolumeCardViewModel? volume = null, bool forceFullScan = false)
     {
         volume ??= SelectedVolume;
         if (volume is null || IsScanning) return;
@@ -316,8 +316,11 @@ public sealed class MainViewModel : Observable, IDisposable
             var options = new MftScanOptions { Progress = progress };
             var orchestrator = new ScanOrchestrator(options);
 
+            // Refresh prefers a snapshot plus the journal delta; it falls back to a full
+            // scan on its own and reports which path it took.
             ScanResult result = await Task.Run(
-                () => orchestrator.ScanVolume(volume.DriveLetter, StrategyPreference.Auto, token), token);
+                () => orchestrator.Refresh(volume.DriveLetter, StrategyPreference.Auto,
+                                           allowSnapshot: !forceFullScan, token), token);
 
             stopwatch.Stop();
             ApplyScanResult(result, stopwatch.Elapsed);
@@ -351,7 +354,12 @@ public sealed class MainViewModel : Observable, IDisposable
 
         string fallback = result.FallbackReason is null ? string.Empty : $" — {result.FallbackReason}";
 
-        StatusText = L.T("scan.summary", Format.Count(files), Format.Duration(elapsed), strategy + fallback);
+        string source = result.Incremental is not null
+            ? $" · {SnapshotDescription.Describe(result.Incremental)}"
+            : string.Empty;
+
+        StatusText = L.T("scan.summary", Format.Count(files), Format.Duration(elapsed),
+                         strategy + fallback + source);
 
         SummaryText = HasRealAllocation
             ? L.T("scan.logicalAndDisk", Format.Bytes(index.TotalLogicalBytes),

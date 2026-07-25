@@ -99,6 +99,7 @@ static class Help
         Console.WriteLine($"    --strategy=auto|mft|walk   {L.T("cli.optStrategy")}");
         Console.WriteLine($"    --suspicious               {L.T("cli.optSuspicious")}");
         Console.WriteLine($"    --no-progress              {L.T("cli.optNoProgress")}");
+        Console.WriteLine($"    --fresh                    {L.T("cli.optFresh")}");
         Console.WriteLine($"    --language=en-US|pt-BR     {L.T("cli.optLanguage")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.securityOptions")}");
@@ -169,8 +170,13 @@ static class Commands
 
         var sw = Stopwatch.StartNew();
 
+        // --fresh skips the snapshot entirely. It exists because a cached index is a
+        // convenience, and the moment anyone doubts the numbers they need a way to
+        // insist on measuring the disk again.
+        bool fresh = args.Contains("--fresh");
+
         ScanResult result = IsWholeVolume(target)
-            ? orchestrator.ScanVolume(char.ToUpperInvariant(target[0]), preference, cts.Token)
+            ? orchestrator.Refresh(char.ToUpperInvariant(target[0]), preference, !fresh, cts.Token)
             : orchestrator.ScanFolder(target, cts.Token);
 
         sw.Stop();
@@ -180,6 +186,10 @@ static class Commands
 
         // ------------------------------------------------------------------
         Formatting.WriteHeading(L.T("cli.headScan", target));
+
+        Console.WriteLine($"  {L.T("cli.labelSource"),-17} {L.T(result.CameFromSnapshot ? "cli.sourceSnapshot" : "cli.sourceScan")}");
+        if (result.Incremental is not null)
+            Formatting.WriteMuted($"                    {SnapshotDescription.Describe(result.Incremental)}");
 
         Console.WriteLine($"  {L.T("cli.labelStrategy"),-17} {L.T(result.StrategyUsed == ScanStrategy.Mft ? "scan.strategyMft" : "scan.strategyWalk")}");
         if (result.FallbackReason is not null)
