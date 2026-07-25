@@ -265,6 +265,19 @@ public sealed class MainViewModel : Observable, IDisposable
     private string _summaryText = string.Empty;
     public string SummaryText { get => _summaryText; private set => Set(ref _summaryText, value); }
 
+    /// <summary>
+    /// Set when the scan's own numbers contradict each other. Empty the rest of the time —
+    /// a banner that is always up is a banner nobody reads.
+    /// </summary>
+    private string _warningText = string.Empty;
+    public string WarningText
+    {
+        get => _warningText;
+        private set { Set(ref _warningText, value); Raise(nameof(HasWarning)); }
+    }
+
+    public bool HasWarning => _warningText.Length > 0;
+
     private bool _hasScanned;
     public bool HasScanned { get => _hasScanned; private set => Set(ref _hasScanned, value); }
 
@@ -365,6 +378,16 @@ public sealed class MainViewModel : Observable, IDisposable
             ? L.T("scan.logicalAndDisk", Format.Bytes(index.TotalLogicalBytes),
                   Format.Bytes(index.TotalBytesOnDisk), Format.Bytes(index.TotalSlackBytes))
             : L.T("scan.logicalOnly", Format.Bytes(index.TotalLogicalBytes));
+
+        // Cross-check the measured total against what the volume reports as used. Only the
+        // impossible direction is surfaced: telling someone "97% of the used space is
+        // accounted for" every single scan is noise they would learn to ignore, and then it
+        // would be ignored on the one scan where it said something.
+        Reconciliation check = HasRealAllocation
+            ? index.CheckAgainstFileSystem()
+            : default;
+
+        WarningText = check.IsImpossible ? check.Describe() : string.Empty;
 
         // Árvore
         Root = new FolderNodeViewModel(index, index.RootIndex, index.Volume.Root);
