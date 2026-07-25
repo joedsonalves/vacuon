@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Vacuon.Native</RootNamespace>
+    <AssemblyName>Vacuon.Native</AssemblyName>
+    <!-- P/Invoke puro: nada aqui depende de UI. -->
+    <NoWarn>$(NoWarn);CA1401;SYSLIB1054;CA1806;CA1416</NoWarn>
+  </PropertyGroup>
+
+</Project>
