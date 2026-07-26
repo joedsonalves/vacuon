@@ -40,6 +40,10 @@ project.fragment.lock.json
 # CONTRIBUTING — reponha-os se algum dia voltar.
 /PRD.md
 
+# Estado do momento e combinados pessoais, para o Claude Code. O CLAUDE.md ao lado
+# É versionado — ele traz convenções e armadilhas, que servem a qualquer um.
+/CLAUDE.local.md
+
 # A suíte NÃO entra aqui, e é deliberado. Ela é a evidência de tudo que o README
 # afirma sobre o parser de MFT, e "compile e teste você mesmo" é a alternativa
 # que o projeto oferece a quem não quer confiar num binário sem assinatura.
