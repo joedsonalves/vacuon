@@ -1,6 +1,6 @@
 # Publishing Vacuon on winget
 
-`winget install Vacuon` is the closest thing to a fix for the SmartScreen warning that does
+`winget install vacuon` is the closest thing to a fix for the SmartScreen warning that does
 not cost money. It does **not** make the warning disappear for someone who downloads the
 `.exe` by hand and double-clicks it — that warning comes from the shell checking an unsigned
 binary's reputation, and only a code-signing certificate silences it. What winget gives is a

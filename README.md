@@ -64,11 +64,20 @@ never `GENERIC_WRITE`.
 is the same core without a window, for scripting. Put it somewhere on your `PATH` and see
 [the CLI section](#gui-and-command-line).
 
-Or let winget place it for you, once the package is accepted — it installs the app and puts a
-`vacuon` command on your `PATH`:
+Winget installs the app once the package is accepted. Note that it ships the **GUI** and puts
+it on your `PATH` as `vacuon` — typing `vacuon` in a terminal opens the window. The CLI above
+is a separate download:
 
 ```powershell
-winget install Joedsonalves.Vacuon
+winget install vacuon
+```
+
+`vacuon` is the package's moniker, so the short name is enough. Should another package ever
+match it, winget stops and asks you to be specific rather than guessing; this longer form is
+the one that can never turn ambiguous:
+
+```powershell
+winget install --id Joedsonalves.Vacuon --exact
 ```
 
 ### Build it yourself

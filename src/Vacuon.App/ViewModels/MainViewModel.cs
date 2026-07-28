@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using Vacuon.App.Infra;
 using Vacuon.App.Services;
+using Vacuon.Core;
 using Vacuon.Core.Actions;
 using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
@@ -145,7 +146,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     // ================= idioma =================
 
     /// <summary>Versão exibida no rodapé e nas Configurações.</summary>
-    public static string AppVersion => "0.3.1";
+    public static string AppVersion => AppInfo.Version;
 
     /// <summary>
     /// Footer tag. It claims "nothing was deleted" only while that is still true —

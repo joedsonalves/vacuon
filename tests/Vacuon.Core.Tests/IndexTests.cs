@@ -6,6 +6,17 @@ using Xunit;
 
 namespace Vacuon.Core.Tests;
 
+public class AppInfoTests
+{
+    [Fact]
+    public void Version_IsPlainSemverAndLivesInOnePlace()
+    {
+        // The number used to be typed out in the window footer, the CLI banner and
+        // `vacuon version`. Three copies that must agree is three chances to disagree.
+        Assert.Matches(@"^\d+\.\d+\.\d+$", AppInfo.Version);
+    }
+}
+
 public class FileEntryTests
 {
     [Fact]
