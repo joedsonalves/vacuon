@@ -54,21 +54,29 @@ public partial class ExplorerView : UserControl
     private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         // SelectedItems is not a bindable dependency property on ListView, so the
-        // multi-selection has to be pushed to the view model from here.
+        // highlight has to be pushed to the view model from here. The ticked basket does
+        // not come through this path — a checkbox reaches the view model on its own.
         Model?.SetListSelection(Files.SelectedItems.OfType<FileRowViewModel>());
     }
 
-    private void OnTreeCheckChanged(object sender, RoutedEventArgs e) => PushTreeSelection();
+    // ==================== sorting ====================
 
-    private void PushTreeSelection()
+    /// <summary>
+    /// Clicking a column header sorts by it; clicking the active one reverses it.
+    /// <para>
+    /// Which column was asked for comes from the Tag on the header's content, not from its
+    /// position — the GridView allows reordering, so the position means nothing.
+    /// </para>
+    /// </summary>
+    private void OnColumnHeaderClick(object sender, RoutedEventArgs e)
     {
-        MainViewModel? model = Model;
-        if (model is null) return;
+        if (e.OriginalSource is not GridViewColumnHeader header) return;
+        if (header.Column?.Header is not FrameworkElement content) return;
+        if (content.Tag is not string tag) return;
+        if (!Enum.TryParse(tag, out RowSortKey key)) return;
 
-        var paths = new List<string>();
-        foreach (FolderNodeViewModel root in model.RootNodes) root.CollectChecked(paths);
-
-        model.SetTreeSelection(paths);
+        Model?.SortBy(key);
+        RequestVisibleThumbnails();
     }
 
     // ==================== deletion ====================
@@ -103,15 +111,12 @@ public partial class ExplorerView : UserControl
         MainViewModel? model = Model;
         if (model is null) return;
 
-        // Refresh the tree ticks first: a checkbox toggled and then a delete triggered
-        // by keyboard would otherwise act on a stale batch.
-        PushTreeSelection();
-
         Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
         model.DeleteSelection(mode, owner);
 
-        foreach (FolderNodeViewModel root in model.RootNodes) root.ClearChecks();
-        PushTreeSelection();
+        // What actually went is already out of the basket. Anything left was refused or
+        // failed, and clearing it would hide the fact that it is still there.
+        RequestVisibleThumbnails();
     }
 
     // ==================== navigation ====================

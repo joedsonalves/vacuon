@@ -17,6 +17,22 @@ public sealed record VolumeInfo(
 }
 
 /// <summary>
+/// What a call to <see cref="VolumeIndex.MarkDeleted"/> took out of the index.
+/// <para>
+/// The bytes are summed from the entries that were removed, not from what the delete
+/// itself claimed — the two are measured by different code, and only this one saw the
+/// whole subtree.
+/// </para>
+/// </summary>
+public readonly record struct Removal(int Entries, long LogicalBytes, long BytesOnDisk)
+{
+    public bool IsEmpty => Entries == 0;
+
+    public static Removal operator +(Removal a, Removal b) =>
+        new(a.Entries + b.Entries, a.LogicalBytes + b.LogicalBytes, a.BytesOnDisk + b.BytesOnDisk);
+}
+
+/// <summary>
 /// O índice completo de um volume: arrays planos indexados pelo número do registro da MFT.
 /// </summary>
 public sealed class VolumeIndex
@@ -95,6 +111,71 @@ public sealed class VolumeIndex
 
     /// <summary>Espaço total em disco: fluxo principal + Alternate Data Streams.</summary>
     public long GetSizeOnDisk(int index) => Entries[index].AllocatedSize + GetAdsBytes(index);
+
+    /// <summary>
+    /// Takes an entry and everything below it out of the index.
+    /// <para>
+    /// Called after a delete really happened on disk. Dropping the row from the list on
+    /// screen is not enough: every view is derived from <see cref="Entries"/>, so an item
+    /// removed from the list alone walks straight back in the moment the folder is
+    /// reopened, the search is rerun, or the biggest-files view is rebuilt.
+    /// </para>
+    /// <para>
+    /// An entry is freed by emptying its name — the same condition the scanner uses for an
+    /// unused MFT record. Nothing is compacted and no index shifts, so the entry numbers
+    /// held by rows and tree nodes elsewhere stay valid.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// What left the index, measured from the entries themselves. Callers report this
+    /// instead of the figure the shell guessed while deleting.
+    /// </returns>
+    public Removal MarkDeleted(int index)
+    {
+        if (index < 0 || index >= Entries.Length) return default;
+        if (!Entries[index].IsInUse) return default;
+
+        // The root is refused by ProtectedPaths and cannot be deleted on disk. Emptying
+        // the whole index because of a bug upstream would be far worse than doing nothing.
+        if (index == RootIndex) return default;
+
+        // Collect before clearing: GetChildren reads the child index, and that index is
+        // built from the very entries this method is about to free.
+        var subtree = new List<int>();
+        var pending = new Stack<int>();
+        pending.Push(index);
+
+        while (pending.Count > 0)
+        {
+            int current = pending.Pop();
+            subtree.Add(current);
+
+            foreach (int child in GetChildren(current))
+                if (Entries[child].IsInUse) pending.Push(child);
+        }
+
+        long logical = 0;
+        long onDisk = 0;
+
+        foreach (int i in subtree)
+        {
+            ref FileEntry entry = ref Entries[i];
+
+            if (!entry.IsDirectory)
+            {
+                logical += entry.LogicalSize;
+
+                // Same rule as TotalBytesOnDisk: a hardlinked file's clusters were never
+                // credited to it, and removing one of its names does not free them either.
+                if (entry.HardLinkCount <= 1) onDisk += GetSizeOnDisk(i);
+            }
+
+            entry.NameLength = 0;
+        }
+
+        InvalidateAggregates();
+        return new Removal(subtree.Count, logical, onDisk);
+    }
 
     public int Capacity => Entries.Length;
 

@@ -18,6 +18,7 @@ public sealed class FolderNodeViewModel : Observable
 
     private readonly VolumeIndex? _index;
     private readonly int _entryIndex;
+    private readonly ISelectionSink? _selection;
     private bool _loaded;
     private bool _isExpanded;
     private bool _isSelected;
@@ -28,10 +29,13 @@ public sealed class FolderNodeViewModel : Observable
         Children = [];
     }
 
-    public FolderNodeViewModel(VolumeIndex index, int entryIndex, string? displayName = null)
+    public FolderNodeViewModel(VolumeIndex index, int entryIndex, ISelectionSink? selection = null,
+                               string? displayName = null)
     {
         _index = index;
         _entryIndex = entryIndex;
+        _selection = selection;
+        _isChecked = selection?.IsChecked(entryIndex) ?? false;
 
         Name = displayName ?? index.GetName(entryIndex).ToString();
         if (string.IsNullOrEmpty(Name) || Name == ".") Name = index.Volume.Root;
@@ -85,33 +89,92 @@ public sealed class FolderNodeViewModel : Observable
     /// per node instead. It also makes the batch explicit — you can see what is marked
     /// without holding Ctrl and hoping.
     /// </para>
+    /// <para>
+    /// The tick itself is kept by the view model, in the same basket the file list uses,
+    /// so folders and files ticked in either pane are one selection rather than two.
+    /// </para>
     /// </summary>
     public bool IsChecked
     {
         get => _isChecked;
-        set => Set(ref _isChecked, value);
+        set
+        {
+            if (!Set(ref _isChecked, value)) return;
+            _selection?.SetChecked(_entryIndex, value);
+        }
+    }
+
+    /// <summary>
+    /// Adopts the basket's answer for one entry, without telling it back.
+    /// <para>
+    /// A subfolder shows twice — as a node here and as a row in the list — and ticking
+    /// either one has to be visible on the other.
+    /// </para>
+    /// </summary>
+    internal void SyncChecked(int entryIndex, bool value)
+    {
+        if (_entryIndex == entryIndex && _index is not null && _isChecked != value)
+        {
+            _isChecked = value;
+            Raise(nameof(IsChecked));
+        }
+
+        foreach (FolderNodeViewModel child in Children) child.SyncChecked(entryIndex, value);
+    }
+
+    /// <summary>Re-reads every loaded node's tick from the basket, after a batch change.</summary>
+    internal void SyncAllChecks()
+    {
+        if (_selection is not null)
+        {
+            bool value = _selection.IsChecked(_entryIndex);
+            if (_isChecked != value)
+            {
+                _isChecked = value;
+                Raise(nameof(IsChecked));
+            }
+        }
+
+        foreach (FolderNodeViewModel child in Children) child.SyncAllChecks();
     }
 
     /// <summary>Full path of this folder, materialized on demand.</summary>
     public string FullPath => _index?.GetFullPath(_entryIndex) ?? string.Empty;
-
-    /// <summary>Walks this node and its loaded descendants collecting the ticked ones.</summary>
-    public void CollectChecked(List<string> into)
-    {
-        if (IsChecked && _index is not null)
-        {
-            string path = FullPath;
-            if (!string.IsNullOrEmpty(path)) into.Add(path);
-        }
-
-        foreach (FolderNodeViewModel child in Children) child.CollectChecked(into);
-    }
 
     /// <summary>Clears every tick in this subtree, after a delete or a rescan.</summary>
     public void ClearChecks()
     {
         IsChecked = false;
         foreach (FolderNodeViewModel child in Children) child.ClearChecks();
+    }
+
+    /// <summary>
+    /// Drops the children whose entries are gone and refreshes the sizes that are left.
+    /// <para>
+    /// Called after a delete. Without it a deleted folder keeps its node in the tree, and
+    /// reopening a collapsed ancestor rebuilds it straight from the index.
+    /// </para>
+    /// </summary>
+    public void PruneDeleted()
+    {
+        if (_index is null) return;
+
+        for (int i = Children.Count - 1; i >= 0; i--)
+        {
+            FolderNodeViewModel child = Children[i];
+            if (child._index is null) continue;   // the expansion placeholder
+
+            if (!_index.Entries[child._entryIndex].IsInUse) Children.RemoveAt(i);
+            else child.PruneDeleted();
+        }
+
+        // A folder that lost everything below it should stop offering an arrow to open.
+        if (Children.Count == 0 && _loaded && !_index.HasChildDirectories(_entryIndex))
+            _isExpanded = false;
+
+        Raise(nameof(SubtreeSize));
+        Raise(nameof(SizeText));
+        Raise(nameof(ShareOfVolume));
     }
 
     private void LoadChildren()
@@ -133,7 +196,7 @@ public sealed class FolderNodeViewModel : Observable
         subfolders.Sort(static (a, b) => b.Size.CompareTo(a.Size));
 
         foreach ((int index, _) in subfolders)
-            Children.Add(new FolderNodeViewModel(_index, index));
+            Children.Add(new FolderNodeViewModel(_index, index, _selection));
     }
 
     public void ExpandTo(int depth)

@@ -82,6 +82,15 @@
                              Text="{Binding ExtensionFilter, UpdateSourceTrigger=PropertyChanged, Delay=250}"
                              ToolTip="{DynamicResource S.filter.extensionHint}"/>
 
+                    <CheckBox Style="{StaticResource Check}" Margin="16,0,0,0" VerticalAlignment="Center"
+                              Content="{DynamicResource S.filter.includeFolders}"
+                              ToolTip="{DynamicResource S.filter.includeFoldersHint}"
+                              IsChecked="{Binding SearchFolders, Mode=TwoWay}"/>
+
+                    <CheckBox Style="{StaticResource Check}" Margin="14,0,0,0" VerticalAlignment="Center"
+                              Content="{DynamicResource S.filter.inSelectedFolder}"
+                              IsChecked="{Binding SearchInSelectedFolder, Mode=TwoWay}"/>
+
                     <Button Style="{StaticResource Button.Ghost}" Margin="10,0,0,0" FontSize="12"
                             Content="{DynamicResource S.action.clear}" Command="{Binding ClearFiltersCommand}"/>
                 </StackPanel>
@@ -128,9 +137,7 @@
                                              deixa marcar varias pastas e apagar de uma vez. -->
                                         <StackPanel Orientation="Horizontal">
                                             <CheckBox Style="{StaticResource Check}" Margin="0,0,6,0"
-                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                                      Checked="OnTreeCheckChanged"
-                                                      Unchecked="OnTreeCheckChanged"/>
+                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding Name}"/>
                                         </StackPanel>
@@ -181,11 +188,32 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
                                FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
                                Text="{Binding ModeText}"/>
-                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+
+                    <!-- Marcar em lote. A cesta sobrevive a trocar de pasta, ordenar e
+                         buscar, entao "selecionar tudo" aqui e o inicio de um lote, nao
+                         uma selecao que morre no proximo clique. -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,14,0">
+                        <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,4"
+                                Content="{DynamicResource S.select.all}"
+                                ToolTip="{DynamicResource S.select.allHint}"
+                                Command="{Binding SelectAllCommand}"/>
+                        <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,4" Margin="4,0,0,0"
+                                Content="{DynamicResource S.select.invert}"
+                                Command="{Binding InvertSelectionCommand}"/>
+                        <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,4" Margin="4,0,0,0"
+                                Content="{DynamicResource S.select.none}"
+                                Command="{Binding ClearSelectionCommand}"
+                                Visibility="{Binding HasSelection, Converter={StaticResource Visible}}"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" Style="{StaticResource Text.Sub}"
+                               VerticalAlignment="Center"
                                Foreground="{DynamicResource Text.Muted}"
                                Text="{Binding TruncationText}"/>
                 </Grid>
@@ -199,9 +227,22 @@
                           SelectionChanged="OnListSelectionChanged"
                           Margin="10,0,10,0"
                           MouseDoubleClick="OnRowDoubleClick"
-                          PreviewKeyDown="OnListKeyDown">
+                          PreviewKeyDown="OnListKeyDown"
+                          GridViewColumnHeader.Click="OnColumnHeaderClick">
                     <ListView.View>
                         <GridView AllowsColumnReorder="True">
+                            <!-- Marcacao em lote. Fica antes de tudo porque e o que a pessoa
+                                 clica em sequencia descendo a lista. -->
+                            <GridViewColumn Width="34">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Style="{StaticResource Check}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+
                             <!-- Ícone / miniatura: a largura acompanha o tamanho escolhido -->
                             <GridViewColumn Width="{Binding IconPixels, Mode=OneWay}">
                                 <GridViewColumn.CellTemplate>
@@ -220,7 +261,15 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="{DynamicResource S.column.name}" Width="380">
+                            <!-- Cabecalhos vem do VM, com a seta de ordenacao ja embutida: o
+                                 rotulo traduzido e a direcao sao uma string so, e mudam juntos.
+                                 A Tag diz ao clique qual coluna foi pedida. -->
+                            <GridViewColumn Width="380">
+                                <GridViewColumn.Header>
+                                    <TextBlock Tag="Name"
+                                               Text="{Binding DataContext.HeaderName,
+                                                      RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="6,0,0,0" VerticalAlignment="Center">
@@ -245,7 +294,12 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="{DynamicResource S.column.size}" Width="96">
+                            <GridViewColumn Width="96">
+                                <GridViewColumn.Header>
+                                    <TextBlock Tag="Size"
+                                               Text="{Binding DataContext.HeaderSize,
+                                                      RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Number}" Width="86"
@@ -254,7 +308,12 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="{DynamicResource S.column.modified}" Width="130">
+                            <GridViewColumn Width="130">
+                                <GridViewColumn.Header>
+                                    <TextBlock Tag="Modified"
+                                               Text="{Binding DataContext.HeaderModified,
+                                                      RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
@@ -263,7 +322,12 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Header="{DynamicResource S.column.path}" Width="420">
+                            <GridViewColumn Width="420">
+                                <GridViewColumn.Header>
+                                    <TextBlock Tag="Path"
+                                               Text="{Binding DataContext.HeaderPath,
+                                                      RelativeSource={RelativeSource AncestorType=ListView}}"/>
+                                </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
@@ -285,6 +349,10 @@
                             <MenuItem Header="{DynamicResource S.action.copyPath}" InputGestureText="Ctrl+C"
                                       Command="{Binding CopyPathCommand}"/>
                             <Separator/>
+                            <MenuItem Header="{DynamicResource S.select.all}" Command="{Binding SelectAllCommand}"/>
+                            <MenuItem Header="{DynamicResource S.select.invert}" Command="{Binding InvertSelectionCommand}"/>
+                            <MenuItem Header="{DynamicResource S.select.none}" Command="{Binding ClearSelectionCommand}"/>
+                            <Separator/>
                             <MenuItem Header="{DynamicResource S.delete.recycleHeader}" InputGestureText="Del"
                                       Click="OnDeleteToRecycleBin"/>
                             <MenuItem Header="{DynamicResource S.delete.permanentHeader}" InputGestureText="Shift+Del"
@@ -294,7 +362,24 @@
                 </ListView>
 
                 <!-- ações da seleção -->
-                <Border Grid.Row="2" Padding="16,10" BorderBrush="{DynamicResource Stroke.Subtle}"
+                <StackPanel Grid.Row="2">
+                    <!-- A Lixeira nao devolve espaco enquanto nao for esvaziada, entao o
+                         app diz quanto continua ocupado em vez de somar como liberado. -->
+                    <Border Padding="16,8" BorderBrush="{DynamicResource Stroke.Subtle}"
+                            BorderThickness="0,1,0,0"
+                            Visibility="{Binding HasRecycled, Converter={StaticResource Visible}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{Binding RecycledText}"/>
+                            <Button Style="{StaticResource Button.Ghost}" Margin="10,0,0,0"
+                                    FontSize="11" Padding="8,4"
+                                    Content="{DynamicResource S.delete.openRecycleBin}"
+                                    Command="{Binding OpenRecycleBinCommand}"/>
+                        </StackPanel>
+                    </Border>
+
+                <Border Padding="16,10" BorderBrush="{DynamicResource Stroke.Subtle}"
                         BorderThickness="0,1,0,0"
                         Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
                     <StackPanel Orientation="Horizontal">
@@ -318,8 +403,14 @@
                         <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource Text.Muted}"
                                    Text="{Binding SelectionSummaryText}"/>
+
+                        <TextBlock Style="{StaticResource Text.Sub}" Margin="10,0,0,0" VerticalAlignment="Center"
+                                   FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                                   Text="{DynamicResource S.select.keepsAcrossFolders}"
+                                   Visibility="{Binding HasBasket, Converter={StaticResource Visible}}"/>
                     </StackPanel>
                 </Border>
+                </StackPanel>
             </Grid>
         </Grid>
     </Grid>
