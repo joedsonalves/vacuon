@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using Vacuon.Cli;
+using Vacuon.Core;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
@@ -81,7 +82,7 @@ static class Help
     {
         Console.WriteLine();
         Console.WriteLine($"  {L.T("app.name")} — {L.T("app.tagline")}");
-        Console.WriteLine($"  v0.3.1 · {L.T("settings.versionTitle", "0.3.1")}");
+        Console.WriteLine($"  v{AppInfo.Version} · {L.T("settings.versionTitle", AppInfo.Version)}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.usage")}");
         Console.WriteLine("    vacuon <command> [options]");
@@ -120,7 +121,7 @@ static class Commands
 {
     public static int Version()
     {
-        Console.WriteLine("Vacuon 0.3.1");
+        Console.WriteLine($"Vacuon {AppInfo.Version}");
         Console.WriteLine($".NET        {Environment.Version}");
         Console.WriteLine($"OS          {Environment.OSVersion.VersionString}");
         Console.WriteLine($"{L.T("cli.cores"),-11} {Environment.ProcessorCount}");
