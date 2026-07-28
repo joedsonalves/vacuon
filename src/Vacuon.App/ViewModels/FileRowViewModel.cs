@@ -19,13 +19,20 @@ public sealed class FileRowViewModel : Observable
 {
     private readonly VolumeIndex _index;
     private readonly int _entryIndex;
+    private readonly ISelectionSink? _selection;
     private BitmapSource? _thumbnail;
     private bool _thumbnailRequested;
+    private bool _isChecked;
 
-    public FileRowViewModel(VolumeIndex index, int entryIndex)
+    public FileRowViewModel(VolumeIndex index, int entryIndex, ISelectionSink? selection = null)
     {
         _index = index;
         _entryIndex = entryIndex;
+        _selection = selection;
+
+        // Straight into the field: reading the basket back is a restore, not a new tick,
+        // and routing it through the setter would push it right back where it came from.
+        _isChecked = selection?.IsChecked(entryIndex) ?? false;
 
         ref FileEntry entry = ref index.Entries[entryIndex];
 
@@ -41,6 +48,42 @@ public sealed class FileRowViewModel : Observable
     }
 
     public int EntryIndex => _entryIndex;
+
+    /// <summary>
+    /// Ticked for a batch action.
+    /// <para>
+    /// The tick lives in the view model's basket, not in this row, so it survives the list
+    /// being refilled. Changing folder, sorting a column or running another search rebuilds
+    /// every row here — a selection that lived in the rows would die with them, which is
+    /// exactly what made gathering files across folders impossible before.
+    /// </para>
+    /// </summary>
+    public bool IsChecked
+    {
+        get => _isChecked;
+        set
+        {
+            if (!Set(ref _isChecked, value)) return;
+            _selection?.SetChecked(_entryIndex, value);
+        }
+    }
+
+    /// <summary>
+    /// Adopts the basket's answer without telling it back.
+    /// <para>
+    /// The same entry can be on screen twice — a subfolder is a row in the list and a node
+    /// in the tree at the same time. Ticking one has to show on the other, and routing that
+    /// through the normal setter would bounce it back to the basket it just came from.
+    /// </para>
+    /// </summary>
+    internal void SyncChecked(bool value)
+    {
+        if (_isChecked == value) return;
+
+        _isChecked = value;
+        Raise(nameof(IsChecked));
+    }
+
     public string Name { get; }
     public bool IsDirectory { get; }
     public long LogicalSize { get; }

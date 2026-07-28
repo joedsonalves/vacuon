@@ -82,8 +82,8 @@ public partial class DeleteDialog : Window
         Body.Text = permanent ? L.T("delete.permanentBody") : L.T("delete.recycleBody");
 
         var parts = new List<string>(2);
-        if (folders > 0) parts.Add(L.T("delete.folders", Format.Count(folders)));
-        if (files > 0) parts.Add(L.T("delete.files", Format.Count(files)));
+        if (folders > 0) parts.Add(folders == 1 ? L.T("delete.folderOne") : L.T("delete.folders", Format.Count(folders)));
+        if (files > 0) parts.Add(files == 1 ? L.T("delete.fileOne") : L.T("delete.files", Format.Count(files)));
 
         Summary.Text = $"{string.Join(" · ", parts)} · {Format.Bytes(bytes)}";
 

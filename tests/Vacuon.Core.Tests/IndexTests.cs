@@ -237,6 +237,88 @@ public class VolumeIndexTests
         Assert.Equal(2, buckets[0].Count);
         Assert.Equal(FileCategories.Video, buckets[0].CategoryKey);
     }
+
+    [Fact]
+    public void MarkDeleted_RemovesTheFileFromEverythingDerivedFromTheIndex()
+    {
+        // The bug this guards: pruning the list on screen and leaving the index alone.
+        // The row came back on the next folder open, search or biggest-files rebuild.
+        VolumeIndex index = BuildSample();
+
+        Removal gone = index.MarkDeleted(8);          // render_v2.mp4
+
+        Assert.Equal(1, gone.Entries);
+        Assert.Equal(2000, gone.LogicalBytes);
+        Assert.Equal(2000, gone.BytesOnDisk);
+
+        Assert.False(index.Entries[8].IsInUse);
+        Assert.Equal([7], index.GetChildren(6).ToArray());
+        Assert.Equal(1000, index.GetSubtreeSize(6));
+        Assert.Equal(1050, index.GetSubtreeSize(5));
+        Assert.Equal(1050, index.TotalLogicalBytes);
+        Assert.Equal(string.Empty, index.GetFullPath(8));
+        Assert.DoesNotContain(SizeAnalyzer.TopFiles(index, 10), t => t.Index == 8);
+    }
+
+    [Fact]
+    public void MarkDeleted_TakesTheWholeSubtreeWithTheFolder()
+    {
+        VolumeIndex index = BuildSample();
+
+        Removal gone = index.MarkDeleted(6);          // Videos, with both renders inside
+
+        Assert.Equal(3, gone.Entries);                // the folder plus its two files
+        Assert.Equal(3000, gone.LogicalBytes);
+
+        Assert.False(index.Entries[7].IsInUse);
+        Assert.False(index.Entries[8].IsInUse);
+        Assert.Equal([9], index.GetChildren(5).ToArray());
+        Assert.Equal(50, index.GetSubtreeSize(5));
+        Assert.Equal(1, index.FileCount);
+    }
+
+    [Fact]
+    public void MarkDeleted_IsIdempotentAndRefusesTheRoot()
+    {
+        VolumeIndex index = BuildSample();
+
+        Assert.Equal(1, index.MarkDeleted(10).Entries);
+        Assert.True(index.MarkDeleted(10).IsEmpty);   // already gone, nothing more to take
+
+        // ProtectedPaths refuses the volume root, so this can only ever be a bug upstream —
+        // and emptying the entire index would be a much worse answer than doing nothing.
+        Assert.True(index.MarkDeleted(index.RootIndex).IsEmpty);
+        Assert.True(index.Entries[index.RootIndex].IsInUse);
+    }
+
+    [Fact]
+    public void MarkDeleted_DoesNotClaimToFreeAHardlinkedFilesClusters()
+    {
+        // The clusters were never credited to this name, so deleting it frees nothing.
+        var names = new NameBlob(64);
+        var entries = new FileEntry[8];
+
+        entries[5] = new FileEntry
+        {
+            RecordNumber = 5, ParentIndex = 5,
+            NameOffset = names.Append("."), NameLength = 1,
+            Flags = EntryFlags.Directory,
+        };
+        entries[6] = new FileEntry
+        {
+            RecordNumber = 6, ParentIndex = 5,
+            NameOffset = names.Append("compartilhado.dll"), NameLength = 17,
+            LogicalSize = 1024, AllocatedSize = 4096, HardLinkCount = 3,
+        };
+
+        var volume = new VolumeInfo('C', "Teste", "NTFS", 1000, 500, 4096, false);
+        var index = new VolumeIndex(entries, names, volume, ScanStrategy.Mft);
+
+        Removal gone = index.MarkDeleted(6);
+
+        Assert.Equal(1024, gone.LogicalBytes);
+        Assert.Equal(0, gone.BytesOnDisk);
+    }
 }
 
 public class FileCategoriesTests

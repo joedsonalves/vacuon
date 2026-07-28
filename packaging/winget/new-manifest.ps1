@@ -113,8 +113,8 @@ Description: |-
 
   Images and videos are shown as thumbnails in six sizes, so you can tell which of five
   large renders is the final one without opening any of them. Deletion goes to the Recycle
-  Bin by default and permanently only behind an explicit acknowledgement, with a protection
-  list that refuses the volume root, Windows, System32 and kernel-owned files.
+  Bin by default, and permanently only behind a confirmation you have to tick, with a
+  protection list that refuses the volume root, Windows, System32 and kernel-owned files.
 
   Every scan cross-checks the space it attributed to files against what the volume reports
   as used, and says so when the two disagree.
@@ -156,8 +156,8 @@ Description: |-
 
   Imagens e videos aparecem como miniaturas em seis tamanhos, para voce saber qual de cinco
   renderizacoes grandes e a final sem abrir nenhuma. A exclusao vai para a Lixeira por
-  padrao, e definitiva so atras de uma confirmacao explicita, com uma lista de protecao que
-  recusa a raiz do volume, Windows, System32 e arquivos do kernel.
+  padrao, e definitiva so atras de uma confirmacao que voce precisa marcar, com uma lista
+  de protecao que recusa a raiz do volume, Windows, System32 e arquivos do kernel.
 
   Toda varredura confere o espaco atribuido a arquivos contra o que o volume declara em uso,
   e avisa quando os dois nao batem.

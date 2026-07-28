@@ -34,7 +34,10 @@ public enum ListMode
     Suspicious,
 }
 
-public sealed class MainViewModel : Observable, IDisposable
+/// <summary>Which column the file list is ordered by.</summary>
+public enum RowSortKey { Size, Name, Modified, Path }
+
+public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 {
     /// <summary>
     /// Teto de linhas materializadas. A virtualização do WPF cuida dos contêineres,
@@ -62,6 +65,10 @@ public sealed class MainViewModel : Observable, IDisposable
         CopyPathCommand = new RelayCommand(CopySelectedPath);
         RunSecurityScanCommand = new RelayCommand(async () => await RunSecurityScanAsync(), () => !IsSecurityScanning);
         ClearFiltersCommand = new RelayCommand(ClearFilters);
+        SelectAllCommand = new RelayCommand(SelectAllListed);
+        InvertSelectionCommand = new RelayCommand(InvertListedSelection);
+        ClearSelectionCommand = new RelayCommand(ClearSelection);
+        OpenRecycleBinCommand = new RelayCommand(OpenRecycleBin);
 
         ThemeManager.Changed += OnThemeChanged;
 
@@ -184,6 +191,8 @@ public sealed class MainViewModel : Observable, IDisposable
             nameof(ElevationText), nameof(AlwaysAdminHintText), nameof(ThemeToggleTooltip),
             nameof(ModeText), nameof(TruncationText), nameof(SummaryText),
             nameof(SecurityStatusText), nameof(IconSizeOptions), nameof(SelectedIconSizeOption),
+            nameof(SelectionSummaryText), nameof(SelectionDetailText), nameof(RecycledText),
+            nameof(HeaderName), nameof(HeaderSize), nameof(HeaderModified), nameof(HeaderPath),
         })
         {
             Raise(name);
@@ -374,11 +383,6 @@ public sealed class MainViewModel : Observable, IDisposable
         StatusText = L.T("scan.summary", Format.Count(files), Format.Duration(elapsed),
                          strategy + fallback + source);
 
-        SummaryText = HasRealAllocation
-            ? L.T("scan.logicalAndDisk", Format.Bytes(index.TotalLogicalBytes),
-                  Format.Bytes(index.TotalBytesOnDisk), Format.Bytes(index.TotalSlackBytes))
-            : L.T("scan.logicalOnly", Format.Bytes(index.TotalLogicalBytes));
-
         // Cross-check the measured total against what the volume reports as used. Only the
         // impossible direction is surfaced: telling someone "97% of the used space is
         // accounted for" every single scan is noise they would learn to ignore, and then it
@@ -389,11 +393,42 @@ public sealed class MainViewModel : Observable, IDisposable
 
         WarningText = check.IsImpossible ? check.Describe() : string.Empty;
 
+        // A fresh index means the old entry numbers mean nothing. Anything still ticked
+        // would point at whatever now sits at that record.
+        _basket.Clear();
+        _listSelection.Clear();
+        RaiseSelectionChanged();
+
         // Árvore
-        Root = new FolderNodeViewModel(index, index.RootIndex, index.Volume.Root);
+        Root = new FolderNodeViewModel(index, index.RootIndex, this, index.Volume.Root);
         Root.IsExpanded = true;
         Root.IsSelected = true;
         Raise(nameof(RootNodes));
+
+        RefreshAggregates();
+
+        LoadVolumes();
+        ShowBiggestFiles();
+    }
+
+    /// <summary>
+    /// Recomputes everything derived from the index: the totals line and the three
+    /// breakdowns in the sidebar.
+    /// <para>
+    /// Runs after a scan and again after a delete. Each one is a linear pass over the entry
+    /// array — cheap enough to redo, and far better than leaving a breakdown on screen that
+    /// still counts files the user just deleted.
+    /// </para>
+    /// </summary>
+    private void RefreshAggregates()
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return;
+
+        SummaryText = HasRealAllocation
+            ? L.T("scan.logicalAndDisk", Format.Bytes(index.TotalLogicalBytes),
+                  Format.Bytes(index.TotalBytesOnDisk), Format.Bytes(index.TotalSlackBytes))
+            : L.T("scan.logicalOnly", Format.Bytes(index.TotalLogicalBytes));
 
         Extensions.Clear();
         foreach (ExtensionBucket bucket in SizeAnalyzer.ByExtension(index, 12))
@@ -406,9 +441,6 @@ public sealed class MainViewModel : Observable, IDisposable
         AgeBuckets.Clear();
         foreach (AgeBucket bucket in SizeAnalyzer.ByAge(index, DateTime.UtcNow))
             if (bucket.Count > 0) AgeBuckets.Add(bucket);
-
-        LoadVolumes();
-        ShowBiggestFiles();
     }
 
     // ================= árvore =================
@@ -436,6 +468,16 @@ public sealed class MainViewModel : Observable, IDisposable
     // ================= lista =================
 
     public ObservableCollection<FileRowViewModel> Rows { get; } = [];
+
+    /// <summary>
+    /// The same rows, in a plain list.
+    /// <para>
+    /// Sorting happens here and the result is republished, so the row objects survive a
+    /// re-sort — with them the thumbnails already decoded and the ticks already placed.
+    /// Sorting the ObservableCollection in place would fire one notification per move.
+    /// </para>
+    /// </summary>
+    private readonly List<FileRowViewModel> _rows = [];
 
     private ListMode _mode = ListMode.Folder;
     public ListMode Mode
@@ -539,21 +581,118 @@ public sealed class MainViewModel : Observable, IDisposable
     private void Fill(IEnumerable<int> indices, int total)
     {
         CancelPendingThumbnails();
-        Rows.Clear();
+        _rows.Clear();
 
-        if (Index is null) return;
-
-        int added = 0;
-        foreach (int index in indices)
+        if (Index is null)
         {
-            if (added >= MaxRows) break;
-            Rows.Add(new FileRowViewModel(Index, index));
-            added++;
+            Rows.Clear();
+            TotalMatches = 0;
+            return;
         }
 
+        foreach (int index in indices)
+        {
+            if (_rows.Count >= MaxRows) break;
+            _rows.Add(new FileRowViewModel(Index, index, this));
+        }
+
+        // Everything that fills this list hands it over biggest-first. That is a sort by
+        // size, descending — so say so, instead of letting the header arrow claim otherwise.
+        _sortKey = RowSortKey.Size;
+        _sortDescending = true;
+        RaiseSortState();
+
         TotalMatches = total;
-        Raise(nameof(TruncationText));
         SelectedRow = null;
+        PublishRows();
+    }
+
+    /// <summary>Moves the working list into the bound collection, in its current order.</summary>
+    private void PublishRows()
+    {
+        Rows.Clear();
+        foreach (FileRowViewModel row in _rows) Rows.Add(row);
+
+        Raise(nameof(TruncationText));
+        Raise(nameof(IsTruncated));
+    }
+
+    // ================= ordenação =================
+
+    private RowSortKey _sortKey = RowSortKey.Size;
+    private bool _sortDescending = true;
+
+    public RowSortKey SortKey => _sortKey;
+    public bool SortDescending => _sortDescending;
+
+    // Column headers carry their own sort arrow. Built here rather than in XAML so the
+    // localized label and the arrow stay one string and refresh together.
+    public string HeaderName => Header("column.name", RowSortKey.Name);
+    public string HeaderSize => Header("column.size", RowSortKey.Size);
+    public string HeaderModified => Header("column.modified", RowSortKey.Modified);
+    public string HeaderPath => Header("column.path", RowSortKey.Path);
+
+    private string Header(string key, RowSortKey column) =>
+        column == _sortKey ? $"{L.T(key)}  {(_sortDescending ? '▾' : '▴')}" : L.T(key);
+
+    private void RaiseSortState()
+    {
+        Raise(nameof(SortKey));
+        Raise(nameof(SortDescending));
+        Raise(nameof(HeaderName));
+        Raise(nameof(HeaderSize));
+        Raise(nameof(HeaderModified));
+        Raise(nameof(HeaderPath));
+    }
+
+    /// <summary>
+    /// Reorders the listed rows. Clicking the active column again reverses it.
+    /// </summary>
+    public void SortBy(RowSortKey key)
+    {
+        if (key == _sortKey)
+        {
+            _sortDescending = !_sortDescending;
+        }
+        else
+        {
+            _sortKey = key;
+
+            // Open each column on the order that answers the question it is asked: the
+            // biggest file, the oldest file — but names and paths read A to Z.
+            _sortDescending = key is RowSortKey.Size or RowSortKey.Modified;
+        }
+
+        SortRows();
+        RaiseSortState();
+        PublishRows();
+    }
+
+    private void SortRows()
+    {
+        Comparison<FileRowViewModel> ascending = _sortKey switch
+        {
+            RowSortKey.Name => static (a, b) =>
+                string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase),
+
+            RowSortKey.Modified => static (a, b) => a.Modified.CompareTo(b.Modified),
+
+            RowSortKey.Path => static (a, b) =>
+                string.Compare(a.FullPath, b.FullPath, StringComparison.OrdinalIgnoreCase),
+
+            _ => static (a, b) => a.LogicalSize.CompareTo(b.LogicalSize),
+        };
+
+        // Ties keep folders above files: a folder and a file of the same size are not
+        // equally interesting when the point is finding what to delete.
+        Comparison<FileRowViewModel> comparison = (a, b) =>
+        {
+            int order = ascending(a, b);
+            if (order != 0) return _sortDescending ? -order : order;
+            return b.IsDirectory.CompareTo(a.IsDirectory);
+        };
+
+        _rows.Sort(comparison);
     }
 
     // ================= busca e filtros =================
@@ -574,6 +713,35 @@ public sealed class MainViewModel : Observable, IDisposable
     private string _extensionFilter = string.Empty;
     public string ExtensionFilter { get => _extensionFilter; set { if (Set(ref _extensionFilter, value)) ApplySearch(); } }
 
+    /// <summary>
+    /// Restricts the search to the folder selected in the tree.
+    /// <para>
+    /// Searching a whole volume for "render" answers a different question than searching one
+    /// project folder for it, and the second is the one asked while clearing space.
+    /// </para>
+    /// </summary>
+    private bool _searchInSelectedFolder;
+    public bool SearchInSelectedFolder
+    {
+        get => _searchInSelectedFolder;
+        set { if (Set(ref _searchInSelectedFolder, value)) ApplySearch(); }
+    }
+
+    /// <summary>
+    /// Includes folders in the results, sized by their whole subtree.
+    /// <para>
+    /// On by default, and for a long time not possible at all: the scan loop skipped every
+    /// directory, so a folder could never be found by name — the one thing you want when
+    /// hunting for <c>node_modules</c> or an old build output.
+    /// </para>
+    /// </summary>
+    private bool _searchFolders = true;
+    public bool SearchFolders
+    {
+        get => _searchFolders;
+        set { if (Set(ref _searchFolders, value)) ApplySearch(); }
+    }
+
     public ICommand ClearFiltersCommand { get; }
 
     private void ClearFilters()
@@ -582,11 +750,13 @@ public sealed class MainViewModel : Observable, IDisposable
         _minSizeBytes = 0;
         _minAgeDays = 0;
         _extensionFilter = string.Empty;
+        _searchInSelectedFolder = false;
 
         Raise(nameof(SearchText));
         Raise(nameof(MinSizeBytes));
         Raise(nameof(MinAgeDays));
         Raise(nameof(ExtensionFilter));
+        Raise(nameof(SearchInSelectedFolder));
 
         ShowBiggestFiles();
     }
@@ -608,24 +778,42 @@ public sealed class MainViewModel : Observable, IDisposable
 
         Mode = ListMode.Search;
 
+        VolumeIndex index = Index;
         string query = SearchText;
         string[] extensions = ExtensionFilter
             .Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(e => e.StartsWith('.') ? e : "." + e)
             .ToArray();
 
+        // A folder has no extension, so an extension filter is an implicit "files only".
+        bool includeFolders = SearchFolders && extensions.Length == 0;
+
+        // -1 means the whole volume.
+        int scope = SearchInSelectedFolder && SelectedFolder is not null
+            ? SelectedFolder.EntryIndex
+            : -1;
+
         DateTime cutoff = MinAgeDays > 0 ? DateTime.UtcNow.AddDays(-MinAgeDays) : DateTime.MaxValue;
+
+        if (includeFolders) index.BuildSubtreeSizes();
 
         var matches = new List<(int Index, long Size)>();
 
         // Passada linear sobre o array plano. Sem LINQ e sem materializar caminho:
         // é o que mantém a busca abaixo de 100 ms em um índice de milhões de entradas.
-        for (int i = 0; i < Index.Entries.Length; i++)
+        for (int i = 0; i < index.Entries.Length; i++)
         {
-            ref FileEntry entry = ref Index.Entries[i];
-            if (!entry.IsInUse || entry.IsDirectory) continue;
+            ref FileEntry entry = ref index.Entries[i];
+            if (!entry.IsInUse) continue;
 
-            if (MinSizeBytes > 0 && entry.LogicalSize < MinSizeBytes) continue;
+            bool isFolder = entry.IsDirectory;
+            if (isFolder && !includeFolders) continue;
+
+            // A folder stands for everything under it, so that is the size to filter on —
+            // an empty-looking directory holding 40 GB must not be filtered out as small.
+            long size = isFolder ? index.GetSubtreeSize(i) : entry.LogicalSize;
+
+            if (MinSizeBytes > 0 && size < MinSizeBytes) continue;
 
             if (MinAgeDays > 0)
             {
@@ -633,7 +821,7 @@ public sealed class MainViewModel : Observable, IDisposable
                 if (written == DateTime.MinValue || written > cutoff) continue;
             }
 
-            ReadOnlySpan<char> name = Index.GetName(i);
+            ReadOnlySpan<char> name = index.GetName(i);
 
             if (query.Length > 0 &&
                 name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0) continue;
@@ -652,11 +840,38 @@ public sealed class MainViewModel : Observable, IDisposable
                 if (!matchesExtension) continue;
             }
 
-            matches.Add((i, entry.LogicalSize));
+            // Ancestry last on purpose: it is the only test that walks, and by here only a
+            // handful of entries are still candidates.
+            if (scope >= 0 && !IsUnder(index, i, scope)) continue;
+
+            matches.Add((i, size));
         }
 
         matches.Sort(static (a, b) => b.Size.CompareTo(a.Size));
         Fill(matches.Select(m => m.Index), matches.Count);
+    }
+
+    /// <summary>Is <paramref name="entryIndex"/> inside <paramref name="ancestor"/>?</summary>
+    private static bool IsUnder(VolumeIndex index, int entryIndex, int ancestor)
+    {
+        if (entryIndex == ancestor) return false;
+
+        int root = index.RootIndex;
+        int current = entryIndex;
+
+        // Same 512 ceiling GetFullPath uses: real depth never approaches it, and a corrupt
+        // MFT with a parent cycle must not spin here.
+        for (int guard = 0; guard < 512; guard++)
+        {
+            uint parent = index.Entries[current].ParentIndex;
+            if (parent >= (uint)index.Entries.Length || parent == (uint)current) return false;
+
+            current = (int)parent;
+            if (current == ancestor) return true;
+            if (current == root) return false;
+        }
+
+        return false;
     }
 
     // ================= agregados =================
@@ -808,49 +1023,186 @@ public sealed class MainViewModel : Observable, IDisposable
         }
     }
 
-    // ================= exclusão =================
+    // ================= seleção =================
 
     /// <summary>
-    /// Extra paths selected in the folder tree. The tree and the list are separate
-    /// selections, and a delete acts on both — selecting a folder on the left and files
-    /// on the right is a normal way to work.
+    /// The batch, by entry index.
+    /// <para>
+    /// Keyed on the index and nothing else: it costs four bytes an item, it survives every
+    /// rebuild of the list and the tree, and the index itself still answers for the name,
+    /// the size and the full path. Ticks in the file list and ticks in the folder tree land
+    /// in the same set, because to the person deleting they are one selection.
+    /// </para>
     /// </summary>
-    private readonly List<string> _treeSelection = [];
+    private readonly HashSet<int> _basket = [];
 
-    /// <summary>Rows selected in the file list. Fed by the view (SelectedItems is not bindable).</summary>
+    /// <summary>Rows highlighted in the list. Fed by the view (SelectedItems is not bindable).</summary>
     private readonly List<FileRowViewModel> _listSelection = [];
 
-    public int SelectedCount => _treeSelection.Count + _listSelection.Count;
+    /// <summary>Suppresses per-item notifications while a whole batch is being ticked.</summary>
+    private bool _selectionBatch;
+
+    void ISelectionSink.SetChecked(int entryIndex, bool isChecked)
+    {
+        bool changed = isChecked ? _basket.Add(entryIndex) : _basket.Remove(entryIndex);
+        if (!changed || _selectionBatch) return;
+
+        MirrorCheck(entryIndex, isChecked);
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>
+    /// Shows one entry's tick on the other pane.
+    /// <para>
+    /// In folder mode a subfolder is a row in the list and a node in the tree at once. They
+    /// are two objects for one entry, and a checkbox that only moves on the half you clicked
+    /// makes the batch look like it lost an item.
+    /// </para>
+    /// </summary>
+    private void MirrorCheck(int entryIndex, bool isChecked)
+    {
+        foreach (FileRowViewModel row in _rows)
+        {
+            if (row.EntryIndex != entryIndex) continue;
+            row.SyncChecked(isChecked);
+            break;
+        }
+
+        Root?.SyncChecked(entryIndex, isChecked);
+    }
+
+    bool ISelectionSink.IsChecked(int entryIndex) => _basket.Contains(entryIndex);
+
+    public ICommand SelectAllCommand { get; }
+    public ICommand InvertSelectionCommand { get; }
+    public ICommand ClearSelectionCommand { get; }
+
+    /// <summary>Ticks everything currently listed — never the whole volume.</summary>
+    private void SelectAllListed() =>
+        InBatch(() => { foreach (FileRowViewModel row in _rows) row.IsChecked = true; });
+
+    private void InvertListedSelection() =>
+        InBatch(() => { foreach (FileRowViewModel row in _rows) row.IsChecked = !row.IsChecked; });
+
+    /// <summary>Empties the basket — the listed rows, the tree ticks, and the rest.</summary>
+    public void ClearSelection() => InBatch(() =>
+    {
+        foreach (FileRowViewModel row in _rows) row.IsChecked = false;
+        Root?.ClearChecks();
+
+        // Whatever was ticked in a folder that is no longer on screen has no row and no
+        // node left to clear it through; it only exists here.
+        _basket.Clear();
+    });
+
+    private void InBatch(Action action)
+    {
+        _selectionBatch = true;
+        try { action(); }
+        finally { _selectionBatch = false; }
+
+        // The tree was not the one being ticked, so it has to catch up in one pass.
+        Root?.SyncAllChecks();
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>
+    /// What an action would act on: the ticked basket, or — when nothing is ticked — whatever
+    /// is highlighted in the list right now.
+    /// <para>
+    /// Ctrl-clicking three rows and pressing Del has to keep working. The basket is there for
+    /// gathering across folders, not as a new toll gate in front of the old gesture.
+    /// </para>
+    /// </summary>
+    private List<int> EffectiveEntries()
+    {
+        if (_basket.Count > 0) return [.. _basket];
+
+        var entries = new List<int>(_listSelection.Count);
+        foreach (FileRowViewModel row in _listSelection) entries.Add(row.EntryIndex);
+        return entries;
+    }
+
+    public int SelectedCount => _basket.Count > 0 ? _basket.Count : _listSelection.Count;
     public bool HasSelection => SelectedCount > 0;
 
-    public string SelectionSummaryText
+    /// <summary>True while the selection is the persistent one rather than the highlight.</summary>
+    public bool HasBasket => _basket.Count > 0;
+
+    /// <summary>
+    /// Bytes the selection stands for. A folder counts its whole subtree, and an item whose
+    /// parent is also selected counts nothing — it is already inside that total.
+    /// </summary>
+    public long SelectedBytes
     {
         get
         {
-            if (SelectedCount == 0) return string.Empty;
+            VolumeIndex? index = Index;
+            if (index is null) return 0;
 
-            long bytes = _listSelection.Sum(r => r.LogicalSize);
-            return L.T("delete.selectionCount", Format.Count(SelectedCount), Format.Bytes(bytes));
+            long total = 0;
+
+            foreach (int i in EffectiveEntries())
+            {
+                if (i < 0 || i >= index.Entries.Length) continue;
+
+                ref FileEntry entry = ref index.Entries[i];
+                if (!entry.IsInUse) continue;
+                if (HasSelectedAncestor(index, i)) continue;
+
+                total += entry.IsDirectory ? index.GetSubtreeSize(i) : entry.LogicalSize;
+            }
+
+            return total;
         }
     }
 
-    public string SelectionDetailText => _listSelection.Count == 1 && _treeSelection.Count == 0
+    /// <summary>
+    /// Is some ancestor of this entry also in the basket?
+    /// <para>
+    /// Without this, ticking a folder and then a file inside it would report the file's bytes
+    /// twice — a number nobody measured, on the one screen where the number decides what gets
+    /// destroyed.
+    /// </para>
+    /// </summary>
+    private bool HasSelectedAncestor(VolumeIndex index, int entryIndex)
+    {
+        if (_basket.Count == 0) return false;
+
+        int root = index.RootIndex;
+        int current = entryIndex;
+
+        for (int guard = 0; guard < 512; guard++)
+        {
+            if (current == root) return false;
+
+            uint parent = index.Entries[current].ParentIndex;
+            if (parent >= (uint)index.Entries.Length || parent == (uint)current) return false;
+
+            current = (int)parent;
+            if (_basket.Contains(current)) return true;
+        }
+
+        return false;
+    }
+
+    public string SelectionSummaryText => SelectedCount == 0
+        ? string.Empty
+        : L.T("delete.selectionCount", Format.Count(SelectedCount), Format.Bytes(SelectedBytes));
+
+    public string SelectionDetailText => SelectedCount == 1 && _listSelection.Count == 1
         ? $"{_listSelection[0].FullPath}\n{Format.Bytes(_listSelection[0].LogicalSize)} · {_listSelection[0].ModifiedText}"
         : SelectionSummaryText;
 
-    /// <summary>Called by the view whenever the list selection changes.</summary>
+    /// <summary>Called by the view whenever the list highlight changes.</summary>
     public void SetListSelection(IEnumerable<FileRowViewModel> rows)
     {
         _listSelection.Clear();
         _listSelection.AddRange(rows);
-        RaiseSelectionChanged();
-    }
 
-    /// <summary>Called by the view whenever the tree selection changes.</summary>
-    public void SetTreeSelection(IEnumerable<string> paths)
-    {
-        _treeSelection.Clear();
-        _treeSelection.AddRange(paths);
+        // The highlight drives the single-item actions whether or not a basket exists.
+        SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
+
         RaiseSelectionChanged();
     }
 
@@ -858,16 +1210,13 @@ public sealed class MainViewModel : Observable, IDisposable
     {
         Raise(nameof(SelectedCount));
         Raise(nameof(HasSelection));
+        Raise(nameof(HasBasket));
+        Raise(nameof(SelectedBytes));
         Raise(nameof(SelectionSummaryText));
         Raise(nameof(SelectionDetailText));
-
-        // SelectedRow keeps the single-item actions (open, reveal) working unchanged.
-        SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
     }
 
-    /// <summary>Every path the current selection covers, list and tree together.</summary>
-    private List<string> SelectedPaths() =>
-        [.. _treeSelection.Concat(_listSelection.Select(r => r.FullPath))];
+    // ================= exclusão =================
 
     /// <summary>
     /// Plans a deletion, asks for confirmation, executes it and reports the outcome.
@@ -879,14 +1228,31 @@ public sealed class MainViewModel : Observable, IDisposable
     /// <param name="owner">Owner window for the confirmation dialog.</param>
     public void DeleteSelection(DeleteMode mode, Window owner)
     {
-        List<string> paths = SelectedPaths();
+        VolumeIndex? index = Index;
+        List<int> selected = EffectiveEntries();
 
-        if (paths.Count == 0)
+        // Path back to entry. Pruning the index afterwards by matching strings would be
+        // guessing at which row a result belongs to; this knows, because it built the path.
+        var byPath = new Dictionary<string, int>(selected.Count, StringComparer.OrdinalIgnoreCase);
+
+        if (index is not null)
+        {
+            foreach (int i in selected)
+            {
+                if (i < 0 || i >= index.Entries.Length || !index.Entries[i].IsInUse) continue;
+
+                string path = index.GetFullPath(i);
+                if (path.Length > 0) byPath[path.TrimEnd('\\')] = i;
+            }
+        }
+
+        if (byPath.Count == 0)
         {
             StatusText = L.T("delete.nothingSelected");
             return;
         }
 
+        List<string> paths = [.. byPath.Keys];
         var service = new DeleteService();
 
         // Plan first, always. The dialog shows exactly what will happen, including the
@@ -897,20 +1263,108 @@ public sealed class MainViewModel : Observable, IDisposable
 
         DeleteReport report = service.Execute(paths, mode);
 
-        StatusText = report.FailedCount == 0
-            ? L.T("delete.done", Format.Count(report.DeletedCount), Format.Bytes(report.BytesFreed))
-            : L.T("delete.donePartial", Format.Count(report.DeletedCount),
-                  Format.Bytes(report.BytesFreed), Format.Count(report.FailedCount));
+        // Take out of the index exactly what the disk reported as gone, and measure the
+        // result from the entries themselves — the whole subtree included.
+        Removal removed = default;
+
+        foreach (DeleteResult result in report.Results)
+        {
+            if (!result.Succeeded) continue;
+            if (byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry))
+                removed += index!.MarkDeleted(entry);
+        }
 
         if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
 
-        if (report.DeletedCount > 0 && !_anythingDeleted)
+        ReportDeletion(report, removed, mode);
+        AfterDeletion(removed);
+    }
+
+    /// <summary>
+    /// Says what happened — and, for the Recycle Bin, what did not.
+    /// <para>
+    /// A move to the bin frees nothing. The bytes sit in <c>$Recycle.Bin</c> until it is
+    /// emptied, so a status line reading "3 GiB freed" would be the app asserting a figure
+    /// the disk plainly disagrees with. It says "still occupied" instead, and offers to open
+    /// the bin.
+    /// </para>
+    /// </summary>
+    private void ReportDeletion(DeleteReport report, Removal removed, DeleteMode mode)
+    {
+        // Only the MFT read measures allocation. Without it the logical size is the honest
+        // figure to quote, and the summary line already says the same thing.
+        long bytes = HasRealAllocation ? removed.BytesOnDisk : removed.LogicalBytes;
+
+        string count = Format.Count(report.DeletedCount);
+        string size = Format.Bytes(bytes);
+        bool one = report.DeletedCount == 1;
+
+        if (mode == DeleteMode.RecycleBin)
+        {
+            RecycledBytes += bytes;
+            HasRecycled = report.DeletedCount > 0 || HasRecycled;
+
+            StatusText = report.FailedCount > 0
+                ? L.T("delete.recycledPartial", count, size, Format.Count(report.FailedCount))
+                : one ? L.T("delete.recycledOne", size)
+                      : L.T("delete.recycled", count, size);
+
+            return;
+        }
+
+        StatusText = report.FailedCount > 0
+            ? L.T("delete.donePartial", count, size, Format.Count(report.FailedCount))
+            : one ? L.T("delete.doneOne", size)
+                  : L.T("delete.done", count, size);
+    }
+
+    /// <summary>
+    /// Brings every view back in line with an index that just lost entries.
+    /// </summary>
+    private void AfterDeletion(Removal removed)
+    {
+        if (removed.IsEmpty) return;
+
+        if (!_anythingDeleted)
         {
             _anythingDeleted = true;
             Raise(nameof(FooterText));
         }
 
-        RemoveDeletedRows(report);
+        DropDeletedRows();
+        Root?.PruneDeleted();
+        RefreshAggregates();
+
+        // Free space moved, and the cards on the Dashboard still quote the figure from the
+        // scan. Re-reading it is one call per volume.
+        LoadVolumes();
+    }
+
+    /// <summary>Bytes moved to the Recycle Bin this session and not yet reclaimed.</summary>
+    private long _recycledBytes;
+    public long RecycledBytes
+    {
+        get => _recycledBytes;
+        private set { Set(ref _recycledBytes, value); Raise(nameof(RecycledText)); }
+    }
+
+    private bool _hasRecycled;
+    public bool HasRecycled { get => _hasRecycled; private set => Set(ref _hasRecycled, value); }
+
+    public string RecycledText => L.T("delete.stillInBin", Format.Bytes(RecycledBytes));
+
+    public ICommand OpenRecycleBinCommand { get; }
+
+    private void OpenRecycleBin()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("shell:RecycleBinFolder") { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
+        {
+            StatusText = L.T("status.cannotOpenRecycleBin");
+        }
     }
 
     /// <summary>Human-readable reason a single item did not go.</summary>
@@ -938,34 +1392,42 @@ public sealed class MainViewModel : Observable, IDisposable
     public bool HasFailures => LastFailures.Count > 0;
 
     /// <summary>
-    /// Drops the rows that are really gone.
+    /// Drops the rows whose entries no longer exist.
     /// <para>
-    /// The index in memory still describes the old disk — rescanning after every delete
-    /// would cost a full traversal, so the list is pruned instead and the numbers in the
-    /// sidebar stay as measured. They will be right again after the next scan.
+    /// Asking the index is exact and costs one array read per row. The previous version
+    /// compared path strings, which meant a row survived whenever the two spellings of a
+    /// path disagreed — and, worse, that the row was the only thing removed at all.
     /// </para>
     /// </summary>
-    private void RemoveDeletedRows(DeleteReport report)
+    private void DropDeletedRows()
     {
-        var deleted = new HashSet<string>(
-            report.Results.Where(r => r.Succeeded).Select(r => r.Path),
-            StringComparer.OrdinalIgnoreCase);
+        VolumeIndex? index = Index;
+        if (index is null) return;
 
-        if (deleted.Count == 0) return;
+        int dropped = 0;
 
-        for (int i = Rows.Count - 1; i >= 0; i--)
+        for (int i = _rows.Count - 1; i >= 0; i--)
         {
-            string path = Rows[i].FullPath.TrimEnd('\\');
+            if (index.Entries[_rows[i].EntryIndex].IsInUse) continue;
 
-            bool gone = deleted.Contains(path)
-                     || deleted.Any(d => path.StartsWith(d + "\\", StringComparison.OrdinalIgnoreCase));
-
-            if (gone) Rows.RemoveAt(i);
+            _rows.RemoveAt(i);
+            dropped++;
         }
 
-        _listSelection.Clear();
-        _treeSelection.Clear();
-        TotalMatches = Rows.Count;
+        // Subtract rather than assign: on a truncated list the real total is still larger
+        // than what is on screen, and claiming otherwise would understate the match count.
+        if (dropped > 0) TotalMatches -= dropped;
+
+        PublishRows();
+
+        // A tick left pointing at a freed entry would keep the action bar up for something
+        // that no longer exists.
+        _basket.RemoveWhere(i => !index.Entries[i].IsInUse);
+        _listSelection.RemoveAll(r => !index.Entries[r.EntryIndex].IsInUse);
+
+        if (SelectedRow is not null && !index.Entries[SelectedRow.EntryIndex].IsInUse)
+            SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
+
         RaiseSelectionChanged();
     }
 
