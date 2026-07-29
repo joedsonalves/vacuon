@@ -34,13 +34,22 @@
                                 Visibility="{Binding IsAiPanel, Converter={StaticResource Visible}}"/>
                     </StackPanel>
 
-                    <StackPanel>
+                    <StackPanel Margin="0,0,6,0">
                         <Button Style="{StaticResource Button.Ghost}" Padding="12,7" FontSize="13"
                                 Content="{DynamicResource S.nav.startup}"
                                 Click="OnShowStartup"/>
                         <Border Height="2" CornerRadius="1" Margin="4,2,4,0"
                                 Background="{DynamicResource Gauge.Fill}"
                                 Visibility="{Binding IsStartupPanel, Converter={StaticResource Visible}}"/>
+                    </StackPanel>
+
+                    <StackPanel>
+                        <Button Style="{StaticResource Button.Ghost}" Padding="12,7" FontSize="13"
+                                Content="{DynamicResource S.optimize.memoryPanel}"
+                                Click="OnShowMemory"/>
+                        <Border Height="2" CornerRadius="1" Margin="4,2,4,0"
+                                Background="{DynamicResource Gauge.Fill}"
+                                Visibility="{Binding IsMemoryPanel, Converter={StaticResource Visible}}"/>
                     </StackPanel>
                 </StackPanel>
             </StackPanel>
@@ -49,6 +58,7 @@
         <Grid Grid.Row="1">
             <views:AiView      Visibility="{Binding IsAiPanel,      Converter={StaticResource Visible}}"/>
             <views:StartupView Visibility="{Binding IsStartupPanel, Converter={StaticResource Visible}}"/>
+            <views:MemoryView  Visibility="{Binding IsMemoryPanel,  Converter={StaticResource Visible}}"/>
         </Grid>
     </Grid>
 </UserControl>

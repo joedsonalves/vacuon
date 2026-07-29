@@ -28,7 +28,7 @@ public enum Section { Dashboard, Explorer, Security, Optimize, Settings }
 /// of the app: everywhere else reads, and these two write.
 /// </para>
 /// </summary>
-public enum OptimizePanel { Ai, Startup }
+public enum OptimizePanel { Ai, Startup, Memory }
 
 /// <summary>Modo de listagem do Explorer.</summary>
 public enum ListMode
@@ -82,6 +82,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         OpenRecycleBinCommand = new RelayCommand(OpenRecycleBin);
         RunAiScanCommand = new RelayCommand(async () => await RunAiScanAsync(), () => !IsAiScanning);
         RunStartupScanCommand = new RelayCommand(async () => await RunStartupScanAsync(), () => !IsStartupScanning);
+        RunMemoryScanCommand = new RelayCommand(async () => await RunMemoryScanAsync());
+        TrimWorkingSetsCommand = new RelayCommand(async () => await TrimWorkingSetsAsync());
 
         ThemeManager.Changed += OnThemeChanged;
 
@@ -119,11 +121,13 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             if (!Set(ref _panel, value)) return;
             Raise(nameof(IsAiPanel));
             Raise(nameof(IsStartupPanel));
+            Raise(nameof(IsMemoryPanel));
         }
     }
 
     public bool IsAiPanel => _panel == OptimizePanel.Ai;
     public bool IsStartupPanel => _panel == OptimizePanel.Startup;
+    public bool IsMemoryPanel => _panel == OptimizePanel.Memory;
     public bool IsSettings => Section == Section.Settings;
 
     // ================= elevação =================
@@ -1715,6 +1719,96 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         }
 
         StartupStatusText = Summarize(report);
+    }
+
+    // ================= memória =================
+
+    public ObservableCollection<MemoryRowViewModel> MemoryRows { get; } = [];
+
+    private bool _hasMemoryRun;
+    public bool HasMemoryRun { get => _hasMemoryRun; private set => Set(ref _hasMemoryRun, value); }
+
+    private string _memoryStatusText = L.T("memory.prompt");
+    public string MemoryStatusText { get => _memoryStatusText; private set => Set(ref _memoryStatusText, value); }
+
+    private string _memoryTotals = string.Empty;
+    public string MemoryTotals { get => _memoryTotals; private set => Set(ref _memoryTotals, value); }
+
+    private string _memoryCompressed = string.Empty;
+    public string MemoryCompressed { get => _memoryCompressed; private set => Set(ref _memoryCompressed, value); }
+
+    private string _memoryStartupShare = string.Empty;
+    public string MemoryStartupShare
+    {
+        get => _memoryStartupShare;
+        private set { Set(ref _memoryStartupShare, value); Raise(nameof(HasStartupShare)); }
+    }
+
+    public bool HasStartupShare => _memoryStartupShare.Length > 0;
+
+    private string _trimOutcome = string.Empty;
+    public string TrimOutcome
+    {
+        get => _trimOutcome;
+        private set { Set(ref _trimOutcome, value); Raise(nameof(HasTrimOutcome)); }
+    }
+
+    public bool HasTrimOutcome => _trimOutcome.Length > 0;
+
+    public ICommand RunMemoryScanCommand { get; private set; } = null!;
+    public ICommand TrimWorkingSetsCommand { get; private set; } = null!;
+
+    private async Task RunMemoryScanAsync()
+    {
+        MemoryStatusText = L.T("memory.running");
+
+        MemoryReport report = await Task.Run(() => new MemoryScanner().Scan(20));
+        MemoryReading r = report.Reading;
+
+        MemoryRows.Clear();
+        foreach (ProcessMemory p in report.TopProcesses)
+        {
+            MemoryRows.Add(new MemoryRowViewModel(p)
+            {
+                Share = r.TotalBytes > 0 ? (double)p.PrivateBytes / r.TotalBytes : 0,
+            });
+        }
+
+        MemoryTotals = $"{L.T("memory.total")} {Format.Bytes(r.TotalBytes)}  ·  " +
+                       $"{L.T("memory.inUse")} {Format.Bytes(r.InUseBytes)}  ·  " +
+                       $"{L.T("memory.available")} {Format.Bytes(r.AvailableBytes)}";
+
+        MemoryStatusText = L.T("memory.load", r.LoadPercent);
+
+        MemoryCompressed = r.CompressedBytes > 0
+            ? $"{L.T("memory.compressed")}: {Format.Bytes(r.CompressedBytes)}"
+            : string.Empty;
+
+        // Only worth saying when there is something to say — and it points at the one screen
+        // that can actually remove the cost for good.
+        MemoryStartupShare = report.FromStartupBytes > 0
+            ? L.T("memory.fromStartupTotal", Format.Bytes(report.FromStartupBytes))
+            : string.Empty;
+
+        HasMemoryRun = true;
+    }
+
+    /// <summary>
+    /// Empties every working set, and reports what really happened.
+    /// <para>
+    /// The result is worded as a movement, not as a saving, and a negative movement is shown
+    /// as a negative — which is the case other utilities never put on screen.
+    /// </para>
+    /// </summary>
+    private async Task TrimWorkingSetsAsync()
+    {
+        TrimResult result = await Task.Run(() => new WorkingSetTrimmer().TrimAll());
+
+        TrimOutcome = result.MovedBytes >= 0
+            ? L.T("memory.trimResult", result.ProcessesTouched, Format.Bytes(result.MovedBytes))
+            : L.T("memory.trimResultNegative", result.ProcessesTouched, Format.Bytes(-result.MovedBytes));
+
+        await RunMemoryScanAsync();
     }
 
     public void Dispose()
