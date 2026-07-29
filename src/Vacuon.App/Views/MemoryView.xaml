@@ -101,10 +101,48 @@
                                                          Converter={StaticResource SharePercent}}"/>
                                 </StackPanel>
 
-                                <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
-                                           FontSize="11" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource Text.Muted}"
-                                           Text="{Binding SizeText}"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource Text.Number}"
+                                               FontSize="11" HorizontalAlignment="Right"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding SizeText}"/>
+
+                                    <!-- Fechar joga fora o que nao estiver salvo, entao o botao
+                                         pergunta duas vezes e o segundo diz o que se esta
+                                         aceitando, em vez de so "OK". -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0"
+                                                HorizontalAlignment="Right">
+                                        <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,3"
+                                                Content="{Binding CloseText}"
+                                                Foreground="{DynamicResource Risk.Danger}"
+                                                Click="OnArmClose"
+                                                Visibility="{Binding CanClose, Converter={StaticResource Visible}}"/>
+
+                                        <Button Style="{StaticResource Button.Base}" FontSize="11" Padding="8,3"
+                                                Content="{Binding ConfirmText}"
+                                                Foreground="{DynamicResource Risk.Danger}"
+                                                Click="OnConfirmClose"
+                                                Visibility="{Binding IsArmed, Converter={StaticResource Visible}}"/>
+
+                                        <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,3"
+                                                Margin="4,0,0,0"
+                                                Content="{Binding CancelText}"
+                                                Click="OnCancelClose"
+                                                Visibility="{Binding IsArmed, Converter={StaticResource Visible}}"/>
+
+                                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="10"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding ProtectedText}"
+                                                   Visibility="{Binding IsProtected, Converter={StaticResource Visible}}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="10" Margin="0,4,0,0"
+                                               HorizontalAlignment="Right" TextWrapping="Wrap"
+                                               MaxWidth="260" TextAlignment="Right"
+                                               Text="{Binding Outcome}"
+                                               Visibility="{Binding Outcome, Converter={StaticResource NotEmpty}}"/>
+                                </StackPanel>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
