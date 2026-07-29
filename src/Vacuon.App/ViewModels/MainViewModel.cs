@@ -19,7 +19,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Security, Optimize, Startup, Settings }
 
 /// <summary>Modo de listagem do Explorer.</summary>
 public enum ListMode
@@ -72,6 +72,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         ClearSelectionCommand = new RelayCommand(ClearSelection);
         OpenRecycleBinCommand = new RelayCommand(OpenRecycleBin);
         RunAiScanCommand = new RelayCommand(async () => await RunAiScanAsync(), () => !IsAiScanning);
+        RunStartupScanCommand = new RelayCommand(async () => await RunStartupScanAsync(), () => !IsStartupScanning);
 
         ThemeManager.Changed += OnThemeChanged;
 
@@ -91,6 +92,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsExplorer));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
+            Raise(nameof(IsStartup));
             Raise(nameof(IsSettings));
         }
     }
@@ -99,6 +101,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsExplorer => Section == Section.Explorer;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
+    public bool IsStartup => Section == Section.Startup;
     public bool IsSettings => Section == Section.Settings;
 
     // ================= elevação =================
@@ -1597,6 +1600,100 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
         _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
     };
+
+    // ================= inicialização do Windows =================
+
+    public ObservableCollection<StartupRowViewModel> StartupItems { get; } = [];
+
+    private bool _isStartupScanning;
+    public bool IsStartupScanning
+    {
+        get => _isStartupScanning;
+        private set
+        {
+            if (!Set(ref _isStartupScanning, value)) return;
+            (RunStartupScanCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private bool _hasStartupRun;
+    public bool HasStartupRun { get => _hasStartupRun; private set => Set(ref _hasStartupRun, value); }
+
+    private string _startupStatusText = L.T("startup.prompt");
+    public string StartupStatusText { get => _startupStatusText; private set => Set(ref _startupStatusText, value); }
+
+    public ICommand RunStartupScanCommand { get; private set; } = null!;
+
+    private async Task RunStartupScanAsync()
+    {
+        IsStartupScanning = true;
+        StartupStatusText = L.T("startup.running");
+
+        try
+        {
+            StartupReport report = await Task.Run(() => new StartupScanner().Scan());
+
+            StartupItems.Clear();
+
+            // Enabled first, and the heaviest of those at the top: the list is read to find
+            // what to switch off, not to browse alphabetically.
+            foreach (StartupEntry e in report.Entries
+                         .OrderByDescending(e => e.IsEnabled)
+                         .ThenByDescending(e => e.MeasuredBytes)
+                         .ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase))
+            {
+                StartupItems.Add(new StartupRowViewModel(e));
+            }
+
+            HasStartupRun = true;
+            StartupStatusText = Summarize(report);
+        }
+        finally
+        {
+            IsStartupScanning = false;
+        }
+    }
+
+    private static string Summarize(StartupReport report) => report.MeasuredBytes > 0
+        ? L.T("startup.summary", report.Entries.Count, report.EnabledCount, Format.Bytes(report.MeasuredBytes))
+        : L.T("startup.summaryNothingRunning", report.Entries.Count, report.EnabledCount);
+
+    /// <summary>Switches one startup program, then re-reads the list to show what stuck.</summary>
+    public async Task SetStartupEnabledAsync(StartupRowViewModel row, bool enabled)
+    {
+        SwitchOutcome outcome = await Task.Run(() => new StartupSwitch().SetEnabled(row.Entry, enabled));
+
+        row.Outcome = outcome switch
+        {
+            SwitchOutcome.Applied => L.T(enabled ? "startup.outcomeEnabled" : "startup.outcomeDisabled"),
+            SwitchOutcome.NeedsElevation => L.T("startup.outcomeNeedsElevation"),
+            SwitchOutcome.NotConfirmed => L.T("startup.outcomeNotConfirmed"),
+            _ => L.T("startup.outcomeFailed"),
+        };
+
+        await RefreshStartupRowsAsync();
+    }
+
+    /// <summary>
+    /// Re-reads every entry after a change, so the state shown always comes from the machine
+    /// rather than from assuming the write did what it was asked.
+    /// </summary>
+    private async Task RefreshStartupRowsAsync()
+    {
+        StartupReport report = await Task.Run(() => new StartupScanner().Scan());
+
+        foreach (StartupEntry fresh in report.Entries)
+        {
+            foreach (StartupRowViewModel row in StartupItems)
+            {
+                if (row.Entry.Name != fresh.Name || row.Entry.Source != fresh.Source) continue;
+                row.Entry = fresh;
+                break;
+            }
+        }
+
+        StartupStatusText = Summarize(report);
+    }
 
     public void Dispose()
     {

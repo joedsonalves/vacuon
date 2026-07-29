@@ -61,6 +61,9 @@ public partial class MainWindow : Window
     private void OnNavOptimize(object sender, RoutedEventArgs e) =>
         Navigate(Section.Optimize, "nav.optimize");
 
+    private void OnNavStartup(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Startup, "nav.startup");
+
     private void OnNavSettings(object sender, RoutedEventArgs e) =>
         Navigate(Section.Settings, "nav.settings");
 
