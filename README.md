@@ -91,12 +91,16 @@ dotnet build -c Release
 dotnet test
 ```
 
-The app lands in `src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe`. To produce the same
-self-contained single file that the release ships:
+That is enough to run it: the app lands in
+`src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe` and opens from there.
 
-```bash
-dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
+The step below is **optional**, and only needed to produce the same self-contained single file
+the release ships. Keep it on one line — a backslash at the end of a line is a bash
+continuation, and `cmd.exe` passes it straight to MSBuild, which reads it as a second project
+and stops:
+
+```powershell
+dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
 ```
 
 ### Requirements
