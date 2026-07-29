@@ -65,11 +65,20 @@ O [`vacuon-cli.exe`](https://github.com/joedsonalves/vacuon/releases/latest/down
 é o mesmo núcleo sem janela, para scripts. Coloque em algum lugar do `PATH` e veja
 [a seção da CLI](#interface-gráfica-e-linha-de-comando).
 
-Ou deixe o winget colocar por você, assim que o pacote for aceito — ele instala o app e põe um
-comando `vacuon` no seu `PATH`:
+O winget instala o app assim que o pacote for aceito. Repare que ele entrega a **interface
+gráfica**, e a coloca no seu `PATH` como `vacuon` — digitar `vacuon` no terminal abre a janela.
+A CLI acima é um download separado:
 
 ```powershell
-winget install Joedsonalves.Vacuon
+winget install vacuon
+```
+
+`vacuon` é o moniker do pacote, então o nome curto basta. Se algum dia outro pacote casar com
+ele, o winget para e pede para você ser específico; esta forma mais longa é a que nunca fica
+ambígua:
+
+```powershell
+winget install --id Joedsonalves.Vacuon --exact
 ```
 
 ### Compilar do código
@@ -83,12 +92,16 @@ dotnet build -c Release
 dotnet test
 ```
 
-O app sai em `src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe`. Para gerar o mesmo
-arquivo único self-contained que a release publica:
+Isso já basta para rodar: o app sai em
+`src/Vacuon.App/bin/Release/net10.0-windows/Vacuon.exe` e abre dali mesmo.
 
-```bash
-dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
+O passo abaixo é **opcional**, e serve só para gerar o mesmo arquivo único self-contained que
+a release publica. Mantenha em **uma linha só** — a barra invertida no fim da linha é
+continuação do bash, e o `cmd.exe` repassa ela ao MSBuild, que a lê como um segundo projeto
+e para:
+
+```powershell
+dotnet publish src/Vacuon.App/Vacuon.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o artifacts/gui
 ```
 
 ### Requisitos
