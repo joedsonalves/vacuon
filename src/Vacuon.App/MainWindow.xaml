@@ -73,9 +73,6 @@
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.optimize}" Tag="&#xE945;"
                                  IsChecked="{Binding IsOptimize, Mode=OneWay}"
                                  Checked="OnNavOptimize"/>
-                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.startup}" Tag="&#xE7E8;"
-                                 IsChecked="{Binding IsStartup, Mode=OneWay}"
-                                 Checked="OnNavStartup"/>
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.settings}" Tag=""
                                  IsChecked="{Binding IsSettings, Mode=OneWay}"
                                  Checked="OnNavSettings"/>
@@ -180,8 +177,7 @@
                 <views:DashboardView Visibility="{Binding IsDashboard, Converter={StaticResource Visible}}"/>
                 <views:ExplorerView  Visibility="{Binding IsExplorer,  Converter={StaticResource Visible}}"/>
                 <views:SecurityView  Visibility="{Binding IsSecurity,  Converter={StaticResource Visible}}"/>
-                <views:AiView        Visibility="{Binding IsOptimize,  Converter={StaticResource Visible}}"/>
-                <views:StartupView   Visibility="{Binding IsStartup,   Converter={StaticResource Visible}}"/>
+                <views:OptimizeView  Visibility="{Binding IsOptimize,  Converter={StaticResource Visible}}"/>
                 <views:SettingsView  Visibility="{Binding IsSettings,  Converter={StaticResource Visible}}"/>
             </Grid>
 

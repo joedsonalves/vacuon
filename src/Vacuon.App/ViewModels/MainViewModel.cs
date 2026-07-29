@@ -19,7 +19,16 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Security, Optimize, Startup, Settings }
+public enum Section { Dashboard, Explorer, Security, Optimize, Settings }
+
+/// <summary>
+/// The two panels inside Optimize.
+/// <para>
+/// They share a section because they share the one thing that sets them apart from the rest
+/// of the app: everywhere else reads, and these two write.
+/// </para>
+/// </summary>
+public enum OptimizePanel { Ai, Startup }
 
 /// <summary>Modo de listagem do Explorer.</summary>
 public enum ListMode
@@ -92,7 +101,6 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsExplorer));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
-            Raise(nameof(IsStartup));
             Raise(nameof(IsSettings));
         }
     }
@@ -101,7 +109,21 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsExplorer => Section == Section.Explorer;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
-    public bool IsStartup => Section == Section.Startup;
+
+    private OptimizePanel _panel = OptimizePanel.Ai;
+    public OptimizePanel Panel
+    {
+        get => _panel;
+        set
+        {
+            if (!Set(ref _panel, value)) return;
+            Raise(nameof(IsAiPanel));
+            Raise(nameof(IsStartupPanel));
+        }
+    }
+
+    public bool IsAiPanel => _panel == OptimizePanel.Ai;
+    public bool IsStartupPanel => _panel == OptimizePanel.Startup;
     public bool IsSettings => Section == Section.Settings;
 
     // ================= elevação =================
