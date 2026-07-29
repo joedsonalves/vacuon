@@ -428,7 +428,7 @@
   "memory.closeFailed": "Não foi possível fechar.",
   "cli.cmdMemory": "Mede a memória e mostra os maiores consumidores",
   "cli.headMemory": "MEMÓRIA",
-  "optimize.intro": "Os dois painéis aqui são as únicas partes do Vacuon que mudam algo nesta máquina. Todo o resto só lê.",
+  "optimize.intro": "Os três painéis aqui são as únicas partes do Vacuon que mudam algo nesta máquina. Todo o resto só lê.",
   "ai.title": "Componentes de IA da Microsoft",
   "ai.intro": "O Windows entrega vários recursos de IA, e liga boa parte deles sem perguntar. Esta aba lê o estado de cada um e desliga aqueles para os quais a Microsoft documenta um controle.",
   "ai.disclaimer": "Só componentes da Microsoft aparecem aqui. Software de IA de terceiros instalado na máquina não é assunto desta aba, por mais que haja.",

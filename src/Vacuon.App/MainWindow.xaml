@@ -151,8 +151,12 @@
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                         <TextBlock x:Name="HeaderTitle" Style="{StaticResource Text.Title}" Text="{DynamicResource S.nav.dashboard}"/>
+                        <!-- StatusText fala da varredura. Nas telas que nao varrem nada ele
+                             ficava dizendo "Pick a drive and click Scan" embaixo de um titulo
+                             que nao tem drive nenhum para escolher. -->
                         <TextBlock Style="{StaticResource Text.Sub}" Margin="0,3,0,0"
-                                   Text="{Binding StatusText}"/>
+                                   Text="{Binding StatusText}"
+                                   Visibility="{Binding ShowScanStatus, Converter={StaticResource Visible}}"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">

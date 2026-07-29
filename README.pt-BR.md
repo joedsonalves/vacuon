@@ -9,7 +9,7 @@ Lê a MFT do NTFS direto do volume, mostra o conteúdo real do que você vai apa
 e nunca afirma um número que não mediu.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Testes](https://img.shields.io/badge/testes-187-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-244-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
@@ -266,6 +266,72 @@ O print acima é o resultado numa máquina limpa: **44 locais, 122 entradas, 51 
 Extensão dupla (`fatura.pdf.cmd`), caractere Unicode RLO invertendo a extensão visível, executável oculto, executável com Alternate Data Stream grande, extensões de phishing, executável recém-criado em System32.
 
 Os dois itens do print são chamarizes sintéticos criados para demonstrar a detecção. Antes da calibração, esta mesma lista trazia **45 itens, 43 deles falsos positivos**.
+
+### Otimizar — a única parte que escreve
+
+Três painéis dividem uma seção porque dividem o que os separa do resto do app: **em todo lugar
+o Vacuon lê, e aqui ele escreve.** A aba Segurança afirma, na interface e no CLI, que não mudou
+chave nenhuma — manter a escrita em outro lugar é o que mantém aquela frase verdadeira.
+
+#### Componentes de IA
+
+<img src="docs/img/12-ia-componentes.png" width="900" alt="Painel de componentes de IA mostrando o estado de cada um e o controle documentado no registro">
+
+Encontra os recursos de IA que o Windows entrega e liga sem perguntar, e desliga aqueles para
+os quais a Microsoft documenta um controle. Cada entrada mostra o valor exato do registro e
+leva à página da Microsoft sobre ele, para a afirmação ser conferida na fonte em vez de aceita
+na palavra do Vacuon.
+
+O app escreve o valor documentado e **lê de volta** para confirmar que ficou lá. Se o Windows
+vai obedecer na hora ou só depois que você sair da sessão é decisão dele, e o painel não finge
+o contrário. Toda mudança é gravada num diário antes de o registro ser tocado, então
+**Desfazer** sempre tem um estado anterior para restaurar — e desfazer um valor que o Vacuon
+criou apaga o valor, em vez de escrever zero, porque são estados diferentes.
+
+Pacotes do sistema, como o componente de IA do Windows, são apenas informados, nunca removidos:
+isso é operação de manutenção, e o Windows Update devolve vários deles. Um botão que perde
+calado é pior que botão nenhum. Software de IA de terceiros não aparece aqui.
+
+#### Inicialização — o que o Windows abre ao entrar
+
+<img src="docs/img/13-inicializacao.png" width="900" alt="Painel de inicialização listando as chaves Run e as pastas de Inicializar com a memória medida">
+
+As chaves Run, a visão de 32 bits e as duas pastas de Inicializar, com o que cada um está
+segurando de memória agora. Entradas apontando para arquivo que não existe mais são marcadas —
+peso morto que ainda custa uma busca a cada login.
+
+Desligar escreve o `StartupApproved`, o mesmo controle que o Gerenciador de Tarefas e as
+Configurações usam, então **nada é apagado**: a entrada continua onde o programa a colocou e o
+Windows apenas é avisado para pular. Religar é um clique.
+
+#### Memória — medida, e honesta sobre o que um "limpador" faz
+
+<img src="docs/img/14-memoria.png" width="900" alt="Painel de memória ordenado por memória privada, com a ressalva do working set explicada">
+
+Ordenado pela **memória privada**, não pelo working set. Working set é o que o Gerenciador de
+Tarefas mostra, e conta página compartilhada entre processos uma vez para cada um — somar isso
+nos quarenta e cinco filhos de um navegador dá um total maior que a máquina inteira.
+
+O `Memory Compression` ganha linha própria em vez de liderar a lista de consumidores. Ele é o
+maior working set da maioria das máquinas com quase nada de privado, é a primeira coisa que um
+limpador de RAM ataca, e atacá-lo troca RAM rápida por leitura de disco.
+
+**Fechar** numa linha libera memória de verdade — as páginas somem, não mudam de lugar — então
+o painel diz o que o processo segurava **e** quanto o disponível realmente subiu. Esses dois
+números raramente são iguais, e mostrar só o mais bonito seria a aritmética que este app existe
+para não fazer. A confirmação é a linha sumir, e ela só some depois que o processo é confirmado
+morto.
+
+O botão que outros utilitários chamam de "liberar memória" também está aqui, com a descrição
+real colada nele: ele esvazia os working sets, o número de disponível sobe, e nada foi
+liberado — as páginas foram para o standby ou para o pagefile e voltam, do disco, assim que o
+programa delas encostar nelas de novo. O resultado é relatado como *movido*, e um movimento
+**negativo** aparece como negativo.
+
+> Processos chamados `csrss`, `wininit`, `lsass`, `services`, `winlogon`, `smss`, `dwm`,
+> `svchost` e `System` são recusados. Encerrar qualquer um deles é tela azul imediata, não
+> mensagem de erro. Mesma regra da lista de proteção de caminhos: sem override, sem modo
+> avançado, sem caixa de marcar.
 
 ### Configurações — tema e privilégio
 
