@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-187-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-244-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -266,6 +266,71 @@ The screenshot above is the result on a clean machine: **44 locations, 122 entri
 Double extension (`invoice.pdf.cmd`), Unicode RLO character reversing the visible extension, hidden executable, executable carrying a large Alternate Data Stream, phishing extensions, executable recently created in System32.
 
 The two items in the screenshot are synthetic decoys created to demonstrate the detection. Before calibration, this same list held **45 items, 43 of them false positives**.
+
+### Optimize — the only part that writes
+
+Three panels share one section because they share the thing that separates them from the rest
+of the app: **everywhere else reads, and these write.** The Security tab states, in the
+interface and in the CLI, that it changed no key — keeping the writing somewhere else is what
+keeps that true.
+
+#### AI components
+
+<img src="docs/img/12-ia-componentes.png" width="900" alt="AI components panel showing each component's state and the documented registry control">
+
+Finds the AI features Windows ships and turns on without asking, and switches off the ones
+Microsoft documents a control for. Every entry names the exact registry value and links to
+Microsoft's page for it, so the claim can be checked against the source rather than taken on
+Vacuon's word.
+
+Vacuon writes the documented value and **reads it back** to confirm it is there. Whether
+Windows acts on it right away or only after you sign out is up to Windows, and the panel does
+not pretend otherwise. Every change is journalled before the registry is touched, so **Undo**
+always has a previous state to restore — and undoing a value Vacuon created deletes it rather
+than writing a zero, because those are different states.
+
+Shipped packages like the Windows AI component get reported, never removed: that is a
+servicing operation, and Windows Update puts several of them back. A button that quietly loses
+is worse than no button. Third-party AI software does not appear here at all.
+
+#### Startup — what Windows launches at sign-in
+
+<img src="docs/img/13-inicializacao.png" width="900" alt="Startup panel listing Run keys and Startup folders with measured memory">
+
+The Run keys, the 32-bit view and both Startup folders, with what each one is holding in
+memory right now. Entries pointing at a file that no longer exists are called out — dead
+weight that still costs a lookup at every sign-in.
+
+Disabling writes `StartupApproved`, the same switch Task Manager and Settings use, so **nothing
+is deleted**: the entry stays where its program put it and Windows is simply told to skip it.
+Turning it back on is one click.
+
+#### Memory — measured, and honest about what a "cleaner" does
+
+<img src="docs/img/14-memoria.png" width="900" alt="Memory panel ranked by private memory, with the working-set caveat spelled out">
+
+Ranked by **private memory**, not working set. Working set is what Task Manager shows and it
+counts pages shared between processes once for each of them, so adding it up across a browser's
+forty-five children gives a total larger than the machine has.
+
+`Memory Compression` gets its own line instead of topping the consumer list. It is the biggest
+working set on most machines with almost nothing private, it is the first thing a RAM cleaner
+attacks, and attacking it trades fast RAM for disk reads.
+
+**Close** on a row really does free memory — the pages are gone, not moved — so the panel says
+what the process was holding *and* how much available memory actually rose. Those two are
+rarely the same number, and showing only the flattering one would be the arithmetic this app
+exists not to do. The confirmation is the row disappearing, and it only disappears once the
+process is confirmed gone.
+
+The button other utilities call "free memory" is here too, with its real description attached:
+it empties working sets, the available figure goes up, and nothing was freed — the pages moved
+to the standby list or the pagefile and come back, from disk, the moment their program touches
+them again. The result is reported as *moved*, and a **negative** movement is shown as negative.
+
+> Processes named `csrss`, `wininit`, `lsass`, `services`, `winlogon`, `smss`, `dwm`, `svchost`
+> and `System` are refused. Terminating any of them is an immediate stop error, not an error
+> message. Same rule as the path protection list: no override, no advanced mode, no checkbox.
 
 ### Settings — theme, language and privilege
 

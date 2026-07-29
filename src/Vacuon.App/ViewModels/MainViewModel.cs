@@ -104,6 +104,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
             Raise(nameof(IsSettings));
+            Raise(nameof(ShowScanStatus));
         }
     }
 
@@ -129,6 +130,13 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsStartupPanel => _panel == OptimizePanel.Startup;
     public bool IsMemoryPanel => _panel == OptimizePanel.Memory;
     public bool IsSettings => Section == Section.Settings;
+
+    /// <summary>
+    /// The header subtitle carries the scan status, which only means something on the two
+    /// screens that scan. Elsewhere it sat under the title telling the reader to pick a drive
+    /// on a page with no drives on it.
+    /// </summary>
+    public bool ShowScanStatus => IsDashboard || IsExplorer;
 
     // ================= elevação =================
 
