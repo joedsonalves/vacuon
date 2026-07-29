@@ -11,6 +11,7 @@ using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
+using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
@@ -18,7 +19,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Security, Settings }
+public enum Section { Dashboard, Explorer, Security, Optimize, Settings }
 
 /// <summary>Modo de listagem do Explorer.</summary>
 public enum ListMode
@@ -70,6 +71,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         InvertSelectionCommand = new RelayCommand(InvertListedSelection);
         ClearSelectionCommand = new RelayCommand(ClearSelection);
         OpenRecycleBinCommand = new RelayCommand(OpenRecycleBin);
+        RunAiScanCommand = new RelayCommand(async () => await RunAiScanAsync(), () => !IsAiScanning);
 
         ThemeManager.Changed += OnThemeChanged;
 
@@ -88,6 +90,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsDashboard));
             Raise(nameof(IsExplorer));
             Raise(nameof(IsSecurity));
+            Raise(nameof(IsOptimize));
             Raise(nameof(IsSettings));
         }
     }
@@ -95,6 +98,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsDashboard => Section == Section.Dashboard;
     public bool IsExplorer => Section == Section.Explorer;
     public bool IsSecurity => Section == Section.Security;
+    public bool IsOptimize => Section == Section.Optimize;
     public bool IsSettings => Section == Section.Settings;
 
     // ================= elevação =================
@@ -193,6 +197,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             nameof(ModeText), nameof(TruncationText), nameof(SummaryText),
             nameof(SecurityStatusText), nameof(IconSizeOptions), nameof(SelectedIconSizeOption),
             nameof(SelectionSummaryText), nameof(SelectionDetailText), nameof(RecycledText),
+            nameof(AiStatusText), nameof(AiJournalNoteText),
             nameof(HeaderName), nameof(HeaderSize), nameof(HeaderModified), nameof(HeaderPath),
         })
         {
@@ -1489,6 +1494,109 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             IsSecurityScanning = false;
         }
     }
+
+    // ================= componentes de IA =================
+
+    public ObservableCollection<AiComponentRowViewModel> AiComponents { get; } = [];
+
+    private bool _isAiScanning;
+    public bool IsAiScanning
+    {
+        get => _isAiScanning;
+        private set
+        {
+            if (!Set(ref _isAiScanning, value)) return;
+            (RunAiScanCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private bool _hasAiRun;
+    public bool HasAiRun { get => _hasAiRun; private set => Set(ref _hasAiRun, value); }
+
+    private string _aiStatusText = L.T("ai.prompt");
+    public string AiStatusText { get => _aiStatusText; private set => Set(ref _aiStatusText, value); }
+
+    public string AiJournalNoteText => L.T("ai.journalNote", PolicyJournal.DefaultPath);
+
+    public ICommand RunAiScanCommand { get; private set; } = null!;
+
+    private async Task RunAiScanAsync()
+    {
+        IsAiScanning = true;
+        AiStatusText = L.T("ai.running");
+
+        try
+        {
+            AiScanReport report = await Task.Run(() => new AiComponentScanner().Scan());
+
+            AiComponents.Clear();
+            foreach (AiComponentStatus status in report.Items)
+                AiComponents.Add(new AiComponentRowViewModel(status));
+
+            HasAiRun = true;
+
+            // Zero running is a real answer, and it gets its own sentence rather than being
+            // dressed up as a saving that is not there.
+            AiStatusText = report.MeasuredBytes > 0
+                ? L.T("ai.summary", report.Items.Count, report.OnCount, Format.Bytes(report.MeasuredBytes))
+                : L.T("ai.summaryNothingRunning", report.Items.Count, report.OnCount);
+        }
+        finally
+        {
+            IsAiScanning = false;
+        }
+    }
+
+    /// <summary>Switches one component off, then re-reads the machine to show what stuck.</summary>
+    public async Task TurnOffAsync(AiComponentRowViewModel row)
+    {
+        SwitchResult result = await Task.Run(() => new AiComponentSwitch().TurnOff(row.Component));
+        row.Outcome = Describe(result, undone: false);
+        await RefreshAiRowsAsync();
+    }
+
+    public async Task UndoAsync(AiComponentRowViewModel row)
+    {
+        SwitchResult result = await Task.Run(() => new AiComponentSwitch().Undo(row.Component));
+        row.Outcome = Describe(result, undone: true);
+        await RefreshAiRowsAsync();
+    }
+
+    /// <summary>
+    /// Re-reads every component after a change.
+    /// <para>
+    /// The state shown always comes from a fresh read of the machine, never from assuming the
+    /// write did what it was asked to.
+    /// </para>
+    /// </summary>
+    private async Task RefreshAiRowsAsync()
+    {
+        AiScanReport report = await Task.Run(() => new AiComponentScanner().Scan());
+
+        foreach (AiComponentStatus status in report.Items)
+        {
+            foreach (AiComponentRowViewModel row in AiComponents)
+            {
+                if (row.Component.Id != status.Component.Id) continue;
+                row.Status = status;
+                break;
+            }
+        }
+
+        AiStatusText = report.MeasuredBytes > 0
+            ? L.T("ai.summary", report.Items.Count, report.OnCount, Format.Bytes(report.MeasuredBytes))
+            : L.T("ai.summaryNothingRunning", report.Items.Count, report.OnCount);
+    }
+
+    private static string Describe(SwitchResult result, bool undone) => result.Outcome switch
+    {
+        SwitchOutcome.Applied => L.T(undone ? "ai.outcomeUndone" : "ai.outcomeApplied"),
+        SwitchOutcome.NoChange => L.T("ai.outcomeNoChange"),
+        SwitchOutcome.NeedsElevation => L.T("ai.outcomeNeedsElevation"),
+        SwitchOutcome.NotConfirmed => L.T("ai.outcomeNotConfirmed"),
+        SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
+        _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
+    };
 
     public void Dispose()
     {

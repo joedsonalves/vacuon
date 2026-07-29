@@ -1,0 +1,147 @@
+<UserControl x:Class="Vacuon.App.Views.AiView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="NotVisible"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,18,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==================== cabecalho ==================== -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.ai.title}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Text.Muted}"
+                       Text="{DynamicResource S.ai.intro}"/>
+
+            <!-- A aba Seguranca promete, na interface e no CLI, que nao muda chave nenhuma.
+                 Esta aba muda - por isso e outra aba, e por isso o que ela pode e nao pode
+                 afirmar esta escrito aqui em cima, nao escondido. -->
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                       Text="{DynamicResource S.ai.honestyNote}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                       Text="{DynamicResource S.ai.disclaimer}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,6,0,0" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                       Text="{Binding AiJournalNoteText}"/>
+        </StackPanel>
+
+        <!-- ==================== acao e resumo ==================== -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,16,0,12">
+            <Button Style="{StaticResource Button.Primary}" Padding="14,7"
+                    Content="{DynamicResource S.action.inspect}"
+                    Command="{Binding RunAiScanCommand}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="14,0,0,0" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"
+                       Text="{Binding AiStatusText}"/>
+        </StackPanel>
+
+        <!-- ==================== lista ==================== -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding HasAiRun, Converter={StaticResource Visible}}">
+            <ItemsControl ItemsSource="{Binding AiComponents}" Margin="0,0,8,16">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="16,13">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   Text="{Binding Name}"/>
+
+                                        <!-- Estado lido da maquina, nunca presumido -->
+                                        <Border Margin="10,0,0,0" Padding="7,1" CornerRadius="3"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource Surface.RowAlt}">
+                                            <TextBlock Style="{StaticResource Text.Sub}" FontSize="10"
+                                                       Text="{Binding StateText}"/>
+                                        </Border>
+
+                                        <TextBlock Style="{StaticResource Text.Sub}" Margin="8,0,0,0"
+                                                   FontSize="10" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Risk.Notable}"
+                                                   Text="{Binding NeedsElevationText}"
+                                                   Visibility="{Binding NeedsElevation, Converter={StaticResource Visible}}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               TextWrapping="Wrap" Text="{Binding Description}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding Path}"/>
+
+                                    <!-- Medido agora. Zero e resposta, nao ausencia de resposta. -->
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding MeasuredText}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding ReportedOnlyText}"
+                                               Visibility="{Binding IsReportedOnly, Converter={StaticResource Visible}}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,4,0,0"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Risk.Notable}"
+                                               Text="{Binding ReturnsAfterUpdateText}"
+                                               Visibility="{Binding ReturnsAfterUpdate, Converter={StaticResource Visible}}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,7,0,0"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Text="{Binding Outcome}"
+                                               Visibility="{Binding Outcome, Converter={StaticResource NotEmpty}}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="12,6"
+                                            Content="{Binding TurnOffText}"
+                                            Foreground="{DynamicResource Risk.Danger}"
+                                            Click="OnTurnOff"
+                                            Visibility="{Binding CanTurnOff, Converter={StaticResource Visible}}"/>
+
+                                    <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="12,6"
+                                            Content="{Binding UndoText}"
+                                            Click="OnUndo"
+                                            Visibility="{Binding CanUndo, Converter={StaticResource Visible}}"/>
+
+                                    <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,4"
+                                            Margin="0,6,0,0" HorizontalAlignment="Right"
+                                            Content="{Binding DocsText}"
+                                            Click="OnOpenDocs"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="2" VerticalAlignment="Top" TextWrapping="Wrap"
+                   Style="{StaticResource Text.Sub}" Foreground="{DynamicResource Text.Muted}"
+                   Text="{DynamicResource S.ai.prompt}"
+                   Visibility="{Binding HasAiRun, Converter={StaticResource NotVisible}}"/>
+    </Grid>
+</UserControl>

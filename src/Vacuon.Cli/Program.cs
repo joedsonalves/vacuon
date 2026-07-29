@@ -5,6 +5,7 @@ using Vacuon.Core;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
+using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
@@ -28,6 +29,7 @@ try
         "scan" => Commands.Scan(args[1..]),
         "volumes" => Commands.Volumes(),
         "security" => Commands.Security(args[1..]),
+        "ai" => Commands.Ai(),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -91,6 +93,7 @@ static class Help
         Console.WriteLine($"    volumes                    {L.T("cli.cmdVolumes")}");
         Console.WriteLine($"    scan <drive|folder>        {L.T("cli.cmdScan")}");
         Console.WriteLine($"    security                   {L.T("cli.cmdSecurity")}");
+        Console.WriteLine($"    ai                         {L.T("cli.cmdAi")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -119,6 +122,55 @@ static class Help
 
 static class Commands
 {
+    /// <summary>
+    /// Lists the Microsoft AI components and their state. Reads only — switching anything off
+    /// is a deliberate act and lives in the app, behind a confirmation and a change journal.
+    /// </summary>
+    public static int Ai()
+    {
+        AiScanReport report = new AiComponentScanner().Scan();
+
+        Formatting.WriteHeading(L.T("cli.headAi"));
+
+        foreach (AiComponentStatus s in report.Items)
+        {
+            string state = L.T(s.State switch
+            {
+                ComponentState.On => "ai.stateOn",
+                ComponentState.Off => "ai.stateOff",
+                ComponentState.Absent => "ai.stateAbsent",
+                _ => "ai.stateUnknown",
+            });
+
+            Console.WriteLine();
+            Console.WriteLine($"  {s.Component.Name}  [{state}]");
+            Console.WriteLine($"    {s.Component.Description}");
+
+            if (s.Component.DisplayPath.Length > 0)
+                Console.WriteLine($"    {s.Component.DisplayPath}");
+
+            // Measured, or plainly nothing. Never an estimate of what it "would" cost.
+            Console.WriteLine("    " + (s.RunningProcesses > 0
+                ? L.T("ai.measured", ByteSize.Format(s.MeasuredBytes), s.RunningProcesses)
+                : L.T("ai.measuredNone")));
+
+            if (!s.Component.IsActionable) Console.WriteLine($"    {L.T("ai.reportedOnly")}");
+            if (s.Component.ReturnsAfterUpdate) Console.WriteLine($"    {L.T("ai.returnsAfterUpdate")}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  " + (report.MeasuredBytes > 0
+            ? L.T("ai.summary", report.Items.Count, report.OnCount, ByteSize.Format(report.MeasuredBytes))
+            : L.T("ai.summaryNothingRunning", report.Items.Count, report.OnCount)));
+
+        if (!report.WasElevated) Formatting.WriteWarning("  " + L.T("cli.notElevatedWarning"));
+
+        Console.WriteLine();
+        Formatting.WriteMuted("  " + L.T("cli.aiReadOnly"));
+        Console.WriteLine();
+        return 0;
+    }
+
     public static int Version()
     {
         Console.WriteLine($"Vacuon {AppInfo.Version}");
