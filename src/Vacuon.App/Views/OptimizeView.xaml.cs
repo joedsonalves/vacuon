@@ -27,4 +27,9 @@ public partial class OptimizeView : UserControl
     {
         if (Model is { } model) model.Panel = OptimizePanel.Startup;
     }
+
+    private void OnShowMemory(object sender, RoutedEventArgs e)
+    {
+        if (Model is { } model) model.Panel = OptimizePanel.Memory;
+    }
 }

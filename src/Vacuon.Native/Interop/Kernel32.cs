@@ -79,6 +79,41 @@ public static partial class Kernel32
         out ulong lpTotalNumberOfBytes,
         out ulong lpTotalNumberOfFreeBytes);
 
+    /// <summary>
+    /// Estado da memória física da máquina. Os campos vêm em bytes, e o
+    /// <c>dwLength</c> tem de ser preenchido antes da chamada.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GlobalMemoryStatusEx", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX buffer);
+
+    /// <summary>
+    /// Esvazia o working set de um processo.
+    /// <para>
+    /// As páginas não são liberadas: vão para a lista de standby ou para o pagefile, e o
+    /// processo as traz de volta — do disco — assim que precisar. É o que os "limpadores de
+    /// RAM" chamam de liberar memória, e é por isso que a interface do Vacuon diz na tela o
+    /// que realmente aconteceu.
+    /// </para>
+    /// </summary>
+    [LibraryImport("kernel32.dll", EntryPoint = "K32EmptyWorkingSet", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EmptyWorkingSet(IntPtr process);
+
     [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetVolumeInformation(

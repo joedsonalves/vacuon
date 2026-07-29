@@ -98,8 +98,12 @@
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <!-- Vermelho como o "Turn off" dos componentes de IA: a cor
+                                         de risco e o sinal mais rapido de que este botao desliga
+                                         algo. As duas telas mudam a maquina, entao falam igual. -->
                                     <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="12,6"
                                             Content="{Binding DisableText}"
+                                            Foreground="{DynamicResource Risk.Danger}"
                                             Click="OnDisable"
                                             Visibility="{Binding CanDisable, Converter={StaticResource Visible}}"/>
 
