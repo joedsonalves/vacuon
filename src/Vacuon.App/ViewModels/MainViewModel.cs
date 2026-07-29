@@ -1758,9 +1758,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public ICommand RunMemoryScanCommand { get; private set; } = null!;
     public ICommand TrimWorkingSetsCommand { get; private set; } = null!;
 
-    private async Task RunMemoryScanAsync()
+    private async Task RunMemoryScanAsync(string? keepStatus = null)
     {
-        MemoryStatusText = L.T("memory.running");
+        MemoryStatusText = keepStatus ?? L.T("memory.running");
 
         MemoryReport report = await Task.Run(() => new MemoryScanner().Scan(20));
         MemoryReading r = report.Reading;
@@ -1778,7 +1778,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                        $"{L.T("memory.inUse")} {Format.Bytes(r.InUseBytes)}  ·  " +
                        $"{L.T("memory.available")} {Format.Bytes(r.AvailableBytes)}";
 
-        MemoryStatusText = L.T("memory.load", r.LoadPercent);
+        // A result worth reading survives the refresh that follows it.
+        MemoryStatusText = keepStatus ?? L.T("memory.load", r.LoadPercent);
 
         MemoryCompressed = r.CompressedBytes > 0
             ? $"{L.T("memory.compressed")}: {Format.Bytes(r.CompressedBytes)}"
@@ -1791,6 +1792,57 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             : string.Empty;
 
         HasMemoryRun = true;
+    }
+
+    /// <summary>
+    /// Closes a program from the memory list.
+    /// <para>
+    /// Unlike the trim below, this really does free memory — so the wording may say freed.
+    /// Both figures are reported: what the process was holding, and how much the machine's
+    /// available memory actually rose. They are rarely the same number, and showing only the
+    /// flattering one would be the arithmetic this app exists not to do.
+    /// </para>
+    /// </summary>
+    public async Task CloseProcessAsync(MemoryRowViewModel row)
+    {
+        row.IsArmed = false;
+        row.IsClosing = true;
+
+        try
+        {
+            TerminateResult result = await Task.Run(() => new ProcessTerminator().CloseByName(row.Name));
+
+            if (result.Succeeded)
+            {
+                string held = Format.Bytes(result.HeldBytes);
+                string rose = Format.Bytes(Math.Max(0, result.AvailableRoseBytes));
+
+                // Gone means gone: the row leaves the list, which is the visible confirmation
+                // that the process really died rather than a message claiming it did.
+                MemoryRows.Remove(row);
+
+                MemoryStatusText = result.ClosedCount == result.AttemptedCount
+                    ? L.T("memory.closed", held, rose)
+                    : L.T("memory.closedPartial", result.ClosedCount, result.AttemptedCount, held, rose);
+
+                await RunMemoryScanAsync(keepStatus: MemoryStatusText);
+                return;
+            }
+
+            // Still there: the row stays, carrying the reason.
+            row.Outcome = L.T(result.Outcome switch
+            {
+                TerminateOutcome.Protected => "memory.closeProtected",
+                TerminateOutcome.AccessDenied => "memory.closeDenied",
+                TerminateOutcome.StillRunning => "memory.closeStillRunning",
+                TerminateOutcome.NotFound => "memory.closeNotFound",
+                _ => "memory.closeFailed",
+            });
+        }
+        finally
+        {
+            row.IsClosing = false;
+        }
     }
 
     /// <summary>

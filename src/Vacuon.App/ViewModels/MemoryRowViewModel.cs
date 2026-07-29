@@ -27,4 +27,54 @@ public sealed class MemoryRowViewModel(ProcessMemory process) : Observable
     public string StartupText => process.StartupEntryName is null
         ? string.Empty
         : L.T("memory.fromStartup", process.StartupEntryName);
+
+    // ================= fechar =================
+
+    /// <summary>Windows needs this one. No override, matching the protection list for paths.</summary>
+    public bool IsProtected { get; } = ProtectedProcesses.IsProtected(process.Name);
+
+    public bool CanClose => !IsProtected && !_isArmed && !_isClosing;
+    public string ProtectedText => L.T("memory.closeProtected");
+
+    /// <summary>
+    /// Set by the first click, cleared by the second or by Cancel.
+    /// <para>
+    /// Closing a process throws away whatever was unsaved in it, so the button asks twice.
+    /// The second button says what is being agreed to rather than just "OK".
+    /// </para>
+    /// </summary>
+    private bool _isArmed;
+    public bool IsArmed
+    {
+        get => _isArmed;
+        set
+        {
+            if (!Set(ref _isArmed, value)) return;
+            Raise(nameof(CanClose));
+        }
+    }
+
+    private bool _isClosing;
+    public bool IsClosing
+    {
+        get => _isClosing;
+        set
+        {
+            if (!Set(ref _isClosing, value)) return;
+            Raise(nameof(CanClose));
+        }
+    }
+
+    public string CloseText => L.T("memory.close");
+    public string ConfirmText => L.T("memory.closeConfirm");
+    public string CancelText => L.T("memory.closeCancel");
+
+    private string _outcome = string.Empty;
+    public string Outcome
+    {
+        get => _outcome;
+        set { Set(ref _outcome, value); Raise(nameof(HasOutcome)); }
+    }
+
+    public bool HasOutcome => _outcome.Length > 0;
 }
