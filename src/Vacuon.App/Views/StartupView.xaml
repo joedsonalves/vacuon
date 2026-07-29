@@ -1,0 +1,123 @@
+<UserControl x:Class="Vacuon.App.Views.StartupView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="NotVisible"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,18,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource Text.Section}" Text="{DynamicResource S.startup.title}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Text.Muted}"
+                       Text="{DynamicResource S.startup.intro}"/>
+
+            <!-- Desligar escreve StartupApproved, o mesmo controle do Gerenciador de Tarefas.
+                 Nada e apagado: a entrada continua onde o programa a colocou. -->
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                       Text="{DynamicResource S.startup.honestyNote}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,16,0,12">
+            <Button Style="{StaticResource Button.Primary}" Padding="14,7"
+                    Content="{DynamicResource S.action.inspect}"
+                    Command="{Binding RunStartupScanCommand}"/>
+
+            <TextBlock Style="{StaticResource Text.Sub}" Margin="14,0,0,0" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"
+                       Text="{Binding StartupStatusText}"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding HasStartupRun, Converter={StaticResource Visible}}">
+            <ItemsControl ItemsSource="{Binding StartupItems}" Margin="0,0,8,16">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="16,11">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis" Text="{Binding Name}"/>
+
+                                        <Border Margin="10,0,0,0" Padding="7,1" CornerRadius="3"
+                                                VerticalAlignment="Center"
+                                                Background="{DynamicResource Surface.RowAlt}">
+                                            <TextBlock Style="{StaticResource Text.Sub}" FontSize="10"
+                                                       Text="{Binding StateText}"/>
+                                        </Border>
+
+                                        <TextBlock Style="{StaticResource Text.Sub}" Margin="8,0,0,0"
+                                                   FontSize="10" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding SourceLabel}"/>
+
+                                        <TextBlock Style="{StaticResource Text.Sub}" Margin="8,0,0,0"
+                                                   FontSize="10" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource Risk.Notable}"
+                                                   Text="{Binding NeedsElevationText}"
+                                                   Visibility="{Binding NeedsElevation, Converter={StaticResource Visible}}"/>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               FontSize="11" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               ToolTip="{Binding Command}" Text="{Binding Command}"/>
+
+                                    <!-- Medido agora, nunca projetado -->
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,5,0,0"
+                                               FontSize="11" Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding MeasuredText}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,4,0,0"
+                                               FontSize="11" Foreground="{DynamicResource Risk.Notable}"
+                                               Text="{Binding MissingText}"
+                                               Visibility="{Binding TargetMissing, Converter={StaticResource Visible}}"/>
+
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,7,0,0"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               Text="{Binding Outcome}"
+                                               Visibility="{Binding Outcome, Converter={StaticResource NotEmpty}}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                    <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="12,6"
+                                            Content="{Binding DisableText}"
+                                            Click="OnDisable"
+                                            Visibility="{Binding CanDisable, Converter={StaticResource Visible}}"/>
+
+                                    <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="12,6"
+                                            Content="{Binding EnableText}"
+                                            Click="OnEnable"
+                                            Visibility="{Binding CanEnable, Converter={StaticResource Visible}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="2" VerticalAlignment="Top" TextWrapping="Wrap"
+                   Style="{StaticResource Text.Sub}" Foreground="{DynamicResource Text.Muted}"
+                   Text="{DynamicResource S.startup.prompt}"
+                   Visibility="{Binding HasStartupRun, Converter={StaticResource NotVisible}}"/>
+    </Grid>
+</UserControl>

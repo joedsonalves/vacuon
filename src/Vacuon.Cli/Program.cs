@@ -30,6 +30,7 @@ try
         "volumes" => Commands.Volumes(),
         "security" => Commands.Security(args[1..]),
         "ai" => Commands.Ai(),
+        "startup" => Commands.Startup(),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -94,6 +95,7 @@ static class Help
         Console.WriteLine($"    scan <drive|folder>        {L.T("cli.cmdScan")}");
         Console.WriteLine($"    security                   {L.T("cli.cmdSecurity")}");
         Console.WriteLine($"    ai                         {L.T("cli.cmdAi")}");
+        Console.WriteLine($"    startup                    {L.T("cli.cmdStartup")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -167,6 +169,42 @@ static class Commands
 
         Console.WriteLine();
         Formatting.WriteMuted("  " + L.T("cli.aiReadOnly"));
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>
+    /// Lists what Windows launches at sign-in. Reads only — switching one off lives in the app.
+    /// </summary>
+    public static int Startup()
+    {
+        StartupReport report = new StartupScanner().Scan();
+
+        Formatting.WriteHeading(L.T("cli.headStartup"));
+
+        foreach (StartupEntry e in report.Entries
+                     .OrderByDescending(e => e.IsEnabled)
+                     .ThenByDescending(e => e.MeasuredBytes))
+        {
+            string state = L.T(e.IsEnabled ? "startup.enabled" : "startup.disabled");
+
+            Console.WriteLine();
+            Console.WriteLine($"  {e.Name}  [{state}]  {e.SourceLabel}");
+            Console.WriteLine($"    {e.Command}");
+            Console.WriteLine("    " + (e.RunningProcesses > 0
+                ? L.T("startup.measured", ByteSize.Format(e.MeasuredBytes), e.RunningProcesses)
+                : L.T("startup.measuredNone")));
+
+            if (e.TargetPath is not null && !e.TargetExists)
+                Console.WriteLine($"    {L.T("startup.missingTarget")}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  " + (report.MeasuredBytes > 0
+            ? L.T("startup.summary", report.Entries.Count, report.EnabledCount, ByteSize.Format(report.MeasuredBytes))
+            : L.T("startup.summaryNothingRunning", report.Entries.Count, report.EnabledCount)));
+
+        if (!report.WasElevated) Formatting.WriteWarning("  " + L.T("cli.notElevatedWarning"));
         Console.WriteLine();
         return 0;
     }
