@@ -58,6 +58,9 @@ public partial class MainWindow : Window
     private void OnNavSecurity(object sender, RoutedEventArgs e) =>
         Navigate(Section.Security, "nav.security");
 
+    private void OnNavOptimize(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Optimize, "nav.optimize");
+
     private void OnNavSettings(object sender, RoutedEventArgs e) =>
         Navigate(Section.Settings, "nav.settings");
 
