@@ -569,11 +569,15 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         set => Set(ref _selectedRow, value);
     }
 
+    /// <summary>Entry behind <see cref="CurrentFolderPath"/>, or -1 outside folder mode.</summary>
+    private int _currentFolderIndex = -1;
+
     public void ShowFolder(int entryIndex)
     {
         if (Index is null) return;
 
         Mode = ListMode.Folder;
+        _currentFolderIndex = entryIndex;
         CurrentFolderPath = Index.GetFullPath(entryIndex);
 
         var children = new List<(int Index, long Size)>();
@@ -1472,6 +1476,261 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
 
         RaiseSelectionChanged();
+    }
+
+    // ================= mover =================
+
+    /// <summary>
+    /// Asks for a destination folder, plans the move, confirms it, runs it, and puts the
+    /// index back in agreement with the disk.
+    /// <para>
+    /// This is the one batch action in the app that destroys nothing, and it exists because
+    /// triaging a folder by hand — open a video, decide, move it — was impossible with a
+    /// highlight that a double click wipes out. It acts on the ticked basket, which does
+    /// not care how many files were opened in between.
+    /// </para>
+    /// </summary>
+    public void MoveSelection(Window owner)
+    {
+        VolumeIndex? index = Index;
+        List<int> selected = EffectiveEntries();
+
+        var byPath = new Dictionary<string, int>(selected.Count, StringComparer.OrdinalIgnoreCase);
+
+        if (index is not null)
+        {
+            foreach (int i in selected)
+            {
+                if (i < 0 || i >= index.Entries.Length || !index.Entries[i].IsInUse) continue;
+
+                string path = index.GetFullPath(i);
+                if (path.Length > 0) byPath[path.TrimEnd('\\')] = i;
+            }
+        }
+
+        if (byPath.Count == 0)
+        {
+            StatusText = L.T("move.nothingSelected");
+            return;
+        }
+
+        string? destination = AskForFolder();
+        if (destination is null) return;
+
+        List<string> paths = [.. byPath.Keys];
+        var service = new MoveService();
+
+        MoveReport plan = service.Plan(paths, destination);
+
+        // A destination the service refuses never reaches the dialog: there is nothing to
+        // confirm, only something to say.
+        if (plan.Verdict != DestinationVerdict.Ok)
+        {
+            StatusText = L.T(plan.Verdict switch
+            {
+                DestinationVerdict.Missing => "move.destinationMissing",
+                DestinationVerdict.NotAFolder => "move.destinationNotAFolder",
+                _ => "move.destinationProtected",
+            });
+            return;
+        }
+
+        if (!MoveDialog.Confirm(owner, plan)) return;
+
+        MoveReport report = service.Execute(paths, plan.Destination);
+
+        ApplyMove(report, byPath);
+    }
+
+    /// <summary>
+    /// Brings the index in line with what the disk just did.
+    /// <para>
+    /// Two different truths, and telling them apart is the whole job. Within one volume the
+    /// item only changed parent — re-parenting it keeps the totals right, because the bytes
+    /// never left. Across volumes it really is gone from here, so it leaves the index the
+    /// same way a delete does, and that space really was freed.
+    /// </para>
+    /// </summary>
+    private void ApplyMove(MoveReport report, Dictionary<string, int> byPath)
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return;
+
+        // Resolved on the first item that needs it: a batch that only left the volume has
+        // nothing to place, and locating the folder would read the disk for nothing.
+        int destinationEntry = -1;
+        bool destinationResolved = false;
+
+        var moved = new HashSet<int>();
+        Removal left = default;
+        int unplaced = 0;
+
+        foreach (MoveResult result in report.Results)
+        {
+            if (!result.Succeeded) continue;
+            if (!byPath.TryGetValue(result.Source.TrimEnd('\\'), out int entry)) continue;
+
+            moved.Add(entry);
+
+            if (result.CrossVolume)
+            {
+                // Gone from this volume for real: its clusters are free here now.
+                left += index.MarkDeleted(entry);
+                continue;
+            }
+
+            if (!destinationResolved)
+            {
+                destinationEntry = MoveTarget.Locate(index, report.Destination);
+                destinationResolved = true;
+            }
+
+            if (destinationEntry < 0 ||
+                !index.MarkMoved(entry, destinationEntry, result.FinalName.AsSpan()))
+            {
+                unplaced++;
+            }
+        }
+
+        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+
+        ReportMove(report, left, unplaced);
+        AfterMove(moved, left);
+    }
+
+    /// <summary>
+    /// Says what happened — and, for a move that stayed on the volume, what did not.
+    /// <para>
+    /// "42 items moved · 30 GiB" reads like 30 GiB came back. On one volume not a single
+    /// byte did: the files are the same size in the same place on the platter, under a
+    /// different name in a different directory. The sentence says so.
+    /// </para>
+    /// </summary>
+    private void ReportMove(MoveReport report, Removal left, int unplaced)
+    {
+        string destination = report.Destination;
+        string count = Format.Count(report.MovedCount);
+        string size = Format.Bytes(report.Bytes);
+
+        string headline = report.FailedCount > 0
+            ? L.T("move.donePartial", count, destination, size, Format.Count(report.FailedCount))
+            : report.MovedCount == 1
+                ? L.T("move.doneOne", destination, size)
+                : L.T("move.done", count, destination, size);
+
+        var parts = new List<string>(3) { headline };
+
+        if (report.MovedCount > 0)
+        {
+            // Only the MFT read measures allocation; without it the logical size is the
+            // honest figure, exactly as the delete report does it.
+            long freed = HasRealAllocation ? left.BytesOnDisk : left.LogicalBytes;
+
+            parts.Add(report.CrossVolume
+                ? L.T("move.freed", Format.Bytes(freed))
+                : L.T("move.freedNothing"));
+        }
+
+        int renamed = report.Renames.Count();
+        if (renamed > 0) parts.Add(L.T("move.renamed", Format.Count(renamed)));
+
+        // The index could not place them, so the list is now behind the disk for those
+        // items. Saying it is the only alternative to showing them where they no longer are.
+        if (unplaced > 0) parts.Add(L.T("move.staleIndex", Format.Count(unplaced)));
+
+        StatusText = string.Join(" · ", parts);
+    }
+
+    /// <summary>
+    /// Refreshes the list and the tree around the items that just changed place.
+    /// </summary>
+    private void AfterMove(HashSet<int> moved, Removal left)
+    {
+        VolumeIndex? index = Index;
+        if (index is null || moved.Count == 0) return;
+
+        // Untick before the rows are rebuilt: a row reads its tick from the basket as it is
+        // created, so clearing afterwards would leave a ticked-looking row over an empty
+        // basket — and the action bar would offer to act on it.
+        foreach (int entry in moved) _basket.Remove(entry);
+
+        int dropped = 0;
+
+        for (int i = _rows.Count - 1; i >= 0; i--)
+        {
+            int entry = _rows[i].EntryIndex;
+            if (!moved.Contains(entry)) continue;
+
+            bool stillHere = index.Entries[entry].IsInUse
+                          && (Mode != ListMode.Folder
+                              || index.Entries[entry].ParentIndex == (uint)_currentFolderIndex);
+
+            if (!stillHere)
+            {
+                _rows.RemoveAt(i);
+                dropped++;
+                continue;
+            }
+
+            // Same entry, new name and new path. The row caches both, so it is rebuilt
+            // rather than nudged — and it reads its tick back from the basket on the way.
+            _rows[i] = new FileRowViewModel(index, entry, this);
+        }
+
+        if (dropped > 0) TotalMatches -= dropped;
+        PublishRows();
+
+        _basket.RemoveWhere(i => !index.Entries[i].IsInUse);
+        _listSelection.RemoveAll(r => !index.Entries[r.EntryIndex].IsInUse);
+
+        if (SelectedRow is not null && !index.Entries[SelectedRow.EntryIndex].IsInUse)
+            SelectedRow = _listSelection.Count > 0 ? _listSelection[0] : null;
+
+        Root?.Resync();
+        RaiseSelectionChanged();
+        RefreshAggregates();
+
+        // Only a move across volumes changes free space; on one volume the cards are
+        // already right and re-reading them would say the same thing.
+        if (!left.IsEmpty) LoadVolumes();
+    }
+
+    /// <summary>
+    /// The folder picker, opened on the folder being listed.
+    /// <para>
+    /// It allows creating a folder on the spot, which is how sorting usually starts — and
+    /// why <see cref="MoveTarget"/> has to be able to adopt a folder younger than the scan.
+    /// </para>
+    /// </summary>
+    private string? AskForFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = L.T("move.pickFolder"),
+            Multiselect = false,
+        };
+
+        string start = CurrentFolderPath.Length > 0 ? CurrentFolderPath : Index?.Volume.Root ?? string.Empty;
+        if (start.Length > 0 && Directory.Exists(start)) dialog.InitialDirectory = start;
+
+        return dialog.ShowDialog() == true ? dialog.FolderName : null;
+    }
+
+    /// <summary>Human-readable reason a single item did not move.</summary>
+    private static string Describe(MoveResult result)
+    {
+        string reason = result.Outcome switch
+        {
+            MoveOutcome.Blocked => result.Message ?? L.T("delete.outcomeBlocked"),
+            MoveOutcome.NotFound => L.T("delete.outcomeNotFound"),
+            MoveOutcome.InUse => L.T("delete.outcomeInUse"),
+            MoveOutcome.AccessDenied => L.T("delete.outcomeAccessDenied"),
+            MoveOutcome.IntoItself => L.T("move.outcomeIntoItself"),
+            MoveOutcome.AlreadyThere => L.T("move.outcomeAlreadyThere"),
+            _ => result.Message ?? L.T("delete.outcomeFailed"),
+        };
+
+        return $"{result.Source} — {reason}";
     }
 
     // ================= segurança =================

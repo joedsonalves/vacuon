@@ -1,0 +1,115 @@
+<Window x:Class="Vacuon.App.Views.MoveDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:infra="clr-namespace:Vacuon.App.Infra"
+        Width="620" SizeToContent="Height"
+        MinHeight="260" MaxHeight="700"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{DynamicResource Surface.Window}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Window.Resources>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </Window.Resources>
+
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- header: the badge is amber, not red. Moving destroys nothing. -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <Border CornerRadius="4" Padding="7,3" VerticalAlignment="Center"
+                    Background="{DynamicResource Risk.Notable}">
+                <TextBlock x:Name="ModeBadgeText" FontSize="10" FontWeight="Bold"
+                           FontFamily="{StaticResource Font.Ui}" Foreground="White"/>
+            </Border>
+            <TextBlock x:Name="TitleText" Style="{StaticResource Text.Title}" Margin="10,0,0,0"
+                       FontSize="17" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- where it all goes: the one line the reader must not misread -->
+        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="12,9">
+            <TextBlock x:Name="DestinationText" Style="{StaticResource Text.Body}"
+                       TextTrimming="CharacterEllipsis"/>
+        </Border>
+
+        <TextBlock x:Name="VolumeNote" Grid.Row="2" Style="{StaticResource Text.Sub}"
+                   Margin="0,10,0,0" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Text.Secondary}"/>
+
+        <TextBlock x:Name="Summary" Grid.Row="3" Style="{StaticResource Text.Body}"
+                   Margin="0,14,0,0" FontWeight="SemiBold"/>
+
+        <!-- every item, with the name it will actually have on the other side -->
+        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,10,0,0" Padding="0"
+                MaxHeight="230">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12,10">
+                <StackPanel>
+                    <ItemsControl x:Name="Items">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Style="{StaticResource Text.Sub}"
+                                                   FontSize="11" TextTrimming="CharacterEllipsis"
+                                                   Text="{Binding Path}" ToolTip="{Binding Path}"/>
+                                        <!-- Only shown for the ones the destination renamed. -->
+                                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                                   Foreground="{DynamicResource Risk.Notable}"
+                                                   Text="{Binding RenamedTo}"
+                                                   Visibility="{Binding RenamedTo,
+                                                                Converter={StaticResource NotEmpty}}"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                               FontSize="11" Margin="12,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding SizeText}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="MoreItems" Style="{StaticResource Text.Sub}" FontSize="11"
+                               Margin="0,8,0,0" Foreground="{DynamicResource Text.Muted}"
+                               Visibility="{Binding Text, RelativeSource={RelativeSource Self},
+                                            Converter={StaticResource NotEmpty}}"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- what will not go, and what goes in under another name -->
+        <StackPanel Grid.Row="5" Margin="0,12,0,0">
+            <Border x:Name="NoticeBox" CornerRadius="6" Padding="12"
+                    Background="{DynamicResource Accent.Muted}" Visibility="Collapsed">
+                <TextBlock x:Name="NoticeText" Style="{StaticResource Text.Sub}"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+            <TextBlock x:Name="BodyNote" Style="{StaticResource Text.Sub}" FontSize="11"
+                       Margin="0,10,0,0" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Text.Muted}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,18,0,0">
+            <Button x:Name="CancelButton" Style="{StaticResource Button.Base}"
+                    MinWidth="104" IsCancel="True" Click="OnCancel"/>
+            <Button x:Name="ConfirmButton" Style="{StaticResource Button.Primary}"
+                    MinWidth="104" Margin="8,0,0,0" IsDefault="True" Click="OnConfirm"/>
+        </StackPanel>
+    </Grid>
+</Window>

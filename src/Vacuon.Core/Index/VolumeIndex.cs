@@ -177,6 +177,165 @@ public sealed class VolumeIndex
         return new Removal(subtree.Count, logical, onDisk);
     }
 
+    /// <summary>
+    /// Re-parents an entry — and, when the destination folder already held that name,
+    /// renames it too.
+    /// <para>
+    /// Called after a move really happened on disk, and only when the move stayed on this
+    /// volume. Marking the entry deleted instead would be the easy way out and a lie twice
+    /// over: the file is still there, and the volume total would drop by its size while the
+    /// free space on disk did not move a byte.
+    /// </para>
+    /// <para>
+    /// The subtree needs no visit. Everything below points at its own parent, so a folder
+    /// that changes parent takes its whole subtree with it, exactly as NTFS does.
+    /// </para>
+    /// </summary>
+    /// <returns><c>false</c> when the move could not be represented; the index is untouched.</returns>
+    public bool MarkMoved(int index, int newParentIndex, ReadOnlySpan<char> newName)
+    {
+        if (index < 0 || index >= Entries.Length || !Entries[index].IsInUse) return false;
+        if (index == RootIndex) return false;
+
+        if (newParentIndex < 0 || newParentIndex >= Entries.Length) return false;
+        if (!Entries[newParentIndex].IsInUse || !Entries[newParentIndex].IsDirectory) return false;
+
+        // A folder made its own descendant's child would build a ring, and every walk up
+        // the parent chain — GetFullPath, the subtree sizes, the delete — would spin
+        // until its guard fired.
+        if (newParentIndex == index || IsDescendant(newParentIndex, index)) return false;
+
+        bool renamed = newName.Length > 0 && !newName.SequenceEqual(GetName(index));
+
+        // Read the name before appending: Append can grow the blob, and the span from
+        // GetName points into the buffer it just replaced.
+        int offset = renamed ? Names.Append(newName) : 0;
+
+        ref FileEntry entry = ref Entries[index];
+        entry.ParentIndex = (uint)newParentIndex;
+
+        if (renamed)
+        {
+            entry.NameOffset = offset;
+            entry.NameLength = (ushort)newName.Length;
+        }
+
+        InvalidateAggregates();
+        return true;
+    }
+
+    /// <summary>
+    /// Puts a directory that exists on disk but not in this index into it — at its real
+    /// MFT record number, never at an invented one.
+    /// <para>
+    /// Needed because the obvious way to use a move is to create the destination folder on
+    /// the spot, which leaves it younger than the scan. The record number comes from the
+    /// file system itself (the file id), so a later journal delta about that record lands
+    /// on the same entry rather than on a stranger.
+    /// </para>
+    /// </summary>
+    /// <returns>The entry index, or -1 when the slot is out of range or already in use.</returns>
+    public int AddDirectory(int recordNumber, int parentIndex, ReadOnlySpan<char> name)
+    {
+        if (recordNumber <= 0 || recordNumber >= Entries.Length) return -1;
+        if (name.Length == 0 || name.Length > ushort.MaxValue) return -1;
+        if (parentIndex < 0 || parentIndex >= Entries.Length) return -1;
+        if (!Entries[parentIndex].IsInUse || !Entries[parentIndex].IsDirectory) return -1;
+
+        // Occupied means the index disagrees with the disk about that record. Overwriting
+        // would hide the disagreement; refusing lets the caller say the scan is stale.
+        if (Entries[recordNumber].IsInUse) return -1;
+
+        int offset = Names.Append(name);
+
+        Entries[recordNumber] = new FileEntry
+        {
+            RecordNumber = (uint)recordNumber,
+            ParentIndex = (uint)parentIndex,
+            NameOffset = offset,
+            NameLength = (ushort)name.Length,
+            Flags = EntryFlags.Directory,
+            HardLinkCount = 1,
+        };
+
+        InvalidateAggregates();
+        return recordNumber;
+    }
+
+    /// <summary>Is <paramref name="candidate"/> somewhere below <paramref name="ancestor"/>?</summary>
+    private bool IsDescendant(int candidate, int ancestor)
+    {
+        int root = RootIndex;
+        int current = candidate;
+
+        for (int guard = 0; guard < 512; guard++)
+        {
+            if (current == ancestor) return true;
+            if (current == root) return false;
+
+            uint parent = Entries[current].ParentIndex;
+            if (parent >= (uint)Entries.Length || parent == (uint)current) return false;
+
+            current = (int)parent;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The entry a full path names, or -1 when this index has never heard of it.
+    /// <para>
+    /// Walks down from the root comparing one name at a time. No dictionary of paths is
+    /// kept anywhere — a million of them is exactly the cost the flat index exists to
+    /// avoid — and a lookup this shallow costs one pass over each folder on the way.
+    /// </para>
+    /// </summary>
+    public int FindEntry(ReadOnlySpan<char> path)
+    {
+        int root = RootIndex;
+
+        string rootPath = GetFullPath(root);
+        if (rootPath.Length == 0) return -1;
+
+        ReadOnlySpan<char> rest = path.Trim().TrimEnd('\\');
+        ReadOnlySpan<char> prefix = rootPath.AsSpan().TrimEnd('\\');
+
+        if (rest.Length < prefix.Length) return -1;
+        if (!rest[..prefix.Length].Equals(prefix, StringComparison.OrdinalIgnoreCase)) return -1;
+
+        rest = rest[prefix.Length..];
+        if (rest.Length > 0 && rest[0] != '\\') return -1;
+
+        int current = root;
+
+        while (rest.Length > 0)
+        {
+            rest = rest[1..];   // the separator
+
+            int cut = rest.IndexOf('\\');
+            ReadOnlySpan<char> component = cut < 0 ? rest : rest[..cut];
+            rest = cut < 0 ? default : rest[cut..];
+
+            if (component.Length == 0) continue;
+
+            int found = -1;
+
+            foreach (int child in GetChildren(current))
+            {
+                if (!Entries[child].IsInUse) continue;
+                if (!GetName(child).Equals(component, StringComparison.OrdinalIgnoreCase)) continue;
+
+                found = child;
+                break;
+            }
+
+            if (found < 0) return -1;
+            current = found;
+        }
+
+        return current;
+    }
+
     public int Capacity => Entries.Length;
 
     /// <summary>

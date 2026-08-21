@@ -349,6 +349,8 @@
                             <MenuItem Header="{DynamicResource S.action.copyPath}" InputGestureText="Ctrl+C"
                                       Command="{Binding CopyPathCommand}"/>
                             <Separator/>
+                            <MenuItem Header="{DynamicResource S.move.button}" Click="OnMoveTo"/>
+                            <Separator/>
                             <MenuItem Header="{DynamicResource S.select.all}" Command="{Binding SelectAllCommand}"/>
                             <MenuItem Header="{DynamicResource S.select.invert}" Command="{Binding InvertSelectionCommand}"/>
                             <MenuItem Header="{DynamicResource S.select.none}" Command="{Binding ClearSelectionCommand}"/>
@@ -389,6 +391,15 @@
                                 Content="{DynamicResource S.action.reveal}" Command="{Binding RevealCommand}"/>
                             <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.action.copyPath}" Command="{Binding CopyPathCommand}"/>
+
+                        <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
+
+                        <!-- Mover fica entre a divisoria e a de apagar: e a unica acao em
+                             lote que nao destroi nada, e nao deve encostar no botao vermelho. -->
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="{DynamicResource S.move.button}"
+                                ToolTip="{DynamicResource S.move.buttonHint}"
+                                Click="OnMoveTo"/>
 
                         <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
 

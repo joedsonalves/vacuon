@@ -177,6 +177,59 @@ public sealed class FolderNodeViewModel : Observable
         Raise(nameof(ShareOfVolume));
     }
 
+    /// <summary>
+    /// Re-reads this subtree from the index, after folders changed place.
+    /// <para>
+    /// A move is the one operation that both takes a node away from a parent and gives it
+    /// to another, so pruning what is gone — which is all a delete needs — would leave the
+    /// destination looking empty until the next scan.
+    /// </para>
+    /// </summary>
+    public void Resync()
+    {
+        if (_index is null) return;
+
+        if (_loaded)
+        {
+            for (int i = Children.Count - 1; i >= 0; i--)
+            {
+                FolderNodeViewModel child = Children[i];
+                if (child._index is null) continue;   // the expansion placeholder
+
+                ref FileEntry entry = ref _index.Entries[child._entryIndex];
+
+                // Gone, or now hanging off somebody else.
+                if (!entry.IsInUse || entry.ParentIndex != (uint)_entryIndex) Children.RemoveAt(i);
+                else child.Resync();
+            }
+
+            foreach (int candidate in _index.GetChildren(_entryIndex))
+            {
+                if (!_index.Entries[candidate].IsDirectory) continue;
+                if (Holds(candidate)) continue;
+
+                Children.Add(new FolderNodeViewModel(_index, candidate, _selection));
+            }
+        }
+        else if (Children.Count == 0 && _index.HasChildDirectories(_entryIndex))
+        {
+            // Never opened, and something just moved in: it needs its arrow back.
+            Children.Add(Placeholder);
+        }
+
+        Raise(nameof(SubtreeSize));
+        Raise(nameof(SizeText));
+        Raise(nameof(ShareOfVolume));
+    }
+
+    private bool Holds(int entryIndex)
+    {
+        foreach (FolderNodeViewModel child in Children)
+            if (child._index is not null && child._entryIndex == entryIndex) return true;
+
+        return false;
+    }
+
     private void LoadChildren()
     {
         if (_loaded || _index is null) return;

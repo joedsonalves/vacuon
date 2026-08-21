@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-244-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-262-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -186,6 +186,41 @@ you must not be able to delete Videos itself.
 
 This arrived before milestone M4, so **the Recycle Bin is currently the only undo**, and
 the dialog says exactly that instead of implying a safety net that does not exist yet.
+
+### Moving — the batch action that destroys nothing
+
+Sorting a folder by hand is not a deletion: you open a file, decide, and it either stays or
+goes somewhere else. The highlight was useless for that — a double click to open the next
+file wipes it out — so **Move to…** works on the ticked basket, which survives opening
+files, changing folder, sorting and searching. `Space` ticks whatever is highlighted, so a
+pass is: open, look, `Esc`, `Space`.
+
+**Nothing is ever overwritten.** A name the destination already uses goes in as
+`render (2).mp4`, and the confirmation lists which ones will be renamed before anything
+moves. That includes two files called the same thing coming from two different folders in
+the same batch — the destination is empty in both plans, so only the batch itself can
+notice, and the Shell, told not to ask, would happily move one over the other.
+
+The dialog also says what a move does to your free space, because the answer is usually
+"nothing":
+
+- **Same volume** — this rewrites a directory entry. It is instant, and it frees zero
+  bytes. The index re-parents the entry instead of dropping it, so the volume total does
+  not fall by a number the disk never gave back.
+- **Another volume** — a copy followed by a delete. That does free space here, and the app
+  reports the figure measured from the entries that left, not from what the Shell claimed.
+
+Destinations are checked differently from deletion targets: `Videos` must not be *deleted*
+and is a perfectly ordinary place to *move a video into*. What is refused is writing into
+what Windows and installed programs own — `%WINDIR%`, System32, Program Files, credential
+stores, Vacuon's own folder.
+
+Creating the destination folder in the picker is the normal way to start sorting, which
+means moving into a folder younger than the scan. Vacuon adopts it into the index at its
+**real MFT record number**, read from the file system — never at an invented slot, so a
+later journal delta about that record lands on the right entry. When it cannot be placed
+(another volume, a walk-based scan, a record already taken), the app says the scan is now
+behind the disk and to press `F5`, instead of showing the files where they no longer are.
 
 ### Reopening — snapshot plus the change journal
 
@@ -485,6 +520,7 @@ src/
 │  │                IncrementalUpdater (snapshot + USN delta)
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
 │  ├─ Actions/      DeleteService (Recycle Bin · permanent · dry-run)
+│  │                MoveService (never overwrites) · MoveTarget (adopts a new folder)
 │  ├─ Safety/       ProtectedPaths — the list nothing overrides
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (en-US base + optional pt-BR, embedded JSON)
@@ -522,12 +558,13 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 14. **`FSCTL_READ_USN_JOURNAL` is `METHOD_NEITHER`,** which is why its control code ends in `0xBB` and not `0xB8`. A wrong code fails with a generic "invalid function".
 15. **A USN file reference is not an MFT record number.** The high 16 bits are the sequence number; using the whole 64-bit value as an array index would be catastrophic.
 16. **`ListView.SelectedItems` is not a bindable dependency property.** Multi-selection has to be pushed to the view model from code-behind.
-17. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
+17. **`FOF_NOCONFIRMATION` on a move means "overwrite without asking".** The Shell does not refuse a name that already exists at the destination — it replaces it, reports success, and the file that was there is gone. The caller has to compute a free name itself, and it has to count the names the *same batch* has already claimed: two files called `clip.mkv` from two different folders both see an empty destination.
+18. **A resource named `Strings.en-US.json` is turned into a satellite assembly.** It matches the `name.culture.extension` pattern, so MSBuild infers the culture and ships the file to `bin\en-US\*.resources.dll` instead of the main assembly. The build succeeds, `GetManifestResourceStream` returns null, and the whole UI renders as `[key]`. `WithCulture="false"` is mandatory — there is a test guarding it.
 
-18. **The record header's link count (offset 0x12) counts the DOS 8.3 alias as a link.** NTFS counts `$FILE_NAME` attributes there, and every name that does not fit 8.3 gets a second one in the DOS namespace. On a real volume that marked **75% of all files** as hardlinked — a downloaded `.mp4`, an installer `.exe`. Since hardlinked content is deliberately charged to the disk only once, it **hid 217 GiB**. The true count is the number of `$FILE_NAME` attributes whose namespace is not `Dos`.
-19. **For a compressed or sparse attribute, the size on disk is at 0x40, not 0x28.** Field 0x28 holds the run space *as if nothing had been compressed or punched out*; `CompressedSize` at 0x40 — present only when the flag is set — is what is really occupied. And in those attributes the stream name starts at **0x48**, not 0x40.
-20. **`$BadClus:$Bad` is the size of the whole volume and occupies zero.** Every NTFS volume carries that sparse named stream, and `$Extend\$UsnJrnl:$J` is another. Using their logical size as occupancy added **568 GiB to a 476 GiB disk**. A fallback like `allocated > 0 ? allocated : logical` looks harmless — a resident stream does report 0 — and is exactly what turns them into hundreds of imaginary gigabytes.
-21. **Two totals that are never compared drift apart unnoticed.** The app printed `Size on disk 758 GiB` one line above `377 GiB used of 476 GiB` for an entire release. Measuring *more* than the volume reports as used is arithmetically impossible and always a bug; measuring slightly less is the healthy case, because directory indexes and metadata occupy clusters without being files. Hence `VolumeIndex.CheckAgainstFileSystem()`, the cross-check that would have caught traps 18, 19 and 20 on the first run.
+19. **The record header's link count (offset 0x12) counts the DOS 8.3 alias as a link.** NTFS counts `$FILE_NAME` attributes there, and every name that does not fit 8.3 gets a second one in the DOS namespace. On a real volume that marked **75% of all files** as hardlinked — a downloaded `.mp4`, an installer `.exe`. Since hardlinked content is deliberately charged to the disk only once, it **hid 217 GiB**. The true count is the number of `$FILE_NAME` attributes whose namespace is not `Dos`.
+20. **For a compressed or sparse attribute, the size on disk is at 0x40, not 0x28.** Field 0x28 holds the run space *as if nothing had been compressed or punched out*; `CompressedSize` at 0x40 — present only when the flag is set — is what is really occupied. And in those attributes the stream name starts at **0x48**, not 0x40.
+21. **`$BadClus:$Bad` is the size of the whole volume and occupies zero.** Every NTFS volume carries that sparse named stream, and `$Extend\$UsnJrnl:$J` is another. Using their logical size as occupancy added **568 GiB to a 476 GiB disk**. A fallback like `allocated > 0 ? allocated : logical` looks harmless — a resident stream does report 0 — and is exactly what turns them into hundreds of imaginary gigabytes.
+22. **Two totals that are never compared drift apart unnoticed.** The app printed `Size on disk 758 GiB` one line above `377 GiB used of 476 GiB` for an entire release. Measuring *more* than the volume reports as used is arithmetically impossible and always a bug; measuring slightly less is the healthy case, because directory indexes and metadata occupy clusters without being files. Hence `VolumeIndex.CheckAgainstFileSystem()`, the cross-check that would have caught traps 19, 20 and 21 on the first run.
 
 ## Contributing
 

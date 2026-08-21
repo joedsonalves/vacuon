@@ -114,6 +114,12 @@ public static partial class Kernel32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool EmptyWorkingSet(IntPtr process);
 
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetFileInformationByHandle(
+        SafeFileHandle hFile,
+        out ByHandleFileInformation lpFileInformation);
+
     [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetVolumeInformation(
@@ -125,6 +131,72 @@ public static partial class Kernel32
         out uint lpFileSystemFlags,
         [Out] char[] lpFileSystemNameBuffer,
         int nFileSystemNameSize);
+}
+
+/// <summary>
+/// BY_HANDLE_FILE_INFORMATION — o que <c>GetFileInformationByHandle</c> devolve.
+/// <para>
+/// The two halves of nFileIndex are the file id: on NTFS its low 48 bits are the MFT
+/// record number and the top 16 are the sequence number. It is the only way to learn
+/// the record number of a folder without reading the MFT — which needs elevation.
+/// </para>
+/// </summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct ByHandleFileInformation
+{
+    public uint dwFileAttributes;
+    public long ftCreationTime;
+    public long ftLastAccessTime;
+    public long ftLastWriteTime;
+    public uint dwVolumeSerialNumber;
+    public uint nFileSizeHigh;
+    public uint nFileSizeLow;
+    public uint nNumberOfLinks;
+    public uint nFileIndexHigh;
+    public uint nFileIndexLow;
+}
+
+/// <summary>
+/// Reads the MFT record number of a path that exists.
+/// <para>
+/// Opening a handle with no access rights at all is enough to ask for the id, so this
+/// works in an ordinary session — no elevation, and no share violation against whoever
+/// else has the file open.
+/// </para>
+/// </summary>
+public static class FileIdentity
+{
+    /// <summary>The NTFS record number, or -1 when it could not be read.</summary>
+    public static long RecordNumberOf(string path)
+    {
+        try
+        {
+            using SafeFileHandle handle = Kernel32.CreateFile(
+                path,
+                0,
+                Kernel32.FILE_SHARE_READ | Kernel32.FILE_SHARE_WRITE | Kernel32.FILE_SHARE_DELETE,
+                0,
+                Kernel32.OPEN_EXISTING,
+                // Without BACKUP_SEMANTICS, CreateFile refuses to open a directory.
+                Kernel32.FILE_FLAG_BACKUP_SEMANTICS,
+                0);
+
+            if (handle.IsInvalid) return -1;
+
+            if (!Kernel32.GetFileInformationByHandle(handle, out ByHandleFileInformation info))
+                return -1;
+
+            long id = ((long)info.nFileIndexHigh << 32) | info.nFileIndexLow;
+
+            // Drop the sequence number: the index is addressed by record number alone.
+            return id & 0x0000_FFFF_FFFF_FFFFL;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                        or ArgumentException or NotSupportedException)
+        {
+            return -1;
+        }
+    }
 }
 
 /// <summary>

@@ -91,6 +91,22 @@ public partial class ExplorerView : UserControl
     /// </summary>
     private void OnListKeyDown(object sender, KeyEventArgs e)
     {
+        // Space ticks whatever is highlighted, without the mouse ever finding the little
+        // checkbox. It is the gesture that makes reviewing a folder file by file work:
+        // open, look, Esc, Space — and the tick stays through the next double click.
+        if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            List<FileRowViewModel> rows = [.. Files.SelectedItems.OfType<FileRowViewModel>()];
+            if (rows.Count == 0) return;
+
+            // One decision for the whole highlight: if anything is unticked, tick it all.
+            bool tick = rows.Exists(static r => !r.IsChecked);
+            foreach (FileRowViewModel row in rows) row.IsChecked = tick;
+
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Delete) return;
 
         Delete(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
@@ -100,7 +116,20 @@ public partial class ExplorerView : UserControl
         e.Handled = true;
     }
 
-    private void OnTreeKeyDown(object sender, KeyEventArgs e) => OnListKeyDown(sender, e);
+    /// <summary>
+    /// The tree gets Del and Shift+Del only. Space belongs to the list, where it ticks the
+    /// highlighted rows — forwarding it from here would tick files the tree cannot show.
+    /// </summary>
+    private void OnTreeKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Delete) return;
+
+        Delete(Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+            ? DeleteMode.Permanent
+            : DeleteMode.RecycleBin);
+
+        e.Handled = true;
+    }
 
     private void OnDeleteToRecycleBin(object sender, RoutedEventArgs e) => Delete(DeleteMode.RecycleBin);
 
@@ -116,6 +145,21 @@ public partial class ExplorerView : UserControl
 
         // What actually went is already out of the basket. Anything left was refused or
         // failed, and clearing it would hide the fact that it is still there.
+        RequestVisibleThumbnails();
+    }
+
+    // ==================== moving ====================
+
+    private void OnMoveTo(object sender, RoutedEventArgs e)
+    {
+        MainViewModel? model = Model;
+        if (model is null) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        model.MoveSelection(owner);
+
+        // The rows that stayed on screen point at new paths, so their thumbnails are
+        // requested again for whatever is visible now.
         RequestVisibleThumbnails();
     }
 

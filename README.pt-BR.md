@@ -9,7 +9,7 @@ Lê a MFT do NTFS direto do volume, mostra o conteúdo real do que você vai apa
 e nunca afirma um número que não mediu.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Testes](https://img.shields.io/badge/testes-244-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-262-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
@@ -185,6 +185,42 @@ render de 9 GB que está em Vídeos; você não pode apagar a pasta Vídeos.
 
 Isto chegou antes do marco M4, então **a Lixeira é hoje o único desfazer**, e o diálogo diz
 exatamente isso em vez de sugerir uma rede de segurança que ainda não existe.
+
+### Mover — a ação em lote que não destrói nada
+
+Separar uma pasta na mão não é apagar: você abre um arquivo, decide, e ele fica ou vai para
+outro lugar. O realce não servia para isso — o duplo clique para abrir o próximo apaga a
+seleção anterior —, então o **Mover para…** age sobre a cesta marcada, que sobrevive a abrir
+arquivos, trocar de pasta, ordenar e buscar. `Espaço` marca o que estiver realçado, então a
+passagem fica: abre, olha, `Esc`, `Espaço`.
+
+**Nada é sobrescrito, nunca.** Um nome que o destino já usa entra como `render (2).mp4`, e a
+confirmação lista quais serão renomeados antes de qualquer coisa se mover. Isso inclui dois
+arquivos com o mesmo nome vindos de pastas diferentes no mesmo lote — nos dois planos o
+destino está vazio, então só o próprio lote pode perceber, e o Shell, mandado não perguntar,
+moveria um por cima do outro de boa vontade.
+
+O diálogo também diz o que um movimento faz com o seu espaço livre, porque a resposta
+costuma ser "nada":
+
+- **Mesmo volume** — isto reescreve uma entrada de diretório. É instantâneo, e libera zero
+  bytes. O índice reaponta o pai da entrada em vez de descartá-la, então o total do volume
+  não cai por um número que o disco nunca devolveu.
+- **Outro volume** — cópia seguida de exclusão. Isso sim libera espaço aqui, e o app informa
+  o valor medido nas entradas que saíram, não o que o Shell alegou.
+
+Os destinos são checados de um jeito diferente dos alvos de exclusão: `Vídeos` não pode ser
+*apagada* e é um lugar perfeitamente comum para *mover um vídeo para dentro*. O que se
+recusa é escrever no que o Windows e os programas instalados são donos — `%WINDIR%`,
+System32, Arquivos de Programas, cofres de credencial, a pasta do próprio Vacuon.
+
+Criar a pasta de destino no seletor é o jeito normal de começar a separar, o que significa
+mover para uma pasta mais nova que a varredura. O Vacuon adota essa pasta no índice pelo
+**número real do registro da MFT**, lido do sistema de arquivos — nunca num lugar inventado,
+para que um delta futuro do diário sobre aquele registro caia na entrada certa. Quando não
+dá para posicioná-la (outro volume, varredura por API, registro já ocupado), o app diz que a
+varredura ficou atrás do disco e para apertar `F5`, em vez de mostrar os arquivos onde eles
+não estão mais.
 
 ### Reabrir — snapshot mais o diário de alterações
 
@@ -483,6 +519,7 @@ src/
 │  ├─ Scan/         ScanOrchestrator · MftScanner · Win32Walker · VolumeProbe
 │  ├─ Analyzers/    SizeAnalyzer · FileCategories
 │  ├─ Actions/      DeleteService (Lixeira · permanente · dry-run)
+│  │                MoveService (não sobrescreve) · MoveTarget (adota pasta nova)
 │  ├─ Safety/       ProtectedPaths — a lista que nada contorna
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (base en-US + pt-BR opcional, JSON embutido)
@@ -513,7 +550,8 @@ Se você for escrever um leitor de MFT ou temas em WPF, estas custam caro:
 9. **O template padrão do `ComboBox` ignora `Background`** — no tema escuro ele aparece branco. Precisa de template próprio, e o mesmo vale para `ProgressBar` (o brilho animado sobre fundo escuro vira uma barra esbranquiçada).
 10. **A barra de título é do Windows.** Sem `DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE)`, o tema escuro fica com uma faixa branca no topo.
 11. **`GridViewRowPresenter` exige um `GridView`.** Reusar o estilo de linha de um `ListView` com colunas em outro sem `View` faz o item simplesmente não aparecer.
-12. **Um recurso chamado `Strings.en-US.json` vira assembly satélite.** Ele casa com o padrão `nome.cultura.extensão`, então o MSBuild infere a cultura e manda o arquivo para `bin\en-US\*.resources.dll` em vez do assembly principal. O build passa, `GetManifestResourceStream` devolve null e a interface inteira aparece como `[chave]`. `WithCulture="false"` é obrigatório — e há um teste guardando isso.
+12. **`FOF_NOCONFIRMATION` num movimento quer dizer "sobrescreve sem perguntar".** O Shell não recusa um nome que já existe no destino — ele substitui, informa sucesso, e o arquivo que estava lá acabou. Quem chama tem que calcular um nome livre por conta própria, e tem que contar os nomes que o **mesmo lote** já reservou: dois `clip.mkv` vindos de pastas diferentes veem o destino vazio os dois.
+13. **Um recurso chamado `Strings.en-US.json` vira assembly satélite.** Ele casa com o padrão `nome.cultura.extensão`, então o MSBuild infere a cultura e manda o arquivo para `bin\en-US\*.resources.dll` em vez do assembly principal. O build passa, `GetManifestResourceStream` devolve null e a interface inteira aparece como `[chave]`. `WithCulture="false"` é obrigatório — e há um teste guardando isso.
 
 ## Contribuindo
 
