@@ -289,6 +289,70 @@ public class QuarantineServiceTests : IDisposable
     }
 
     [Fact]
+    public void Held_CountsWhatIsThereNow_NotWhatTheManifestSetOutToHold()
+    {
+        // Found by running the CLI against a real batch: after restoring everything, the
+        // listing still read "2 items · 34 B held", because it printed the manifest total.
+        // The batch was holding nothing at that point — the files were back under their own
+        // names. Claiming to hold bytes that are not there is the same defect as any other
+        // number the app did not measure.
+        string from = Dir("from");
+        string a = File_(from, "a.bin", new string('x', 300));
+        string b = File_(from, "b.bin", new string('y', 700));
+
+        var service = Service();
+        service.Execute([a, b]);
+
+        QuarantineBatch batch = Assert.Single(service.ListBatches("C:\\"));
+        Assert.Equal((1000, 2), service.Held(batch));
+        Assert.Equal(1000, batch.TotalBytes);
+
+        service.Restore(batch, ["00001.bin"]);
+
+        // The manifest still describes both; only one is still held.
+        Assert.Equal(1000, batch.TotalBytes);
+        Assert.Equal((700, 1), service.Held(batch));
+    }
+
+    [Fact]
+    public void Restore_OfEverythingRemovesTheBatchInsteadOfLeavingAnEmptyOne()
+    {
+        // Otherwise every fully restored batch stays in the listing forever, describing
+        // items it no longer has.
+        string from = Dir("from");
+        string a = File_(from, "a.txt");
+        string b = File_(from, "b.txt");
+
+        var service = Service();
+        service.Execute([a, b]);
+
+        QuarantineBatch batch = Assert.Single(service.ListBatches("C:\\"));
+        service.Restore(batch);
+
+        Assert.False(Directory.Exists(batch.BatchFolder));
+        Assert.Empty(service.ListBatches("C:\\"));
+    }
+
+    [Fact]
+    public void Restore_OfPartOfABatchKeepsTheRest()
+    {
+        string from = Dir("from");
+        string a = File_(from, "a.txt");
+        string b = File_(from, "b.txt");
+
+        var service = Service();
+        service.Execute([a, b]);
+
+        QuarantineBatch batch = Assert.Single(service.ListBatches("C:\\"));
+        service.Restore(batch, ["00001.bin"]);
+
+        // Still one item in there, so the batch and its manifest stay.
+        Assert.True(Directory.Exists(batch.BatchFolder));
+        QuarantineBatch still = Assert.Single(service.ListBatches("C:\\"));
+        Assert.Equal(1, service.Held(still).Count);
+    }
+
+    [Fact]
     public void Expired_UsesTheClockItWasGiven()
     {
         string from = Dir("from");

@@ -310,9 +310,44 @@ public sealed class QuarantineService
         return batches;
     }
 
+    /// <summary>True when this item is still sitting in the batch folder.</summary>
+    public static bool IsPresent(QuarantineBatch batch, QuarantineItem item)
+    {
+        string stored = Path.Combine(batch.BatchFolder, item.StoredName);
+        return item.IsDirectory ? Directory.Exists(stored) : File.Exists(stored);
+    }
+
+    /// <summary>
+    /// What the batch is actually holding right now, in bytes and items.
+    /// <para>
+    /// Not the same as <see cref="QuarantineBatch.TotalBytes"/>, which is what the manifest
+    /// set out to hold. Once items are restored they are back under their original names and
+    /// the batch holds nothing on their behalf — reporting the manifest total then would
+    /// claim to be holding bytes that are no longer there.
+    /// </para>
+    /// </summary>
+    public (long Bytes, int Count) Held(QuarantineBatch batch)
+    {
+        long bytes = 0;
+        int count = 0;
+
+        foreach (QuarantineItem item in batch.Items)
+        {
+            if (!IsPresent(batch, item)) continue;
+            bytes += item.Bytes;
+            count++;
+        }
+
+        return (bytes, count);
+    }
+
     /// <summary>
     /// Puts items back where they came from. Passing null for <paramref name="storedNames"/>
     /// restores the whole batch.
+    /// <para>
+    /// A batch that ends up holding nothing is removed, manifest and all. Leaving it behind
+    /// would keep an empty batch in every listing, describing items that are no longer in it.
+    /// </para>
     /// </summary>
     public IReadOnlyList<RestoreResult> Restore(QuarantineBatch batch,
                                                 IEnumerable<string>? storedNames = null,
@@ -332,7 +367,21 @@ public sealed class QuarantineService
             results.Add(RestoreOne(batch, item));
         }
 
+        DropIfEmpty(batch);
         return results;
+    }
+
+    /// <summary>Removes a batch folder once nothing is left in it.</summary>
+    private void DropIfEmpty(QuarantineBatch batch)
+    {
+        if (Held(batch).Count > 0) return;
+
+        try { Directory.Delete(batch.BatchFolder, recursive: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Not worth failing a successful restore over. The listing reports what is
+            // actually held, so an empty folder left behind shows as holding nothing.
+        }
     }
 
     private static RestoreResult RestoreOne(QuarantineBatch batch, QuarantineItem item)
@@ -386,17 +435,10 @@ public sealed class QuarantineService
     /// </summary>
     public long Purge(QuarantineBatch batch)
     {
-        long freed = 0;
+        long freed = Held(batch).Bytes;
 
         try
         {
-            foreach (QuarantineItem item in batch.Items)
-            {
-                string stored = Path.Combine(batch.BatchFolder, item.StoredName);
-                if (item.IsDirectory ? Directory.Exists(stored) : File.Exists(stored))
-                    freed += item.Bytes;
-            }
-
             Directory.Delete(batch.BatchFolder, recursive: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

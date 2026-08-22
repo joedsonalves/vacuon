@@ -1,7 +1,8 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using Vacuon.Cli;
 using Vacuon.Core;
+using Vacuon.Core.Actions;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
@@ -31,6 +32,7 @@ try
         "security" => Commands.Security(args[1..]),
         "ai" => Commands.Ai(),
         "startup" => Commands.Startup(),
+        "quarantine" => Commands.Quarantine(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -96,6 +98,7 @@ static class Help
         Console.WriteLine($"    security                   {L.T("cli.cmdSecurity")}");
         Console.WriteLine($"    ai                         {L.T("cli.cmdAi")}");
         Console.WriteLine($"    startup                    {L.T("cli.cmdStartup")}");
+        Console.WriteLine($"    quarantine [list|…]        {L.T("cli.cmdQuarantine")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -116,6 +119,11 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.quarantineOptions")}");
+        Console.WriteLine($"    {L.T("cli.quarantineUsage")}");
+        Console.WriteLine($"    --older-than=N             {L.T("cli.optOlderThan")}");
+        Console.WriteLine($"    --yes                      {L.T("cli.optYes")}");
         Console.WriteLine();
         Console.WriteLine("  " + L.T("cli.elevationNote").Replace("\n", "\n  "));
         Console.WriteLine();
@@ -208,6 +216,186 @@ static class Commands
         Console.WriteLine();
         return 0;
     }
+
+    /// <summary>
+    /// Lists, restores or purges quarantine batches.
+    /// <para>
+    /// Unlike <c>security</c> and <c>ai</c>, this one is not read-only — restore and purge
+    /// both change the disk. Purge is the destructive half and the only step in the whole
+    /// quarantine that cannot be undone, so it refuses to run without <c>--yes</c> rather
+    /// than asking a question a scheduled task would never see.
+    /// </para>
+    /// </summary>
+    public static int Quarantine(string[] args)
+    {
+        string sub = args.Length == 0 ? "list" : args[0].ToLowerInvariant();
+
+        return sub switch
+        {
+            "list" => QuarantineList(),
+            "restore" => QuarantineRestore(args[1..]),
+            "purge" => QuarantinePurge(args[1..]),
+            _ => QuarantineUnknown(sub),
+        };
+    }
+
+    private static int QuarantineUnknown(string sub)
+    {
+        Formatting.WriteError(L.T("cli.quarantineUnknown", sub));
+        Console.WriteLine("  " + L.T("cli.quarantineUsage"));
+        return 2;
+    }
+
+    /// <summary>Every batch on every fixed volume, because quarantine is per volume.</summary>
+    private static List<(string Volume, QuarantineBatch Batch)> AllBatches()
+    {
+        var service = new QuarantineService();
+        var found = new List<(string, QuarantineBatch)>();
+
+        foreach (VolumeInfo v in VolumeProbe.EnumerateFixedVolumes())
+        {
+            string root = v.DriveLetter + ":\\";
+            foreach (QuarantineBatch batch in service.ListBatches(root))
+                found.Add((root, batch));
+        }
+
+        found.Sort(static (a, b) => b.Item2.CreatedUtc.CompareTo(a.Item2.CreatedUtc));
+        return found;
+    }
+
+    private static int QuarantineList()
+    {
+        Formatting.WriteHeading(L.T("cli.headQuarantine"));
+
+        List<(string Volume, QuarantineBatch Batch)> batches = AllBatches();
+
+        if (batches.Count == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("quarantine.emptyAll"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        long held = 0;
+        var service = new QuarantineService();
+
+        foreach ((string volume, QuarantineBatch batch) in batches)
+        {
+            // What the batch holds NOW, not what its manifest set out to hold. Items that
+            // were restored are back under their original names and this batch is holding
+            // nothing on their behalf.
+            (long bytes, int present) = service.Held(batch);
+            if (present == 0) continue;
+
+            int days = (int)(DateTime.UtcNow - batch.CreatedUtc).TotalDays;
+            string age = days <= 0 ? L.T("quarantine.ageToday") : L.T("quarantine.ageDays", days);
+            string count = present == 1
+                ? L.T("quarantine.itemCountOne")
+                : L.T("quarantine.itemCount", present);
+
+            held += bytes;
+
+            Console.WriteLine();
+            Console.WriteLine($"  {batch.BatchId}   {volume}");
+            Console.WriteLine($"    {count} · {L.T("quarantine.held", Formatting.Bytes(bytes))} · {age}");
+        }
+
+        if (held == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("quarantine.emptyAll"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        Console.WriteLine();
+        // "Held", never "freed": these bytes are still allocated on the volume.
+        Console.WriteLine("  " + L.T("quarantine.held", Formatting.Bytes(held)));
+        Formatting.WriteMuted("  " + L.T("quarantine.heldExplain"));
+        Console.WriteLine();
+        return 0;
+    }
+
+    private static int QuarantineRestore(string[] args)
+    {
+        if (args.Length == 0) return QuarantineUnknown("restore");
+
+        string wanted = args[0];
+        var match = AllBatches().FirstOrDefault(b =>
+            b.Batch.BatchId.Equals(wanted, StringComparison.OrdinalIgnoreCase));
+
+        if (match.Batch is null)
+        {
+            Formatting.WriteError(L.T("cli.quarantineNoBatch", wanted));
+            return 2;
+        }
+
+        IReadOnlyList<RestoreResult> results = new QuarantineService().Restore(match.Batch);
+
+        int restored = results.Count(r => r.Succeeded);
+        int failed = results.Count - restored;
+
+        Console.WriteLine();
+        foreach (RestoreResult r in results.Where(r => !r.Succeeded))
+            Console.WriteLine($"  {DescribeRestore(r.Outcome)}  {r.OriginalPath}");
+
+        Console.WriteLine();
+        Console.WriteLine("  " + (failed > 0
+            ? L.T("quarantine.restorePartial", restored, failed)
+            : restored == 1
+                ? L.T("quarantine.restoreDoneOne")
+                : L.T("quarantine.restoreDone", restored)));
+        Console.WriteLine();
+
+        return failed > 0 ? 1 : 0;
+    }
+
+    private static int QuarantinePurge(string[] args)
+    {
+        if (args.Length == 0) return QuarantineUnknown("purge");
+
+        bool confirmed = args.Any(a => a.Equals("--yes", StringComparison.OrdinalIgnoreCase));
+        string wanted = args[0];
+
+        var match = AllBatches().FirstOrDefault(b =>
+            b.Batch.BatchId.Equals(wanted, StringComparison.OrdinalIgnoreCase));
+
+        if (match.Batch is null)
+        {
+            Formatting.WriteError(L.T("cli.quarantineNoBatch", wanted));
+            return 2;
+        }
+
+        if (!confirmed)
+        {
+            Formatting.WriteWarning("  " + L.T("quarantine.purgeTitle"));
+            Console.WriteLine("  " + L.T("quarantine.purgeBody",
+                Formatting.Bytes(new QuarantineService().Held(match.Batch).Bytes)));
+            Console.WriteLine("  --yes");
+            return 2;
+        }
+
+        long freed = new QuarantineService().Purge(match.Batch);
+
+        Console.WriteLine();
+        // Here, and only here, "freed" is the honest word — and it counts what actually
+        // went away, so a batch already restored reports zero rather than its old size.
+        Console.WriteLine("  " + (freed > 0
+            ? L.T("quarantine.purgeDone", Formatting.Bytes(freed))
+            : L.T("quarantine.purgeNothing")));
+        Console.WriteLine();
+        return 0;
+    }
+
+    private static string DescribeRestore(RestoreOutcome outcome) => L.T(outcome switch
+    {
+        RestoreOutcome.MissingFromQuarantine => "quarantine.outcomeMissing",
+        RestoreOutcome.OriginalPathTaken => "quarantine.outcomeTaken",
+        RestoreOutcome.InUse => "quarantine.outcomeInUse",
+        RestoreOutcome.AccessDenied => "quarantine.outcomeAccessDenied",
+        _ => "quarantine.outcomeFailed",
+    });
 
     public static int Version()
     {

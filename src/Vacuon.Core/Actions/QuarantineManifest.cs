@@ -55,6 +55,15 @@ public sealed record QuarantineBatch
     [JsonIgnore]
     public string BatchFolder { get; init; } = string.Empty;
 
+    /// <summary>
+    /// What the batch set out to hold, summed from <see cref="Items"/>.
+    /// <para>
+    /// Not serialized. Writing it into the file would put a second copy of a number that is
+    /// already there item by item, and a stored total nobody recomputes is a total that
+    /// quietly stops matching the list it claims to describe.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
     public long TotalBytes
     {
         get
