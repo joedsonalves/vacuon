@@ -375,13 +375,27 @@ public class DuplicateFinderTests : IDisposable
         Write("unique.bin", Pattern(12_345, 2));
 
         var seen = new List<DuplicateProgress>();
-        var progress = new Progress<DuplicateProgress>(seen.Add);
 
-        new DuplicateFinder().Find(Index(), Small(), progress);
+        // NOT Progress<T>. That one posts through the SynchronizationContext, and a test
+        // runner has none, so the callbacks land on the thread pool and arrive whenever
+        // they arrive. Asserting on them right after the call passes or fails by timing —
+        // which is exactly what happened: green here, red on CI, green again on the next
+        // three runs without anything being fixed. A test that reports the weather is
+        // worse than no test, because it teaches people to re-run until it is green.
+        new DuplicateFinder().Find(Index(), Small(), new SyncProgress<DuplicateProgress>(seen.Add));
 
-        // Progress<T> posts asynchronously; the first report is synchronous enough to
-        // assert on the total, which is what matters here.
         Assert.NotEmpty(seen);
         Assert.Equal(2, seen[0].FilesTotal);
+
+        // The last report accounts for every candidate, and only candidates: the third
+        // file shares its size with nobody and never reaches a read.
+        Assert.Equal(2, seen[^1].FilesDone);
+        Assert.Equal(2, seen[^1].FilesTotal);
+    }
+
+    /// <summary>Invokes the handler on the calling thread, so assertions are deterministic.</summary>
+    private sealed class SyncProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }
