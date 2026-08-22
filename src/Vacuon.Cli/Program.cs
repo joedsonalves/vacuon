@@ -4,6 +4,7 @@ using Vacuon.Cli;
 using Vacuon.Core;
 using Vacuon.Core.Actions;
 using Vacuon.Core.Analyzers;
+using Vacuon.Core.Cleanup;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Optimization;
@@ -34,6 +35,7 @@ try
         "startup" => Commands.Startup(),
         "quarantine" => Commands.Quarantine(args[1..]),
         "duplicates" or "dupes" => Commands.Duplicates(args[1..]),
+        "clean" => Commands.Clean(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -101,6 +103,7 @@ static class Help
         Console.WriteLine($"    startup                    {L.T("cli.cmdStartup")}");
         Console.WriteLine($"    quarantine [list|…]        {L.T("cli.cmdQuarantine")}");
         Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
+        Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -121,6 +124,12 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.cleanOptions")}");
+        Console.WriteLine($"    --profile=quick|deep|custom {L.T("cli.optProfile")}");
+        Console.WriteLine($"    --apply                    {L.T("cli.optApply")}");
+        Console.WriteLine($"    --to=quarantine|recycle|permanent {L.T("cli.optTo")}");
+        Console.WriteLine($"    --rule=<id>                {L.T("cli.optRule")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.duplicateOptions")}");
         Console.WriteLine($"    --min-size=4KB             {L.T("cli.optMinSize")}");
@@ -499,6 +508,170 @@ static class Commands
         Console.WriteLine();
         return 0;
     }
+
+    /// <summary>
+    /// Rule-based cleanup.
+    /// <para>
+    /// Dry-run unless <c>--apply</c> is passed, and that is not a courtesy: this command can
+    /// be pointed at a whole machine by someone who has not read the rules, so the default
+    /// has to be the one that cannot cost anything.
+    /// </para>
+    /// </summary>
+    public static int Clean(string[] args)
+    {
+        bool apply = args.Contains("--apply");
+        string? onlyRule = args.FirstOrDefault(a => a.StartsWith("--rule=", StringComparison.OrdinalIgnoreCase))?[7..];
+
+        CleanupProfile profile = ArgString(args, "--profile", "quick").ToLowerInvariant() switch
+        {
+            "deep" => CleanupProfile.Deep,
+            "custom" => CleanupProfile.Custom,
+            _ => CleanupProfile.Quick,
+        };
+
+        CleanupDisposal disposal = ArgString(args, "--to", "quarantine").ToLowerInvariant() switch
+        {
+            "recycle" or "recyclebin" => CleanupDisposal.RecycleBin,
+            "permanent" => CleanupDisposal.Permanent,
+            _ => CleanupDisposal.Quarantine,
+        };
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        RuleCatalog.CatalogLoad catalog = RuleCatalog.LoadWithProblems();
+        IReadOnlyList<CleanupRule> rules = catalog.Rules;
+
+        // Said out loud, never swallowed: a rules.json with one bad escape is unreadable,
+        // and the only other symptom is that editing it changes nothing.
+        foreach (string problem in catalog.Problems)
+            Formatting.WriteWarning("  " + L.T("cleanup.catalogProblem", problem));
+
+        if (onlyRule is not null)
+            rules = [.. rules.Where(r => r.Id.Equals(onlyRule, StringComparison.OrdinalIgnoreCase))];
+
+        bool elevated = VolumeProbe.IsElevated();
+        var engine = new RuleEngine();
+
+        Formatting.WriteHeading(L.T("cli.headClean"));
+
+        CleanupPlan plan = engine.Plan(rules, profile, elevated, cts.Token);
+
+        int needElevation = 0;
+
+        foreach (RulePlan rule in plan.Rules)
+        {
+            if (rule.Skipped == RuleSkipReason.NeedsElevation) needElevation++;
+
+            // Rules that matched nothing and rules the profile excluded are not worth a
+            // line each; the ones that could have run but did not are.
+            if (rule.Skipped is RuleSkipReason.NothingMatched or RuleSkipReason.RiskAboveProfile)
+                continue;
+
+            Console.WriteLine();
+            Console.WriteLine($"  {rule.Rule.Name}  [{RiskLabel(rule.Rule.Risk)}]");
+            Formatting.WriteMuted($"    {rule.Rule.Description}");
+
+            if (rule.Skipped != RuleSkipReason.None)
+            {
+                Formatting.WriteWarning("    " + SkipLabel(rule));
+                continue;
+            }
+
+            if (rule.Rule.IsSystemTool)
+            {
+                // No byte figure here on purpose: the tool reports what it freed only after
+                // it has run, and quoting the catalog's range would be someone else's disk.
+                Formatting.WriteMuted("    " + L.T("cleanup.toolWillRun", rule.Rule.Tool ?? "?"));
+                continue;
+            }
+
+            Console.WriteLine($"    {Formatting.Count(rule.Matches.Count)} · {Formatting.Bytes(rule.Bytes)}");
+        }
+
+        Console.WriteLine();
+
+        if (plan.FileCount == 0 && plan.SystemTools.Count == 0)
+        {
+            Console.WriteLine("  " + L.T("cleanup.planNothing"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        int active = plan.Rules.Count(r => r.WillDoSomething);
+        Console.WriteLine("  " + (active == 1
+            ? L.T("cleanup.planSummaryOne",
+                  Formatting.Count(plan.FileCount), Formatting.Bytes(plan.MatchedBytes))
+            : L.T("cleanup.planSummary",
+                  Formatting.Count(plan.FileCount), Formatting.Bytes(plan.MatchedBytes),
+                  Formatting.Count(active))));
+
+        if (needElevation > 0)
+            Formatting.WriteMuted("  " + L.T("cleanup.needsElevationNote", Formatting.Count(needElevation)));
+
+        if (!apply)
+        {
+            Console.WriteLine();
+            Formatting.WriteMuted("  " + L.T("cleanup.dryRun"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        CleanupReport report = engine.Execute(plan, disposal, cts.Token);
+
+        Console.WriteLine();
+        Console.WriteLine("  " + (report.Failed > 0
+            ? L.T("cleanup.donePartial", Formatting.Count(report.Handled), Formatting.Count(report.Failed))
+            : disposal switch
+            {
+                CleanupDisposal.Permanent => L.T("cleanup.donePermanent",
+                    Formatting.Count(report.Handled), Formatting.Bytes(report.Bytes)),
+                CleanupDisposal.RecycleBin => L.T("cleanup.doneRecycle",
+                    Formatting.Count(report.Handled), Formatting.Bytes(report.Bytes)),
+                _ => L.T("cleanup.doneQuarantine",
+                    Formatting.Count(report.Handled), Formatting.Bytes(report.Bytes)),
+            }));
+
+        // System tools run after the files, and each one reports its own measured gain.
+        var tools = new SystemTools();
+
+        foreach (RulePlan rule in plan.SystemTools)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  {rule.Rule.Name}");
+
+            ToolResult result = tools.Run(rule.Rule.Tool!, "C:\\", cts.Token);
+
+            if (!result.Succeeded)
+            {
+                Formatting.WriteWarning("    " + L.T("cleanup.toolFailed",
+                                                     result.Error ?? $"exit {result.ExitCode}"));
+                continue;
+            }
+
+            Console.WriteLine("    " + (result.FreedBytesMeasured
+                ? L.T("cleanup.toolFreed", Formatting.Bytes(result.FreedBytes))
+                : L.T("cleanup.toolNoMeasure")));
+        }
+
+        Console.WriteLine();
+        return report.Failed > 0 ? 1 : 0;
+    }
+
+    private static string RiskLabel(CleanupRisk risk) => L.T(risk switch
+    {
+        CleanupRisk.Caution => "cleanup.riskCaution",
+        CleanupRisk.Dangerous => "cleanup.riskDangerous",
+        _ => "cleanup.riskSafe",
+    });
+
+    private static string SkipLabel(RulePlan plan) => plan.Skipped switch
+    {
+        RuleSkipReason.ProcessRunning => L.T("cleanup.skipProcess", plan.SkipDetail ?? "?"),
+        RuleSkipReason.NeedsElevation => L.T("cleanup.skipElevation"),
+        RuleSkipReason.RiskAboveProfile => L.T("cleanup.skipRisk"),
+        _ => L.T("cleanup.skipNothing"),
+    };
 
     public static int Version()
     {

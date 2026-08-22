@@ -32,28 +32,46 @@ public static class RuleCatalog
         "Vacuon", "rules.json");
 
     /// <summary>
-    /// Every rule, built-in first and user overrides applied on top.
+    /// The rules, and everything that went wrong on the way to loading them.
     /// <para>
-    /// Rules whose paths would land inside a protected subtree are dropped rather than
-    /// shipped as entries that quietly match nothing — see <see cref="Rejected"/>.
+    /// <see cref="Problems"/> is not decoration. A user catalog with one bad escape is
+    /// unreadable JSON, and the honest thing is to keep running on the built-in rules
+    /// <b>and say so</b> — a file someone edited that silently does nothing is worse than
+    /// one that refuses loudly, because they will edit it again and conclude the feature
+    /// is broken.
     /// </para>
     /// </summary>
-    public static IReadOnlyList<CleanupRule> Load(string? userCatalogPath = null)
+    public sealed record CatalogLoad(IReadOnlyList<CleanupRule> Rules, IReadOnlyList<string> Problems);
+
+    /// <summary>Every rule, built-in first and user overrides applied on top.</summary>
+    public static IReadOnlyList<CleanupRule> Load(string? userCatalogPath = null) =>
+        LoadWithProblems(userCatalogPath).Rules;
+
+    /// <summary>
+    /// Same as <see cref="Load"/>, but also reports the rules that were dropped and why.
+    /// </summary>
+    public static CatalogLoad LoadWithProblems(string? userCatalogPath = null)
     {
         var byId = new Dictionary<string, CleanupRule>(StringComparer.OrdinalIgnoreCase);
+        var problems = new List<string>();
 
         foreach (CleanupRule rule in ReadBuiltIn()) byId[rule.Id] = rule;
 
-        foreach (CleanupRule rule in ReadUser(userCatalogPath ?? UserCatalogPath))
+        foreach (CleanupRule rule in ReadUser(userCatalogPath ?? UserCatalogPath, problems))
             byId[rule.Id] = rule;
 
         var kept = new List<CleanupRule>(byId.Count);
 
         foreach (CleanupRule rule in byId.Values)
-            if (Rejected(rule) is null) kept.Add(rule);
+        {
+            string? rejection = Rejected(rule);
+
+            if (rejection is null) kept.Add(rule);
+            else problems.Add($"{rule.Id}: {rejection}");
+        }
 
         kept.Sort(static (a, b) => string.CompareOrdinal(a.Id, b.Id));
-        return kept;
+        return new CatalogLoad(kept, problems);
     }
 
     /// <summary>
@@ -133,7 +151,7 @@ public static class RuleCatalog
         return JsonSerializer.Deserialize<CatalogFile>(stream, Options)?.Rules ?? [];
     }
 
-    private static List<CleanupRule> ReadUser(string path)
+    private static List<CleanupRule> ReadUser(string path, List<string> problems)
     {
         if (!File.Exists(path)) return [];
 
@@ -143,8 +161,11 @@ public static class RuleCatalog
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            // A broken user file must not take the built-in catalog down with it: the
-            // shipped rules are the ones that keep working when someone's edit has a typo.
+            // A broken user file must not take the built-in catalog down with it — the
+            // shipped rules keep working. But it must not vanish either: a single bad
+            // backslash makes the whole file unreadable, and without this line the only
+            // symptom is that editing rules.json changes nothing, forever.
+            problems.Add($"{path}: {ex.Message}");
             return [];
         }
     }
