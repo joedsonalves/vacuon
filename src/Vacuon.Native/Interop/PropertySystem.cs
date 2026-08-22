@@ -30,10 +30,33 @@ public struct PropVariant
     private readonly ushort _reserved1;
     private readonly ushort _reserved2;
     private readonly ushort _reserved3;
-    private readonly nint _value;
+    private nint _value;
     private readonly nint _value2;
 
     public readonly bool IsEmpty => VarType == 0;   // VT_EMPTY
+
+    /// <summary>
+    /// A VT_I8 variant, which is how Media Foundation takes a seek position — 100-nanosecond
+    /// units, the same as <see cref="TimeSpan.Ticks"/>.
+    /// </summary>
+    public static PropVariant FromLong(long value)
+    {
+        var variant = new PropVariant { VarType = 20 };   // VT_I8
+        variant._value = (nint)value;
+        return variant;
+    }
+
+    /// <summary>
+    /// Releases anything the variant owns.
+    /// <para>
+    /// Harmless on the plain numeric ones this code creates, and kept anyway: the day someone
+    /// builds a string variant here, the leak would be silent and the habit is what catches it.
+    /// </para>
+    /// </summary>
+    public void Clear() => PropVariantClear(ref this);
+
+    [System.Runtime.InteropServices.DllImport("ole32.dll")]
+    private static extern int PropVariantClear(ref PropVariant value);
 }
 
 [ComImport]

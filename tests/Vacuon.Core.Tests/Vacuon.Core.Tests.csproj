@@ -11,6 +11,10 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+
+    <!-- Test-only. Lets a test that needs ffmpeg report itself as skipped instead of
+         passing with nothing to check, which is how a guard quietly stops guarding. -->
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
   <ItemGroup>
