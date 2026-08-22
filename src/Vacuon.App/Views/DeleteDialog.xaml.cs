@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Media;
 using Vacuon.App.Infra;
 using Vacuon.Core.Actions;
@@ -11,8 +11,8 @@ namespace Vacuon.App.Views;
 /// before anything is touched.
 /// <para>
 /// The permanent mode additionally requires ticking an acknowledgement box. That is
-/// deliberate friction: until the reversible quarantine of milestone M4 exists, the
-/// Recycle Bin is the only undo, and a permanent delete has none at all.
+/// deliberate friction: a permanent delete has no undo at all, while both of the other
+/// routes out of a folder — the Recycle Bin and the quarantine — do.
 /// </para>
 /// </summary>
 public partial class DeleteDialog : Window

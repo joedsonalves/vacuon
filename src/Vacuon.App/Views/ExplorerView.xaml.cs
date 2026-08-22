@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -160,6 +160,17 @@ public partial class ExplorerView : UserControl
 
         // The rows that stayed on screen point at new paths, so their thumbnails are
         // requested again for whatever is visible now.
+        RequestVisibleThumbnails();
+    }
+
+    private void OnQuarantine(object sender, RoutedEventArgs e)
+    {
+        MainViewModel? model = Model;
+        if (model is null) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        model.QuarantineSelection(owner);
+
         RequestVisibleThumbnails();
     }
 

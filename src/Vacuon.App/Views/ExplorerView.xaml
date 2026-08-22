@@ -1,4 +1,4 @@
-<UserControl x:Class="Vacuon.App.Views.ExplorerView"
+﻿<UserControl x:Class="Vacuon.App.Views.ExplorerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:infra="clr-namespace:Vacuon.App.Infra">
@@ -350,6 +350,7 @@
                                       Command="{Binding CopyPathCommand}"/>
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.move.button}" Click="OnMoveTo"/>
+                            <MenuItem Header="{DynamicResource S.quarantine.button}" Click="OnQuarantine"/>
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.select.all}" Command="{Binding SelectAllCommand}"/>
                             <MenuItem Header="{DynamicResource S.select.invert}" Command="{Binding InvertSelectionCommand}"/>
@@ -403,7 +404,14 @@
 
                         <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
 
+                        <!-- Quarentena antes da Lixeira e do apagar: e a acao de remocao que
+                             tem volta, e o PRD quer ela como o caminho padrao. -->
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="{DynamicResource S.quarantine.button}"
+                                ToolTip="{DynamicResource S.quarantine.buttonHint}"
+                                Click="OnQuarantine"/>
+
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.delete.recycle}" Click="OnDeleteToRecycleBin"/>
                         <!-- Vermelho no permanente: a cor de risco e o sinal mais rapido de
                              que este botao nao tem volta. -->

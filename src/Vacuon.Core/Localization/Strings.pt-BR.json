@@ -2,7 +2,7 @@
   "_comment": "Tradução opcional. Chave ausente aqui cai para o inglês, nunca para [chave].",
   "app.tagline": "Analisador de espaço em disco para Windows",
   "app.footer": "Vacuon {0} · nada foi apagado",
-  "app.readOnlyNotice": "O Vacuon apaga para a Lixeira por padrão; Shift+Del é permanente e pede um reconhecimento explícito. A quarentena reversível do marco M4 ainda está por vir, então a Lixeira é hoje o único desfazer.",
+  "app.readOnlyNotice": "O Vacuon põe de lado por padrão, numa quarentena de onde dá para restaurar; a Lixeira e a exclusão permanente são as duas uma escolha explícita à parte. Expurgar um lote é o único passo que não tem volta.",
   "nav.dashboard": "Painel",
   "nav.explorer": "Explorer",
   "nav.security": "Segurança",
@@ -335,7 +335,7 @@
   "delete.recycleHeader": "Mover para a Lixeira",
   "delete.permanentHeader": "Apagar permanentemente",
   "delete.recycleBody": "Os itens vão para a Lixeira e podem ser restaurados de lá.",
-  "delete.permanentBody": "Isto não tem como desfazer. Ainda não existe quarentena — a quarentena reversível chega no marco M4.",
+  "delete.permanentBody": "Isto não tem como desfazer, e não é a opção reversível: a Quarentena põe os mesmos itens de lado neste volume e devolve quando você pedir.",
   "delete.summary": "{0} itens · {1}",
   "delete.folders": "{0} pastas",
   "delete.files": "{0} arquivos",
@@ -580,5 +580,7 @@
   "cli.quarantineUnknown": "Subcomando de quarentena desconhecido: {0}",
   "cli.quarantineNoBatch": "Nenhum lote corresponde a {0}.",
   "cli.optYes": "Exigido pelo purge: confirma que o lote vai ser apagado de vez",
-  "quarantine.emptyAll": "Não há nada em quarentena."
+  "quarantine.emptyAll": "Não há nada em quarentena.",
+  "action.refresh": "Atualizar",
+  "nav.quarantine": "Quarentena"
 }

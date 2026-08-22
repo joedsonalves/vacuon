@@ -3,7 +3,7 @@
   "app.name": "Vacuon",
   "app.tagline": "Disk space analyzer for Windows",
   "app.footer": "Vacuon {0} · nothing was deleted",
-  "app.readOnlyNotice": "Vacuon deletes to the Recycle Bin by default; Shift+Del is permanent and asks for an explicit acknowledgement. The reversible quarantine of milestone M4 is still ahead, so the Recycle Bin is the only undo today.",
+  "app.readOnlyNotice": "Vacuon sets items aside by default, into a quarantine you can restore from; the Recycle Bin and permanent deletion are both a separate, explicit choice. Purging a batch is the only step that cannot be undone.",
   "nav.dashboard": "Dashboard",
   "nav.explorer": "Explorer",
   "nav.security": "Security",
@@ -335,7 +335,7 @@
   "delete.recycleHeader": "Move to the Recycle Bin",
   "delete.permanentHeader": "Delete permanently",
   "delete.recycleBody": "The items go to the Recycle Bin and can be restored from there.",
-  "delete.permanentBody": "This cannot be undone. There is no quarantine yet — the reversible quarantine arrives in milestone M4.",
+  "delete.permanentBody": "This cannot be undone, and it is not the reversible option: Quarantine sets the same items aside on this volume and puts them back on demand.",
   "delete.summary": "{0} items · {1}",
   "delete.folders": "{0} folders",
   "delete.files": "{0} files",
@@ -580,5 +580,7 @@
   "cli.quarantineUnknown": "Unknown quarantine subcommand: {0}",
   "cli.quarantineNoBatch": "No batch matches {0}.",
   "cli.optYes": "Required by purge: confirms the batch is to be deleted for good",
-  "quarantine.emptyAll": "Nothing in quarantine."
+  "quarantine.emptyAll": "Nothing in quarantine.",
+  "action.refresh": "Refresh",
+  "nav.quarantine": "Quarantine"
 }

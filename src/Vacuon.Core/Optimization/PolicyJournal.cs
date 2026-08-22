@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Vacuon.Core.Optimization;
@@ -33,9 +33,10 @@ public sealed record PolicyChange
 /// <summary>
 /// The record of every change, on disk.
 /// <para>
-/// There is no quarantine yet — milestone M4 — so this file is the only way back. It is
-/// written <b>before</b> the registry is touched: a crash between the two must leave a note
-/// about a change that did not happen, never a change with no note.
+/// The quarantine holds files; a registry value has nowhere to be moved to, so this file
+/// is the only way back for these. It is written <b>before</b> the registry is touched: a
+/// crash between the two must leave a note about a change that did not happen, never a
+/// change with no note — the same ordering the quarantine manifest uses.
 /// </para>
 /// </summary>
 public sealed class PolicyJournal

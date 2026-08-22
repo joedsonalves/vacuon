@@ -9,7 +9,7 @@ Lê a MFT do NTFS direto do volume, mostra o conteúdo real do que você vai apa
 e nunca afirma um número que não mediu.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Testes](https://img.shields.io/badge/testes-262-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-286-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
@@ -130,7 +130,7 @@ Três perguntas, respondidas em segundos:
 
 E uma quarta, que quase nenhum utilitário de disco responde: **tem alguma coisa estranha se alojando na minha máquina?**
 
-> **v0.2.0 — marcos M1 e M2.** Somente leitura: o Vacuon mede, explica e mostra. Ele **ainda não apaga nada** — exclusão e quarentena reversível chegam no M4, porque um app que apaga arquivos tem exatamente uma chance de errar.
+> **v0.3.2 — marcos M1, M2, M4 e a seção Otimizar.** O Vacuon mede, explica, mostra — e tira coisa do lugar de três jeitos, sendo que só um deles é definitivo. A **Quarentena** põe os itens de lado no mesmo volume e devolve quando você pedir; a Lixeira e a exclusão permanente são cada uma uma escolha explícita à parte. Expurgar um lote da quarentena é o único passo sem volta, e o app diz isso onde importa.
 
 ---
 
@@ -190,8 +190,9 @@ de credencial, nem o diretório do próprio Vacuon. Os caminhos são canonizados
 *dentro* de uma pasta protegida continuam apagáveis — você pode muito bem querer apagar um
 render de 9 GB que está em Vídeos; você não pode apagar a pasta Vídeos.
 
-Isto chegou antes do marco M4, então **a Lixeira é hoje o único desfazer**, e o diálogo diz
-exatamente isso em vez de sugerir uma rede de segurança que ainda não existe.
+A exclusão chegou antes da quarentena, quando a Lixeira era o único desfazer que havia.
+Não é mais: a **Quarentena** é o caminho reversível, e o diálogo do permanente agora aponta
+para ela em vez de se apresentar como o único jeito de tirar um arquivo de uma pasta.
 
 ### Mover — a ação em lote que não destrói nada
 
@@ -509,7 +510,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | **M1d** | **Snapshot binário + atualização incremental por USN** | ✅ |
 | M3 | Player embutido (LibVLCSharp) e preview de mídia | ⬜ |
 | M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
-| M4 | Quarentena reversível, histórico, desfazer | ⬜ |
+| **M4** | **Quarentena reversível, restaurar, expurgar** | ✅ |
 | M5 | Catálogo de 120+ regras de limpeza | ⬜ |
 | M6 | Duplicados exatos e quase-duplicados | ⬜ |
 | M7 | Treemap | ⬜ |

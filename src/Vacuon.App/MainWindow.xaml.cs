@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Localization;
@@ -54,6 +54,9 @@ public partial class MainWindow : Window
 
     private void OnNavExplorer(object sender, RoutedEventArgs e) =>
         Navigate(Section.Explorer, "nav.explorer");
+
+    private void OnNavQuarantine(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Quarantine, "nav.quarantine");
 
     private void OnNavSecurity(object sender, RoutedEventArgs e) =>
         Navigate(Section.Security, "nav.security");

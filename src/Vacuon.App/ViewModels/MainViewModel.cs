@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -19,7 +19,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Quarantine, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -71,6 +71,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
+        RefreshQuarantineCommand = new RelayCommand(RefreshQuarantine);
+        RestoreBatchCommand = new RelayCommand(RestoreBatch);
+        PurgeBatchCommand = new RelayCommand(PurgeBatch);
         OpenCommand = new RelayCommand(OpenSelected);
         RevealCommand = new RelayCommand(RevealSelected);
         CopyPathCommand = new RelayCommand(CopySelectedPath);
@@ -101,6 +104,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             if (!Set(ref _section, value)) return;
             Raise(nameof(IsDashboard));
             Raise(nameof(IsExplorer));
+            Raise(nameof(IsQuarantine));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
             Raise(nameof(IsSettings));
@@ -110,6 +114,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public bool IsDashboard => Section == Section.Dashboard;
     public bool IsExplorer => Section == Section.Explorer;
+    public bool IsQuarantine => Section == Section.Quarantine;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
 
@@ -1543,6 +1548,105 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>
+    /// Sets the ticked items aside, reversibly.
+    /// <para>
+    /// The index treatment is the same as a move that stays on the volume, and for the same
+    /// reason: the bytes did not go anywhere. Marking them deleted would drop them out of
+    /// the volume total and claim back space the disk never returned.
+    /// </para>
+    /// </summary>
+    public void QuarantineSelection(Window owner)
+    {
+        VolumeIndex? index = Index;
+        List<int> selected = EffectiveEntries();
+
+        var byPath = new Dictionary<string, int>(selected.Count, StringComparer.OrdinalIgnoreCase);
+
+        if (index is not null)
+        {
+            foreach (int i in selected)
+            {
+                if (i < 0 || i >= index.Entries.Length || !index.Entries[i].IsInUse) continue;
+
+                string path = index.GetFullPath(i);
+                if (path.Length > 0) byPath[path.TrimEnd('\\')] = i;
+            }
+        }
+
+        if (byPath.Count == 0)
+        {
+            StatusText = L.T("move.nothingSelected");
+            return;
+        }
+
+        List<string> paths = [.. byPath.Keys];
+        var service = new QuarantineService();
+
+        QuarantineReport plan = service.Plan(paths);
+        if (!QuarantineDialog.Confirm(owner, plan)) return;
+
+        QuarantineReport report = service.Execute(paths);
+
+        ApplyQuarantine(report, byPath);
+    }
+
+    private void ApplyQuarantine(QuarantineReport report, Dictionary<string, int> byPath)
+    {
+        VolumeIndex? index = Index;
+
+        var moved = new HashSet<int>();
+        int unplaced = 0;
+
+        if (index is not null && report.BatchFolders.Count > 0)
+        {
+            // One batch folder per volume; the list view only ever shows one volume, so the
+            // first is the one these rows went into.
+            int destination = MoveTarget.Locate(index, report.BatchFolders[0]);
+
+            foreach (QuarantineResult result in report.Results)
+            {
+                if (!result.Succeeded) continue;
+                if (!byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry)) continue;
+
+                moved.Add(entry);
+
+                // Re-parent, never MarkDeleted: the clusters are still allocated and the
+                // volume total must not fall.
+                if (destination < 0 ||
+                    !index.MarkMoved(entry, destination, Path.GetFileName(result.Path).AsSpan()))
+                {
+                    unplaced++;
+                }
+            }
+        }
+
+        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+
+        ReportQuarantine(report, unplaced);
+
+        // Nothing was freed, so the removal passed on is empty by construction.
+        AfterMove(moved, default);
+    }
+
+    private void ReportQuarantine(QuarantineReport report, int unplaced)
+    {
+        string size = Format.Bytes(report.BytesHeld);
+
+        string headline = report.FailedCount > 0
+            ? L.T("quarantine.donePartial", Format.Count(report.QuarantinedCount),
+                  Format.Count(report.FailedCount))
+            : report.QuarantinedCount == 1
+                ? L.T("quarantine.doneOne", size)
+                : L.T("quarantine.done", Format.Count(report.QuarantinedCount), size);
+
+        var parts = new List<string>(2) { headline };
+
+        if (unplaced > 0) parts.Add(L.T("move.staleIndex", Format.Count(unplaced)));
+
+        StatusText = string.Join(" · ", parts);
+    }
+
+    /// <summary>
     /// Brings the index in line with what the disk just did.
     /// <para>
     /// Two different truths, and telling them apart is the whole job. Within one volume the
@@ -1717,6 +1821,24 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>Human-readable reason a single item did not move.</summary>
+    private static string Describe(QuarantineResult result)
+    {
+        string reason = result.Outcome switch
+        {
+            QuarantineOutcome.Blocked => result.Message ?? L.T("delete.outcomeBlocked"),
+            QuarantineOutcome.NotFound => L.T("delete.outcomeNotFound"),
+            QuarantineOutcome.InUse => L.T("quarantine.outcomeInUse"),
+            QuarantineOutcome.AccessDenied => L.T("quarantine.outcomeAccessDenied"),
+            // Worth its own sentence: nothing was moved, and the reason is the volume, not
+            // the file. "Failed" would send someone looking at the wrong thing.
+            QuarantineOutcome.NoQuarantineOnVolume =>
+                L.T("quarantine.noRoom", Path.GetPathRoot(result.Path) ?? result.Path),
+            _ => result.Message ?? L.T("quarantine.outcomeFailed"),
+        };
+
+        return $"{result.Path} — {reason}";
+    }
+
     private static string Describe(MoveResult result)
     {
         string reason = result.Outcome switch
@@ -1893,6 +2015,129 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
         _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
     };
+
+    // ================= quarentena =================
+
+    public ObservableCollection<QuarantineBatchViewModel> QuarantineBatches { get; } = [];
+
+    private string _quarantineStatusText = L.T("quarantine.emptyAll");
+    public string QuarantineStatusText
+    {
+        get => _quarantineStatusText;
+        private set => Set(ref _quarantineStatusText, value);
+    }
+
+    private string _quarantineHeldText = string.Empty;
+    public string QuarantineHeldText
+    {
+        get => _quarantineHeldText;
+        private set => Set(ref _quarantineHeldText, value);
+    }
+
+    public bool HasQuarantine => QuarantineBatches.Count > 0;
+
+    public ICommand RefreshQuarantineCommand { get; private set; } = null!;
+    public ICommand RestoreBatchCommand { get; private set; } = null!;
+    public ICommand PurgeBatchCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// Reads every fixed volume's quarantine. Batches holding nothing are left out rather
+    /// than listed as empty: a restored batch is not a thing the user still has.
+    /// </summary>
+    public void RefreshQuarantine()
+    {
+        var service = new QuarantineService();
+        QuarantineBatches.Clear();
+
+        long held = 0;
+
+        foreach (VolumeInfo volume in VolumeProbe.EnumerateFixedVolumes())
+        {
+            foreach (QuarantineBatch batch in service.ListBatches(volume.DriveLetter + ":\\"))
+            {
+                (long bytes, int count) = service.Held(batch);
+                if (count == 0) continue;
+
+                QuarantineBatches.Add(new QuarantineBatchViewModel(batch, bytes, count));
+                held += bytes;
+            }
+        }
+
+        QuarantineStatusText = QuarantineBatches.Count == 0
+            ? L.T("quarantine.emptyAll")
+            : L.T("quarantine.held", Format.Bytes(held));
+
+        QuarantineHeldText = QuarantineBatches.Count == 0
+            ? string.Empty
+            : L.T("quarantine.heldExplain");
+
+        Raise(nameof(HasQuarantine));
+    }
+
+    private void RestoreBatch(object? parameter)
+    {
+        if (parameter is not QuarantineBatchViewModel row) return;
+
+        IReadOnlyList<RestoreResult> results = new QuarantineService().Restore(row.Batch);
+
+        int restored = results.Count(r => r.Succeeded);
+        int failed = results.Count - restored;
+
+        QuarantineStatusText = failed > 0
+            ? L.T("quarantine.restorePartial", Format.Count(restored), Format.Count(failed))
+            : restored == 1
+                ? L.T("quarantine.restoreDoneOne")
+                : L.T("quarantine.restoreDone", Format.Count(restored));
+
+        if (failed > 0)
+            LastFailures = [.. results.Where(r => !r.Succeeded).Select(Describe)];
+
+        RefreshQuarantine();
+
+        // The files are back under their original names, so anything on screen that was
+        // showing them from the quarantine is now behind the disk.
+        StatusText = QuarantineStatusText;
+    }
+
+    private void PurgeBatch(object? parameter)
+    {
+        if (parameter is not QuarantineBatchViewModel row) return;
+
+        // The only irreversible step in the whole quarantine, so it asks — and it quotes
+        // what is really in there, not what the manifest set out to hold.
+        MessageBoxResult answer = MessageBox.Show(
+            L.T("quarantine.purgeBody", Format.Bytes(row.HeldBytes)),
+            L.T("quarantine.purgeTitle"),
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
+
+        if (answer != MessageBoxResult.OK) return;
+
+        long freed = new QuarantineService().Purge(row.Batch);
+
+        // "Freed" is honest here and nowhere else in this screen.
+        QuarantineStatusText = freed > 0
+            ? L.T("quarantine.purgeDone", Format.Bytes(freed))
+            : L.T("quarantine.purgeNothing");
+
+        RefreshQuarantine();
+        StatusText = QuarantineStatusText;
+    }
+
+    private static string Describe(RestoreResult result)
+    {
+        string reason = L.T(result.Outcome switch
+        {
+            RestoreOutcome.MissingFromQuarantine => "quarantine.outcomeMissing",
+            RestoreOutcome.OriginalPathTaken => "quarantine.outcomeTaken",
+            RestoreOutcome.InUse => "quarantine.outcomeInUse",
+            RestoreOutcome.AccessDenied => "quarantine.outcomeAccessDenied",
+            _ => "quarantine.outcomeFailed",
+        });
+
+        return $"{result.OriginalPath} — {reason}";
+    }
 
     // ================= inicialização do Windows =================
 

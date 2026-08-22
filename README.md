@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-263-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-286-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -129,7 +129,7 @@ Three questions, answered in seconds:
 
 And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **v0.3.0 — milestones M1, M2 and deletion.** Vacuon measures, explains, shows — and now deletes, to the Recycle Bin by default and permanently only when you say so. The reversible quarantine of milestone M4 is still ahead, so the Recycle Bin is the only undo today, and the app says so where it matters.
+> **v0.3.2 — milestones M1, M2, M4 and the Optimize section.** Vacuon measures, explains, shows — and removes things three different ways, only one of which is final. **Quarantine** sets items aside on the same volume and puts them back on demand; the Recycle Bin and permanent deletion are each a separate, explicit choice. Purging a quarantine batch is the one step with no undo, and the app says so where it matters.
 
 ---
 
@@ -191,8 +191,9 @@ and `C:\Windows\System32\..\System32` are caught too. The files *inside* a prote
 folder are still deletable — you may well want to delete a 9 GB render sitting in Videos;
 you must not be able to delete Videos itself.
 
-This arrived before milestone M4, so **the Recycle Bin is currently the only undo**, and
-the dialog says exactly that instead of implying a safety net that does not exist yet.
+Deletion arrived before the quarantine, back when the Recycle Bin was the only undo there
+was. It is no longer: **Quarantine** is the reversible route, and the permanent dialog now
+points at it instead of presenting itself as the only way to get a file out of a folder.
 
 ### Moving — the batch action that destroys nothing
 
@@ -509,7 +510,7 @@ Details in [SECURITY.md](SECURITY.md).
 | **M1d** | **Binary snapshot + incremental USN update** | ✅ |
 | M3 | Embedded player (LibVLCSharp) and media preview | ⬜ |
 | M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
-| M4 | Reversible quarantine, history, undo | ⬜ |
+| **M4** | **Reversible quarantine, restore, purge** | ✅ |
 | M5 | Catalog of 120+ cleanup rules | ⬜ |
 | M6 | Exact and near duplicates | ⬜ |
 | M7 | Treemap | ⬜ |

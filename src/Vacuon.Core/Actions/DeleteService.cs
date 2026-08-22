@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
 using Vacuon.Native.Interop;
@@ -55,10 +55,10 @@ public sealed record DeleteReport(IReadOnlyList<DeleteResult> Results, DeleteMod
 /// attempted, and a blocked path is reported rather than skipped in silence.
 /// </para>
 /// <para>
-/// This is the destructive half of the app, and it arrived before the reversible
-/// quarantine of milestone M4. Until that lands, the Recycle Bin is the only undo
-/// there is — which is exactly why it is the default and why the permanent path
-/// demands a separate, explicit gesture from the caller.
+/// This is the destructive half of the app. It arrived before the quarantine, back when
+/// the Recycle Bin was the only undo there was; the reversible route now lives in
+/// <see cref="QuarantineService"/>, and permanent deletion stays what it always was —
+/// a separate, explicit gesture the caller has to make on purpose.
 /// </para>
 /// </summary>
 [SupportedOSPlatform("windows")]
