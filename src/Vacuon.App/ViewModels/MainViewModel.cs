@@ -592,7 +592,158 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public FileRowViewModel? SelectedRow
     {
         get => _selectedRow;
-        set => Set(ref _selectedRow, value);
+        set
+        {
+            if (!Set(ref _selectedRow, value)) return;
+            UpdatePreview();
+        }
+    }
+
+    // ================= painel de preview =================
+
+    private string _previewTitle = string.Empty;
+    public string PreviewTitle
+    {
+        get => _previewTitle;
+        private set
+        {
+            if (!Set(ref _previewTitle, value)) return;
+            Raise(nameof(HasNoPreviewTarget));
+        }
+    }
+
+    /// <summary>Path of the image to show, or empty when the highlighted item is not one.</summary>
+    private string _previewImagePath = string.Empty;
+    public string PreviewImagePath
+    {
+        get => _previewImagePath;
+        private set
+        {
+            if (!Set(ref _previewImagePath, value)) return;
+            Raise(nameof(HasPreviewImage));
+        }
+    }
+
+    public bool HasPreviewImage => _previewImagePath.Length > 0;
+
+    /// <summary>True when nothing is highlighted, so the pane can say what it is for.</summary>
+    public bool HasNoPreviewTarget => _previewTitle.Length == 0;
+
+    /// <summary>Text or hex dump of the highlighted file.</summary>
+    private string _previewText = string.Empty;
+    public string PreviewText
+    {
+        get => _previewText;
+        private set
+        {
+            if (!Set(ref _previewText, value)) return;
+            Raise(nameof(IsPreviewMonospaced));
+        }
+    }
+
+    private bool _previewIsHex;
+    public bool IsPreviewMonospaced => _previewIsHex;
+
+    /// <summary>Media facts, one per line, or empty when the shell knows nothing.</summary>
+    private string _previewFacts = string.Empty;
+    public string PreviewFacts { get => _previewFacts; private set => Set(ref _previewFacts, value); }
+
+    private string _previewNote = string.Empty;
+    public string PreviewNote { get => _previewNote; private set => Set(ref _previewNote, value); }
+
+    /// <summary>
+    /// Fills the preview pane for whatever is highlighted.
+    /// <para>
+    /// Everything here reads at most the first 64 KiB or asks the shell for metadata it
+    /// already has. Nothing decodes video and nothing walks a folder, because this runs on
+    /// every arrow-key press through a list of a million rows.
+    /// </para>
+    /// </summary>
+    private void UpdatePreview()
+    {
+        FileRowViewModel? row = _selectedRow;
+
+        PreviewImagePath = string.Empty;
+        PreviewText = string.Empty;
+        PreviewFacts = string.Empty;
+        PreviewNote = string.Empty;
+        _previewIsHex = false;
+
+        if (row is null)
+        {
+            PreviewTitle = string.Empty;
+            return;
+        }
+
+        PreviewTitle = row.Name;
+
+        string path = row.FullPath;
+        if (path.Length == 0 || row.IsDirectory) return;
+
+        string category = FileCategories.Of(row.Name.AsSpan());
+
+        // Media facts first: they answer "which copy do I keep" for exactly the files whose
+        // content a text preview could not help with.
+        MediaInfo media = MediaProbe.Read(path);
+        if (!media.IsEmpty) PreviewFacts = DescribeMedia(media);
+
+        if (category == FileCategories.Image)
+        {
+            // WPF decodes through WIC, so whatever Windows can open — including HEIC and
+            // WebP where the codec is installed — shows up here without extra code.
+            PreviewImagePath = path;
+            return;
+        }
+
+        // Video and audio have no still to show; the facts above are the preview.
+        if (category is FileCategories.Video or FileCategories.Audio) return;
+
+        PreviewContent content = FilePreview.Read(path);
+
+        switch (content.Kind)
+        {
+            case PreviewKind.Text:
+                PreviewText = content.Text;
+                break;
+
+            case PreviewKind.Binary:
+                _previewIsHex = true;
+                PreviewText = content.Text;
+                break;
+
+            default:
+                PreviewNote = L.T("preview.nothing");
+                return;
+        }
+
+        Raise(nameof(IsPreviewMonospaced));
+
+        if (content.Truncated)
+            PreviewNote = L.T("preview.truncated", Format.Bytes(content.BytesRead),
+                              Format.Bytes(content.FileBytes));
+    }
+
+    private static string DescribeMedia(MediaInfo media)
+    {
+        var lines = new List<string>(6);
+
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrEmpty(value)) lines.Add($"{L.T(key)}: {value}");
+        }
+
+        Add("media.duration", media.Duration?.ToString(@"hh\:mm\:ss"));
+        Add("media.resolution", media.Dimensions is null
+            ? null
+            : $"{media.Dimensions} ({media.ResolutionLabel})");
+        Add("media.frameRate", media.FrameRate is null
+            ? null
+            : L.T("media.fps", media.FrameRate.Value.ToString("N3").TrimEnd('0').TrimEnd('.', ',')));
+        Add("media.videoCodec", media.VideoCodec);
+        Add("media.camera", media.CameraModel);
+        Add("media.dateTaken", media.DateTaken?.ToString("yyyy-MM-dd HH:mm"));
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>Entry behind <see cref="CurrentFolderPath"/>, or -1 outside folder mode.</summary>

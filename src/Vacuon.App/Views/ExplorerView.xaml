@@ -103,6 +103,8 @@
                 <ColumnDefinition Width="300" MinWidth="200"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="320" MinWidth="220"/>
             </Grid.ColumnDefinitions>
 
             <!-- árvore de pastas -->
@@ -431,6 +433,74 @@
                 </Border>
                 </StackPanel>
             </Grid>
+
+            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch"
+                          Background="Transparent"/>
+
+            <!-- Preview: answers "what IS this?" about the file under the cursor, which is
+                 the question standing between someone and deleting it. Everything shown
+                 here is the first 64 KiB, or metadata Windows already had. -->
+            <Border Grid.Column="4" Padding="12,10" BorderThickness="1,0,0,0"
+                    BorderBrush="{DynamicResource Stroke.Subtle}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Style="{StaticResource Text.Section}" Margin="0,0,0,8"
+                               Text="{DynamicResource S.preview.title}"/>
+
+                    <TextBlock Grid.Row="1" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" Margin="0,0,0,8"
+                               Text="{Binding PreviewTitle}" ToolTip="{Binding PreviewTitle}"/>
+
+                    <!-- Media facts. For a video this IS the preview: no frame is decoded,
+                         and 2160p against 720p is what decides which copy stays. -->
+                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="10,8" Margin="0,0,0,8"
+                            Visibility="{Binding PreviewFacts, Converter={StaticResource NotEmpty}}">
+                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                   TextWrapping="Wrap" Text="{Binding PreviewFacts}"/>
+                    </Border>
+
+                    <Grid Grid.Row="3">
+                        <Image Source="{Binding PreviewImagePath}" Stretch="Uniform"
+                               StretchDirection="DownOnly"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               VerticalAlignment="Top"
+                               Visibility="{Binding HasPreviewImage, Converter={StaticResource Visible}}"/>
+
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      Visibility="{Binding PreviewText, Converter={StaticResource NotEmpty}}">
+                            <TextBox Text="{Binding PreviewText, Mode=OneWay}"
+                                     IsReadOnly="True" BorderThickness="0"
+                                     Background="Transparent"
+                                     Foreground="{DynamicResource Text.Secondary}"
+                                     FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                     TextWrapping="NoWrap"/>
+                        </ScrollViewer>
+
+                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                   TextWrapping="Wrap" VerticalAlignment="Center"
+                                   HorizontalAlignment="Center" TextAlignment="Center"
+                                   Foreground="{DynamicResource Text.Muted}"
+                                   Text="{DynamicResource S.preview.pickOne}"
+                                   Visibility="{Binding HasNoPreviewTarget,
+                                                Converter={StaticResource Visible}}"/>
+                    </Grid>
+
+                    <TextBlock Grid.Row="4" Style="{StaticResource Text.Sub}" FontSize="10"
+                               Margin="0,8,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding PreviewNote}"
+                               Visibility="{Binding PreviewNote, Converter={StaticResource NotEmpty}}"/>
+                </Grid>
+            </Border>
+
         </Grid>
     </Grid>
 </UserControl>

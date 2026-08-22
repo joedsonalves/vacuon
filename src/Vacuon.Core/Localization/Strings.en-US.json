@@ -684,5 +684,9 @@
   "media.dateTaken": "Taken",
   "media.nothing": "Windows has no property handler for this file, so it says nothing about it. That is not the same as the file being empty or broken.",
   "media.perSecond": "{0}/s",
-  "media.fps": "{0} fps"
+  "media.fps": "{0} fps",
+  "preview.title": "Preview",
+  "preview.nothing": "Nothing to show: the file is empty, or Windows would not let it be read.",
+  "preview.truncated": "Showing the first {0} of {1}.",
+  "preview.pickOne": "Highlight a file to see what is in it."
 }

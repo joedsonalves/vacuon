@@ -114,6 +114,58 @@ public class MediaProbeTests
     }
 
     [Fact]
+    public void AnImageReportsItsPixelsAndNotItsDpi()
+    {
+        // The bug this exists for: System.Image ids 5 and 6 are HorizontalResolution and
+        // VerticalResolution — DPI, not size. A 1200×800 PNG reported itself as "96×96",
+        // which is plausible enough to ship and completely wrong. The dimensions are ids
+        // 3 and 4. Caught by making an image of a known size and reading the label back.
+        const int width = 40;
+        const int height = 25;
+
+        string path = Path.Combine(Path.GetTempPath(), $"vacuon-dim-{Guid.NewGuid():N}.bmp");
+        File.WriteAllBytes(path, Bitmap(width, height));
+
+        try
+        {
+            MediaInfo info = MediaProbe.Read(path);
+
+            // If no property handler answers on this machine, there is nothing to assert
+            // about — but when it does answer, it must not answer 96.
+            if (info.Width is null) return;
+
+            Assert.Equal((uint)width, info.Width);
+            Assert.Equal((uint)height, info.Height);
+            Assert.NotEqual(96u, info.Width);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>A minimal 24-bit BMP of the given size, built by hand.</summary>
+    private static byte[] Bitmap(int width, int height)
+    {
+        int rowBytes = (width * 3 + 3) & ~3;
+        int pixelBytes = rowBytes * height;
+        var bytes = new byte[54 + pixelBytes];
+
+        bytes[0] = (byte)'B';
+        bytes[1] = (byte)'M';
+        BitConverter.GetBytes(bytes.Length).CopyTo(bytes, 2);
+        BitConverter.GetBytes(54).CopyTo(bytes, 10);        // pixel data offset
+        BitConverter.GetBytes(40).CopyTo(bytes, 14);        // BITMAPINFOHEADER size
+        BitConverter.GetBytes(width).CopyTo(bytes, 18);
+        BitConverter.GetBytes(height).CopyTo(bytes, 22);
+        BitConverter.GetBytes((short)1).CopyTo(bytes, 26);  // planes
+        BitConverter.GetBytes((short)24).CopyTo(bytes, 28); // bits per pixel
+        BitConverter.GetBytes(pixelBytes).CopyTo(bytes, 34);
+
+        return bytes;
+    }
+
+    [Fact]
     public void TheResolutionLabelIsHowPeopleSayIt()
     {
         // The whole point of reading this: comparing two copies of the same video is

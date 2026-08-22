@@ -190,8 +190,20 @@ public static class PropertySystem
         public static PropertyKey VideoEncodingBitrate => new(Video, 8);
         public static PropertyKey VideoCompression => new(Video, 10);
 
-        public static PropertyKey ImageWidth => new(Image, 5);
-        public static PropertyKey ImageHeight => new(Image, 6);
+        /// <summary>
+        /// Pixel dimensions — <c>System.Image.HorizontalSize</c> and <c>VerticalSize</c>.
+        /// <para>
+        /// Ids 3 and 4, not 5 and 6. Those two are <c>HorizontalResolution</c> and
+        /// <c>VerticalResolution</c>, which are <b>DPI</b>: a 1200×800 PNG reported itself as
+        /// "96×96" and the number looked plausible enough to ship. Caught by generating an
+        /// image of a known size and reading the label back.
+        /// </para>
+        /// </summary>
+        public static PropertyKey ImageWidth => new(Image, 3);
+        public static PropertyKey ImageHeight => new(Image, 4);
+
+        public static PropertyKey HorizontalDpi => new(Image, 5);
+        public static PropertyKey VerticalDpi => new(Image, 6);
         public static PropertyKey BitDepth => new(Image, 7);
 
         public static PropertyKey CameraModel => new(Photo, 272);

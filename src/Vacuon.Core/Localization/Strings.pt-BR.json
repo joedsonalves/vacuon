@@ -684,5 +684,9 @@
   "media.dateTaken": "Tirada em",
   "media.nothing": "O Windows não tem manipulador de propriedades para este arquivo, então não diz nada sobre ele. Isso não é o mesmo que o arquivo estar vazio ou quebrado.",
   "media.perSecond": "{0}/s",
-  "media.fps": "{0} fps"
+  "media.fps": "{0} fps",
+  "preview.title": "Prévia",
+  "preview.nothing": "Nada para mostrar: o arquivo está vazio, ou o Windows não deixou lê-lo.",
+  "preview.truncated": "Mostrando os primeiros {0} de {1}.",
+  "preview.pickOne": "Realce um arquivo para ver o que tem dentro."
 }
