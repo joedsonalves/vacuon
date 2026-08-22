@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using Vacuon.Core.Preview;
 
 namespace Vacuon.Core.Analyzers;
@@ -20,7 +20,15 @@ namespace Vacuon.Core.Analyzers;
 /// </summary>
 public static class PerceptualHash
 {
-    /// <summary>Grid the image is reduced to. One extra column, because each row compares pairs.</summary>
+    /// <summary>
+    /// Grid the image is reduced to. One extra column, because each row compares pairs.
+    /// <para>
+    /// 9×8, giving 64 bits. A 17×16 grid was tried and <b>measured worse</b>: the finer grid
+    /// picks up detail that JPEG re-encoding moves, so three versions of one photograph went
+    /// from 0 bits apart to 27 and 34, while different playing cards stayed close. What
+    /// survives a resize is the coarse shape, so the coarse grid is the right one.
+    /// </para>
+    /// </summary>
     private const int Columns = 9;
     private const int Rows = 8;
 
@@ -42,6 +50,15 @@ public static class PerceptualHash
 
         Span<double> cells = stackalloc double[Columns * Rows];
         Reduce(bitmap, cells);
+
+        // A picture with almost no variation cannot be fingerprinted honestly. A logo on
+        // white, a solid rectangle, a mostly-black screenshot — their cells are all nearly
+        // equal, so every comparison lands on the same side and they all hash to nearly the
+        // same value. They then group with each other, and a "these are the same picture"
+        // built on nothing is exactly the false positive that gets somebody's file deleted.
+        // Found on a real disk: 110 unrelated images — a logo, a blue rectangle, two Dolby
+        // wordmarks, several screenshots — arrived in one group.
+        if (!HasEnoughContrast(cells)) return null;
 
         ulong hash = 0;
         int bit = 0;
@@ -106,6 +123,33 @@ public static class PerceptualHash
     }
 
     /// <summary>
+    /// Minimum spread of cell brightness for a fingerprint to mean anything.
+    /// <para>
+    /// In units of the 0–255 luma scale. Below this the picture is flat enough that the
+    /// comparisons are noise, and the honest answer is no fingerprint rather than one that
+    /// happens to match every other flat picture on the disk.
+    /// </para>
+    /// </summary>
+    private const double MinimumStandardDeviation = 6.0;
+
+    private static bool HasEnoughContrast(ReadOnlySpan<double> cells)
+    {
+        double sum = 0;
+        foreach (double cell in cells) sum += cell;
+
+        double mean = sum / cells.Length;
+        double variance = 0;
+
+        foreach (double cell in cells)
+        {
+            double delta = cell - mean;
+            variance += delta * delta;
+        }
+
+        return Math.Sqrt(variance / cells.Length) >= MinimumStandardDeviation;
+    }
+
+    /// <summary>
     /// How many of the 64 bits differ. Zero means the same picture as far as this can tell.
     /// </summary>
     public static int Distance(ulong left, ulong right) => BitOperations.PopCount(left ^ right);
@@ -113,11 +157,16 @@ public static class PerceptualHash
     /// <summary>
     /// Distance at or below which two images are called the same picture.
     /// <para>
-    /// Ten of sixty-four bits. Below about five, a re-encode at a different quality is
-    /// already enough to separate two copies of one photo; above about fifteen, unrelated
-    /// pictures with similar composition start being grouped — and a false "these are the
-    /// same" is what gets somebody's photo deleted.
+    /// Six of sixty-four, not ten. Measured on real files: versions of one photograph come
+    /// back <b>0 bits</b> apart, so nothing is lost by tightening, and every bit of slack
+    /// costs false positives among small structured images.
+    /// </para>
+    /// <para>
+    /// Tightening alone does not fix them, and that is worth stating plainly: twenty-four
+    /// <b>different</b> playing cards at 70 px had a minimum distance of 0. No threshold
+    /// separates populations that overlap. What removes them is the size floor in
+    /// <c>NearDuplicateOptions.MinimumBytes</c>.
     /// </para>
     /// </summary>
-    public const int DefaultThreshold = 10;
+    public const int DefaultThreshold = 6;
 }

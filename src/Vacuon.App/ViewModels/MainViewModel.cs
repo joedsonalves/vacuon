@@ -20,7 +20,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Treemap, Cleanup, Duplicates, Quarantine, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Treemap, Cleanup, Duplicates, Similar, Quarantine, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -72,6 +72,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
+        FindSimilarCommand = new RelayCommand(async () => await FindSimilarAsync(),
+                                             () => !IsFindingSimilar);
+        QuarantineSimilarCommand = new RelayCommand(QuarantineSimilar);
+        ClearSimilarSelectionCommand = new RelayCommand(ClearSimilarSelection);
         ScanForJunkCommand = new RelayCommand(ScanForJunk);
         RunCleanupCommand = new RelayCommand(RunCleanup);
         SetCleanupProfileCommand = new RelayCommand(p =>
@@ -122,6 +126,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsTreemap));
             Raise(nameof(IsCleanup));
             Raise(nameof(IsDuplicates));
+            Raise(nameof(IsSimilar));
             Raise(nameof(IsQuarantine));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
@@ -135,6 +140,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsTreemap => Section == Section.Treemap;
     public bool IsCleanup => Section == Section.Cleanup;
     public bool IsDuplicates => Section == Section.Duplicates;
+    public bool IsSimilar => Section == Section.Similar;
     public bool IsQuarantine => Section == Section.Quarantine;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
@@ -2187,6 +2193,210 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
         _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
     };
+
+    // ================= imagens parecidas =================
+
+    public ObservableCollection<SimilarGroupViewModel> SimilarGroups { get; } = [];
+
+    private bool _isFindingSimilar;
+    public bool IsFindingSimilar
+    {
+        get => _isFindingSimilar;
+        private set
+        {
+            if (!Set(ref _isFindingSimilar, value)) return;
+            (FindSimilarCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _similarStatusText = L.T("similar.needScan");
+    public string SimilarStatusText
+    {
+        get => _similarStatusText;
+        private set => Set(ref _similarStatusText, value);
+    }
+
+    private string _similarSelectionText = string.Empty;
+    public string SimilarSelectionText
+    {
+        get => _similarSelectionText;
+        private set => Set(ref _similarSelectionText, value);
+    }
+
+    private bool _hasSimilarSelection;
+    public bool HasSimilarSelection
+    {
+        get => _hasSimilarSelection;
+        private set => Set(ref _hasSimilarSelection, value);
+    }
+
+    /// <summary>
+    /// Re-reads whether a scan exists, so the pane stops telling someone to scan a drive
+    /// they already scanned. The status text was set once at construction and never
+    /// revisited, which is only correct until the first scan finishes.
+    /// </summary>
+    public void RefreshSimilarStatus()
+    {
+        if (SimilarGroups.Count > 0 || IsFindingSimilar) return;
+
+        VolumeIndex? index = Index;
+
+        if (index is null)
+        {
+            SimilarStatusText = L.T("similar.needScan");
+            return;
+        }
+
+        // Free, and said before the expensive part: unlike exact duplicates, every
+        // candidate here has to be decoded, and on a full disk that is minutes.
+        SimilarScope scope = new NearDuplicateFinder().Scope(index, new NearDuplicateOptions());
+
+        SimilarStatusText = scope.Candidates == 0
+            ? L.T("similar.scopeNone")
+            : L.T("similar.scope", Format.Count(scope.Candidates),
+                  Format.Bytes(scope.CandidateBytes));
+    }
+
+    private CancellationTokenSource? _similarCts;
+
+    public void CancelSimilarSearch() => _similarCts?.Cancel();
+
+    public ICommand FindSimilarCommand { get; private set; } = null!;
+    public ICommand QuarantineSimilarCommand { get; private set; } = null!;
+    public ICommand ClearSimilarSelectionCommand { get; private set; } = null!;
+
+    private async Task FindSimilarAsync()
+    {
+        VolumeIndex? index = Index;
+
+        if (index is null)
+        {
+            SimilarStatusText = L.T("similar.needScan");
+            return;
+        }
+
+        IsFindingSimilar = true;
+        SimilarStatusText = L.T("dup.searching");
+        SimilarGroups.Clear();
+        SimilarSelectionText = string.Empty;
+        HasSimilarSelection = false;
+
+        _similarCts?.Dispose();
+        _similarCts = new CancellationTokenSource();
+        CancellationToken token = _similarCts.Token;
+
+        var progress = new Progress<DuplicateProgress>(p =>
+            SimilarStatusText = L.T("similar.progress",
+                                    Format.Count(p.FilesDone), Format.Count(p.FilesTotal)));
+
+        try
+        {
+            SimilarReport report = await Task.Run(
+                () => new NearDuplicateFinder().Find(index, new NearDuplicateOptions(),
+                                                     progress, token),
+                token);
+
+            foreach (SimilarGroup group in report.Groups.Take(200))
+                SimilarGroups.Add(new SimilarGroupViewModel(group, UpdateSimilarSelection));
+
+            var parts = new List<string>(5);
+
+            // Said first, because everything after it describes a partial answer.
+            if (report.WasCancelled) parts.Add(L.T("similar.cancelled"));
+
+            parts.AddRange(new[]
+            {
+                report.Groups.Count == 0
+                    ? L.T("similar.none")
+                    : report.Groups.Count == 1
+                        ? L.T("similar.summaryOne", Format.Bytes(report.RecoverableBytes))
+                        : L.T("similar.summary", Format.Count(report.Groups.Count),
+                              Format.Bytes(report.RecoverableBytes)),
+
+                L.T("similar.fingerprinted", Format.Count(report.ImagesFingerprinted)),
+            });
+
+            // Both kinds of "not compared" are named. A report that only counts what it
+            // examined reads as though the rest had been examined and found unique.
+            if (report.ImagesSkipped > 0)
+                parts.Add(L.T("similar.skipped", Format.Count(report.ImagesSkipped)));
+
+            if (report.ImagesBelowMinimum > 0)
+                parts.Add(L.T("similar.belowMinimum", Format.Count(report.ImagesBelowMinimum)));
+
+            SimilarStatusText = string.Join(" · ", parts);
+
+            // Thumbnails after the list exists, so the groups appear immediately and fill in.
+            foreach (SimilarGroupViewModel group in SimilarGroups)
+                await group.LoadThumbnailsAsync(_thumbnails);
+        }
+        catch (OperationCanceledException)
+        {
+            // Only reachable if the task itself was cancelled before Find could return a
+            // partial report; the finder handles the usual case and hands back what it has.
+            SimilarStatusText = L.T("similar.cancelled");
+        }
+        finally
+        {
+            IsFindingSimilar = false;
+        }
+    }
+
+    private void UpdateSimilarSelection()
+    {
+        int count = 0;
+        long bytes = 0;
+
+        foreach (SimilarGroupViewModel group in SimilarGroups)
+        {
+            foreach (SimilarVersionViewModel version in group.Versions)
+            {
+                if (!version.IsChecked) continue;
+                count++;
+                bytes += version.Image.Bytes;
+            }
+        }
+
+        HasSimilarSelection = count > 0;
+        SimilarSelectionText = count == 0
+            ? string.Empty
+            : L.T("dup.selectedCount", Format.Count(count), Format.Bytes(bytes));
+    }
+
+    private void ClearSimilarSelection()
+    {
+        foreach (SimilarGroupViewModel group in SimilarGroups)
+            foreach (SimilarVersionViewModel version in group.Versions)
+                version.IsChecked = false;
+
+        UpdateSimilarSelection();
+    }
+
+    private void QuarantineSimilar(object? parameter)
+    {
+        if (parameter is not Window owner) return;
+
+        var paths = new List<string>();
+
+        foreach (SimilarGroupViewModel group in SimilarGroups)
+            foreach (SimilarVersionViewModel version in group.Versions)
+                if (version.IsChecked) paths.Add(version.Path);
+
+        if (paths.Count == 0) return;
+
+        var service = new QuarantineService();
+        QuarantineReport plan = service.Plan(paths, "similar");
+
+        if (!QuarantineDialog.Confirm(owner, plan)) return;
+
+        QuarantineReport report = service.Execute(paths, "similar");
+
+        ReportQuarantine(report, 0);
+
+        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+
+        _ = FindSimilarAsync();
+    }
 
     // ================= limpeza por regras =================
 

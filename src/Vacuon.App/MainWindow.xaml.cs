@@ -64,6 +64,9 @@ public partial class MainWindow : Window
     private void OnNavDuplicates(object sender, RoutedEventArgs e) =>
         Navigate(Section.Duplicates, "nav.duplicates");
 
+    private void OnNavSimilar(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Similar, "nav.similar");
+
     private void OnNavQuarantine(object sender, RoutedEventArgs e) =>
         Navigate(Section.Quarantine, "nav.quarantine");
 

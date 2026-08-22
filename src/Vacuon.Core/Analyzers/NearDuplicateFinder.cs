@@ -88,7 +88,8 @@ public sealed record SimilarReport(
     IReadOnlyList<SimilarGroup> Groups,
     int ImagesFingerprinted,
     int ImagesSkipped,
-    int ImagesBelowMinimum = 0)
+    int ImagesBelowMinimum = 0,
+    bool WasCancelled = false)
 {
     public long RecoverableBytes
     {
@@ -101,13 +102,30 @@ public sealed record SimilarReport(
     }
 }
 
+/// <summary>What a similar-pictures run would have to decode.</summary>
+public readonly record struct SimilarScope(int Candidates, int BelowMinimum, long CandidateBytes);
+
 public sealed record NearDuplicateOptions
 {
     /// <summary>Hamming distance at or below which two pictures are grouped.</summary>
     public int Threshold { get; init; } = PerceptualHash.DefaultThreshold;
 
-    /// <summary>Images smaller than this are ignored. Icons and sprites are not photos.</summary>
-    public long MinimumBytes { get; init; } = 16 * 1024;
+    /// <summary>
+    /// Images smaller than this are ignored.
+    /// <para>
+    /// 256 KiB, raised from 16 after measuring what a real disk produces. The false
+    /// positives this feature can generate are not photographs: they are card faces,
+    /// sprites, wordmarks and UI chrome — small, structurally alike, and beyond what a
+    /// 64-bit fingerprint can tell apart. Twenty-four different playing cards of about
+    /// 2 KiB each had a minimum distance of <b>zero</b>.
+    /// </para>
+    /// <para>
+    /// A size floor removes that whole population without weakening the real case, because
+    /// a photograph worth reclaiming space over is not 2 KiB. A blunt instrument, chosen
+    /// over a clever one that would have been wrong more often.
+    /// </para>
+    /// </summary>
+    public long MinimumBytes { get; init; } = 256 * 1024;
 
     /// <summary>
     /// Thumbnail size asked of the shell.
@@ -136,6 +154,45 @@ public sealed record NearDuplicateOptions
 [SupportedOSPlatform("windows")]
 public sealed class NearDuplicateFinder
 {
+    /// <summary>
+    /// Counts what a run would have to read, without reading any of it.
+    /// <para>
+    /// Free — the candidate list comes from the index. Worth surfacing because unlike the
+    /// exact-duplicate finder, this one has to <b>decode</b> every candidate, and on a disk
+    /// with tens of thousands of pictures that is minutes. A button that starts that with
+    /// no number on screen is a button nobody agreed to.
+    /// </para>
+    /// </summary>
+    public SimilarScope Scope(VolumeIndex index, NearDuplicateOptions? options = null)
+    {
+        options ??= new NearDuplicateOptions();
+
+        int candidates = 0;
+        int belowMinimum = 0;
+        long bytes = 0;
+
+        FileEntry[] entries = index.Entries;
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            ref FileEntry entry = ref entries[i];
+
+            if (!entry.IsInUse || entry.IsDirectory) continue;
+            if (FileCategories.Of(index.GetName(i)) != FileCategories.Image) continue;
+
+            if (entry.LogicalSize < options.MinimumBytes)
+            {
+                belowMinimum++;
+                continue;
+            }
+
+            candidates++;
+            bytes += entry.LogicalSize;
+        }
+
+        return new SimilarScope(candidates, belowMinimum, bytes);
+    }
+
     public SimilarReport Find(VolumeIndex index,
                               NearDuplicateOptions? options = null,
                               IProgress<DuplicateProgress>? progress = null,
@@ -175,10 +232,18 @@ public sealed class NearDuplicateFinder
 
         var fingerprints = new List<SimilarImage>(candidates.Count);
         int skipped = 0;
+        bool cancelled = false;
 
         for (int i = 0; i < candidates.Count; i++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            // Stopping does not throw the work away. Everything read so far is real, and
+            // grouping it costs nothing — telling someone "what was found is below" and
+            // then showing them nothing is a worse answer than not offering to stop.
+            if (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+                break;
+            }
 
             int entry = candidates[i];
             string path = index.GetFullPath(entry);
@@ -200,15 +265,20 @@ public sealed class NearDuplicateFinder
                 entry, path, index.Entries[entry].LogicalSize, hash.Value,
                 media.Width, media.Height));
 
-            if ((i & 31) == 0)
+            // Every eighth image: decoding one is slow enough that a coarser interval
+            // leaves the bar looking stuck.
+            if ((i & 7) == 0)
                 progress?.Report(new DuplicateProgress(i, candidates.Count, 0));
         }
 
-        List<SimilarGroup> groups = Group(fingerprints, options.Threshold, cancellationToken);
+        // CancellationToken.None on purpose: the grouping runs over what is already in
+        // memory and finishes in milliseconds, so cancelling it again would only throw
+        // away the partial answer the user just asked to see.
+        List<SimilarGroup> groups = Group(fingerprints, options.Threshold, CancellationToken.None);
 
         groups.Sort(static (a, b) => b.RecoverableBytes.CompareTo(a.RecoverableBytes));
 
-        return new SimilarReport(groups, fingerprints.Count, skipped, belowMinimum);
+        return new SimilarReport(groups, fingerprints.Count, skipped, belowMinimum, cancelled);
     }
 
     /// <summary>
@@ -239,14 +309,61 @@ public sealed class NearDuplicateFinder
 
                 if (PerceptualHash.Distance(images[i].Hash, images[j].Hash) > threshold) continue;
 
+                // Second, independent test: two versions of one photograph have the same
+                // shape. A 4K and a 720p copy are both 16:9; a 3:2 crop of the same scene is
+                // a different picture and the user did not ask for it to be grouped.
+                //
+                // This is what the fingerprint cannot do on its own. Measured on a real
+                // install: forty-nine different poker table felts — all dark ovals, all
+                // structurally alike — landed in one group at 6 bits. Their aspect ratios
+                // are all over the place, and this splits them without touching the case
+                // the feature exists for.
+                if (!SameShape(images[i], images[j])) continue;
+
                 cluster.Add(images[j]);
                 taken[j] = true;
             }
 
-            if (cluster.Count > 1) groups.Add(new SimilarGroup(cluster, Choose(cluster)));
+            if (cluster.Count < 2) continue;
+
+            // Re-check against the KEEPER, not the seed. Members were gathered around
+            // whichever image came first, but the group is presented around the keeper —
+            // and a real disk produced a group whose header read "14 bits apart" under a
+            // threshold of 10, because the two were measured from different centres. Anything
+            // too far from the version being kept goes back in the pool for its own group.
+            SimilarImage keeper = Choose(cluster);
+            var coherent = new List<SimilarImage>(cluster.Count) { keeper };
+
+            foreach (SimilarImage member in cluster)
+            {
+                if (ReferenceEquals(member, keeper)) continue;
+
+                if (PerceptualHash.Distance(keeper.Hash, member.Hash) <= threshold)
+                    coherent.Add(member);
+            }
+
+            if (coherent.Count > 1) groups.Add(new SimilarGroup(coherent, keeper));
         }
 
         return groups;
+    }
+
+    /// <summary>
+    /// Whether two pictures have the same proportions, within 2%.
+    /// <para>
+    /// Unknown dimensions mean unknown shape, and unknown is not a match: the pair is only
+    /// grouped when both sides can be checked.
+    /// </para>
+    /// </summary>
+    private static bool SameShape(SimilarImage left, SimilarImage right)
+    {
+        if (left.Width is null or 0 || left.Height is null or 0) return false;
+        if (right.Width is null or 0 || right.Height is null or 0) return false;
+
+        double a = (double)left.Width.Value / left.Height.Value;
+        double b = (double)right.Width.Value / right.Height.Value;
+
+        return Math.Abs(a - b) <= 0.02 * Math.Max(a, b);
     }
 
     /// <summary>

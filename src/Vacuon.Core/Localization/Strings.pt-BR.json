@@ -707,5 +707,10 @@
   "similar.find": "Achar imagens parecidas",
   "similar.needScan": "Varra uma unidade primeiro, depois volte aqui.",
   "similar.quarantineSelected": "Pôr as marcadas de lado",
-  "similar.belowMinimum": "{0} ficaram abaixo do tamanho mínimo e nunca foram comparadas."
+  "similar.belowMinimum": "{0} ficaram abaixo do tamanho mínimo e nunca foram comparadas.",
+  "similar.ready": "Pronto. Isto lê uma miniatura de cada imagem do volume, então demora um pouco num disco cheio.",
+  "similar.scope": "{0} imagens para ler · {1}. Cada uma precisa ser decodificada, então isto leva minutos num disco cheio.",
+  "similar.scopeNone": "Nenhuma imagem grande o bastante para comparar.",
+  "similar.progress": "{0} de {1} imagens lidas",
+  "similar.cancelled": "Parado antes do fim — isto é só parte do volume."
 }

@@ -707,5 +707,10 @@
   "similar.find": "Find similar pictures",
   "similar.needScan": "Scan a drive first, then come back.",
   "similar.quarantineSelected": "Quarantine selected",
-  "similar.belowMinimum": "{0} were under the size floor and were never compared."
+  "similar.belowMinimum": "{0} were under the size floor and were never compared.",
+  "similar.ready": "Ready. This reads a thumbnail of every picture on the volume, so it takes a while on a full disk.",
+  "similar.scope": "{0} pictures to read · {1}. Each one has to be decoded, so this takes minutes on a full disk.",
+  "similar.scopeNone": "No pictures big enough to compare.",
+  "similar.progress": "{0} of {1} pictures read",
+  "similar.cancelled": "Stopped early — this is only part of the volume."
 }

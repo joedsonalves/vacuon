@@ -1,4 +1,4 @@
-using Vacuon.Core.Analyzers;
+﻿using Vacuon.Core.Analyzers;
 using Vacuon.Core.Preview;
 using Xunit;
 
@@ -102,42 +102,88 @@ public class PerceptualHashTests
     }
 
     [Fact]
-    public void AFlatImageIsStableRatherThanRandom()
+    public void AFlatImageIsRefusedRatherThanFingerprinted()
     {
-        // Every cell equal means every comparison is "not brighter", so the fingerprint is
-        // all zeroes. That is correct and, more importantly, the same every time — a blank
-        // image must not produce noise that groups it with something.
+        // Found on a real disk, and it was the worst result this feature produced: 110
+        // unrelated images — a logo on white, a solid blue rectangle, two Dolby wordmarks,
+        // a pile of screenshots — arrived in ONE group of "the same picture". They are all
+        // nearly uniform, so every cell comparison lands the same way and they all hash
+        // alike. A fingerprint built on nothing must not exist.
         var flat = new byte[64 * 64 * 4];
         Array.Fill(flat, (byte)200);
 
-        ulong? first = PerceptualHash.Compute(new ThumbnailBitmap(64, 64, flat, true));
-        ulong? second = PerceptualHash.Compute(new ThumbnailBitmap(64, 64, flat, true));
-
-        Assert.NotNull(first);
-        Assert.Equal(first, second);
+        Assert.Null(PerceptualHash.Compute(new ThumbnailBitmap(64, 64, flat, true)));
     }
 
     [Fact]
-    public void BrightnessUsesLumaWeightsNotAPlainAverage()
+    public void ALogoOnWhiteStillGetsAFingerprint_AndThatIsTheGatesLimit()
     {
-        // Pure green and pure blue have the same plain average, and wildly different
-        // brightness to an eye. Using a flat average would let a colour shift move the
-        // fingerprint more than a resize does.
-        var green = new byte[8 * 8 * 4];
-        var blue = new byte[8 * 8 * 4];
+        // Measured rather than assumed, and it corrects what I first believed: a small dark
+        // mark on white has a cell spread of about 12, comfortably over the gate. So the
+        // contrast gate catches the genuinely uniform images and NOT logos.
+        //
+        // Written down because it is the honest boundary of this feature: two unrelated
+        // logos of similar layout can still be grouped, which is why the screen shows the
+        // thumbnails and the bit distance instead of just asserting a match.
+        var pixels = new byte[64 * 64 * 4];
+        Array.Fill(pixels, (byte)255);
 
-        for (int i = 0; i < green.Length; i += 4)
+        for (int y = 28; y < 34; y++)
         {
-            green[i + 1] = 255;   // G
-            green[i + 3] = 255;
-            blue[i] = 255;        // B
-            blue[i + 3] = 255;
+            for (int x = 28; x < 34; x++)
+            {
+                int offset = (y * 64 + x) * 4;
+                pixels[offset] = pixels[offset + 1] = pixels[offset + 2] = 0;
+            }
         }
 
-        // Both are flat, so both hash to zero — what is asserted is that the reduction reads
-        // the channels in BGRA order at all, which a wrong offset would break loudly.
-        Assert.NotNull(PerceptualHash.Compute(new ThumbnailBitmap(8, 8, green, true)));
-        Assert.NotNull(PerceptualHash.Compute(new ThumbnailBitmap(8, 8, blue, true)));
+        Assert.NotNull(PerceptualHash.Compute(new ThumbnailBitmap(64, 64, pixels, true)));
+    }
+
+    [Fact]
+    public void APictureWithRealStructureIsAccepted()
+    {
+        // The other side of the same gate: refusing flat images must not refuse photos.
+        Assert.NotNull(PerceptualHash.Compute(Picture(320, 240)));
+    }
+
+    [Fact]
+    public void ChannelsAreReadInBgraOrderWithLumaWeights()
+    {
+        // Half green, half blue. To the eye green is far brighter, so under luma weights
+        // this has an edge down the middle and fingerprints. Read the channels in the wrong
+        // order and the halves swap, which flips the comparison across that edge — so the
+        // two orderings cannot produce the same answer.
+        ThumbnailBitmap Split(bool greenLeft)
+        {
+            var pixels = new byte[64 * 64 * 4];
+
+            for (int y = 0; y < 64; y++)
+            {
+                for (int x = 0; x < 64; x++)
+                {
+                    int offset = (y * 64 + x) * 4;
+                    bool green = (x < 32) == greenLeft;
+
+                    if (green) pixels[offset + 1] = 255;   // G
+                    else pixels[offset] = 255;             // B
+
+                    pixels[offset + 3] = 255;
+                }
+            }
+
+            return new ThumbnailBitmap(64, 64, pixels, true);
+        }
+
+        ulong? greenLeft = PerceptualHash.Compute(Split(greenLeft: true));
+        ulong? greenRight = PerceptualHash.Compute(Split(greenLeft: false));
+
+        Assert.NotNull(greenLeft);
+        Assert.NotNull(greenRight);
+
+        // Mirroring the picture must move the fingerprint; if green and blue weighed the
+        // same, both halves would be equal and both hashes would be zero.
+        Assert.NotEqual(greenLeft, greenRight);
     }
 }
 
@@ -182,6 +228,26 @@ public class NearDuplicateChoiceTests
         ]);
 
         Assert.Equal("known.jpg", best.Path);
+    }
+
+    [Fact]
+    public void TheThresholdIsTightBecauseRealVersionsLandAtZero()
+    {
+        // Measured, not chosen by feel: three versions of one photograph — 1440p PNG,
+        // 1080p JPEG and a badly compressed 720p JPEG — all fingerprinted identically.
+        // Nothing is lost by tightening, and every bit of slack costs false positives.
+        Assert.True(PerceptualHash.DefaultThreshold <= 6,
+                    "the threshold was widened; the measurements that set it are in the XML doc");
+    }
+
+    [Fact]
+    public void TheSizeFloorIsHighEnoughToExcludeUiArt()
+    {
+        // The false positives were card faces and sprites of about 2 KiB, which a 64-bit
+        // fingerprint cannot tell apart at all — twenty-four different cards had a minimum
+        // distance of zero. The floor is what removes that population.
+        Assert.True(new NearDuplicateOptions().MinimumBytes >= 256 * 1024,
+                    "the size floor was lowered; small UI art comes back with it");
     }
 
     [Fact]
