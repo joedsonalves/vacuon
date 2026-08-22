@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Vacuon.Core.Index;
 
 namespace Vacuon.Core.Analyzers;
@@ -177,17 +177,36 @@ public sealed class DuplicateFinder
     /// <summary>Files at or below this size are read once and hashed whole.</summary>
     private const int SmallFileCutoff = SampleBytes * 2;
 
-    public DuplicateReport Find(VolumeIndex index,
-                                DuplicateOptions? options = null,
-                                IProgress<DuplicateProgress>? progress = null,
-                                CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Runs stage 1 alone and reports what the rest would cost.
+    /// <para>
+    /// Free, because every size is already in the index, and worth surfacing before the
+    /// reading starts: on a real 2.49 M file volume this comes back with 769 k candidates
+    /// holding 102 GiB. A "find duplicates" button that quietly starts reading that is a
+    /// button nobody can consent to.
+    /// </para>
+    /// </summary>
+    public DuplicateScope Scope(VolumeIndex index, DuplicateOptions? options = null)
     {
         options ??= new DuplicateOptions();
 
-        // ---- stage 1: group by size, straight from the index, no disk ----
+        List<List<int>> candidates = Stage1(index, options, out int files, out int candidateFiles);
+
+        long candidateBytes = 0;
+        foreach (List<int> bucket in candidates)
+            candidateBytes += index.Entries[bucket[0]].LogicalSize * bucket.Count;
+
+        return new DuplicateScope(files, candidateFiles, candidates.Count, candidateBytes);
+    }
+
+    /// <summary>Groups by size using only the index. Touches no file content.</summary>
+    private static List<List<int>> Stage1(VolumeIndex index, DuplicateOptions options,
+                                          out int eligibleFiles, out int candidateFiles)
+    {
         var bySize = new Dictionary<long, List<int>>();
 
         FileEntry[] entries = index.Entries;
+        eligibleFiles = 0;
 
         for (int i = 0; i < entries.Length; i++)
         {
@@ -198,6 +217,8 @@ public sealed class DuplicateFinder
             long size = entry.LogicalSize;
             if (size < options.MinimumBytes) continue;
 
+            eligibleFiles++;
+
             if (!bySize.TryGetValue(size, out List<int>? bucket))
                 bySize[size] = bucket = [];
 
@@ -205,7 +226,7 @@ public sealed class DuplicateFinder
         }
 
         var candidates = new List<List<int>>();
-        int candidateFiles = 0;
+        candidateFiles = 0;
 
         foreach (KeyValuePair<long, List<int>> pair in bySize)
         {
@@ -213,6 +234,20 @@ public sealed class DuplicateFinder
             candidates.Add(pair.Value);
             candidateFiles += pair.Value.Count;
         }
+
+        return candidates;
+    }
+
+    public DuplicateReport Find(VolumeIndex index,
+                                DuplicateOptions? options = null,
+                                IProgress<DuplicateProgress>? progress = null,
+                                CancellationToken cancellationToken = default)
+    {
+        options ??= new DuplicateOptions();
+
+        List<List<int>> candidates = Stage1(index, options, out _, out int candidateFiles);
+
+        FileEntry[] entries = index.Entries;
 
         progress?.Report(new DuplicateProgress(0, candidateFiles, 0));
 
@@ -466,3 +501,18 @@ public sealed class DuplicateFinder
 }
 
 public readonly record struct DuplicateProgress(int FilesDone, int FilesTotal, int GroupsFound);
+
+/// <summary>
+/// What stage 1 found, and therefore what stages 2 to 4 would cost.
+/// <para>
+/// <see cref="CandidateBytes"/> is the worst case — the total the candidates hold. The
+/// sampled stages usually read a fraction of it, but the fraction is not knowable in
+/// advance, and quoting a hopeful number before an operation that can take an hour is
+/// exactly the kind of estimate this app does not make.
+/// </para>
+/// </summary>
+public readonly record struct DuplicateScope(
+    int EligibleFiles,
+    int CandidateFiles,
+    int SizeBuckets,
+    long CandidateBytes);

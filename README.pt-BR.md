@@ -9,7 +9,7 @@ Lê a MFT do NTFS direto do volume, mostra o conteúdo real do que você vai apa
 e nunca afirma um número que não mediu.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Testes](https://img.shields.io/badge/testes-286-3FB950.svg)](tests)
+[![Testes](https://img.shields.io/badge/testes-303-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4.svg)](#requisitos)
@@ -512,7 +512,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
 | **M4** | **Quarentena reversível, restaurar, expurgar** | ✅ |
 | M5 | Catálogo de 120+ regras de limpeza | ⬜ |
-| M6 | Duplicados exatos e quase-duplicados | ⬜ |
+| **M6** | **Duplicados exatos, em quatro estágios** | ✅ |
 | M7 | Treemap | ⬜ |
 
 ## Arquitetura

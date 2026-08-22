@@ -67,6 +67,9 @@
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.explorer}" Tag=""
                                  IsChecked="{Binding IsExplorer, Mode=OneWay}"
                                  Checked="OnNavExplorer"/>
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.duplicates}" Tag=""
+                                 IsChecked="{Binding IsDuplicates, Mode=OneWay}"
+                                 Checked="OnNavDuplicates"/>
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.quarantine}" Tag=""
                                  IsChecked="{Binding IsQuarantine, Mode=OneWay}"
                                  Checked="OnNavQuarantine"/>
@@ -183,6 +186,7 @@
             <Grid Grid.Row="1">
                 <views:DashboardView Visibility="{Binding IsDashboard, Converter={StaticResource Visible}}"/>
                 <views:ExplorerView  Visibility="{Binding IsExplorer,  Converter={StaticResource Visible}}"/>
+                <views:DuplicatesView Visibility="{Binding IsDuplicates, Converter={StaticResource Visible}}"/>
                 <views:QuarantineView Visibility="{Binding IsQuarantine, Converter={StaticResource Visible}}"/>
                 <views:SecurityView  Visibility="{Binding IsSecurity,  Converter={StaticResource Visible}}"/>
                 <views:OptimizeView  Visibility="{Binding IsOptimize,  Converter={StaticResource Visible}}"/>

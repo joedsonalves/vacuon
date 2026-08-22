@@ -1,0 +1,133 @@
+﻿<UserControl x:Class="Vacuon.App.Views.DuplicatesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <UserControl.Resources>
+        <!-- Every view declares its own: resources on MainWindow are not in scope here, and
+             a missing one is a XamlParseException at load, which takes the whole window
+             down rather than just this tab. -->
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,20,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource Text.Sub}" TextWrapping="Wrap"
+                   MaxWidth="820" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource Text.Secondary}"
+                   Text="{DynamicResource S.dup.subtitle}"/>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,11">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
+                        Content="{DynamicResource S.dup.find}"
+                        Command="{Binding FindDuplicatesCommand}"/>
+
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.cancel}"
+                        Click="OnStop"
+                        Visibility="{Binding IsFindingDuplicates, Converter={StaticResource Visible}}"/>
+
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="760"
+                               Text="{Binding DuplicateStatusText}"/>
+                    <!-- The worst case, said plainly, before a read that can take an hour. -->
+                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" Margin="0,4,0,0"
+                               TextWrapping="Wrap" MaxWidth="760"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding DuplicateScopeText}"
+                               Visibility="{Binding DuplicateScopeText,
+                                            Converter={StaticResource NotEmpty}}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding DuplicateGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="16,13">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                           Text="{Binding HeaderText}"/>
+
+                                <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource Text.Muted}"
+                                           Text="{Binding NothingRecoverableNote}"
+                                           Visibility="{Binding NothingRecoverableNote,
+                                                        Converter={StaticResource NotEmpty}}"/>
+
+                                <!-- The keeper. No checkbox exists for it, so no amount of
+                                     clicking or "select all" can put it up for removal. -->
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" CornerRadius="4" Padding="6,2"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource Accent.Muted}">
+                                        <TextBlock FontSize="10" FontWeight="Bold"
+                                                   FontFamily="{StaticResource Font.Ui}"
+                                                   Text="{Binding KeeperLabel}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                                               Margin="10,0,0,0" VerticalAlignment="Center"
+                                               FontSize="11" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding KeeperPath}"
+                                               ToolTip="{Binding KeeperPath}"/>
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding Copies}" Margin="0,4,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,3,0,0">
+                                                <CheckBox IsChecked="{Binding IsChecked}"
+                                                          VerticalContentAlignment="Center">
+                                                    <TextBlock Style="{StaticResource Text.Sub}"
+                                                               FontSize="11" TextTrimming="CharacterEllipsis"
+                                                               Text="{Binding Path}"
+                                                               ToolTip="{Binding Path}"/>
+                                                </CheckBox>
+                                                <TextBlock Style="{StaticResource Text.Sub}" FontSize="10"
+                                                           Margin="24,1,0,0" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource Risk.Notable}"
+                                                           Text="{Binding HardLinkNote}"
+                                                           Visibility="{Binding HardLinkNote,
+                                                                        Converter={StaticResource NotEmpty}}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Padding="0,12,0,12" BorderThickness="0,1,0,0"
+                BorderBrush="{DynamicResource Stroke.Subtle}"
+                Visibility="{Binding HasDuplicateSelection, Converter={StaticResource Visible}}">
+            <StackPanel Orientation="Horizontal">
+                <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
+                        Content="{DynamicResource S.dup.quarantineSelected}"
+                        Click="OnQuarantineSelected"/>
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.clearSelection}"
+                        Command="{Binding ClearDuplicateSelectionCommand}"/>
+
+                <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0"
+                           VerticalAlignment="Center" FontWeight="SemiBold"
+                           Text="{Binding DuplicateSelectionText}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

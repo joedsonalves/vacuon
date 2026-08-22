@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-286-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-303-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -512,7 +512,7 @@ Details in [SECURITY.md](SECURITY.md).
 | M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
 | **M4** | **Reversible quarantine, restore, purge** | ✅ |
 | M5 | Catalog of 120+ cleanup rules | ⬜ |
-| M6 | Exact and near duplicates | ⬜ |
+| **M6** | **Exact duplicates, four-stage** | ✅ |
 | M7 | Treemap | ⬜ |
 
 ## Architecture

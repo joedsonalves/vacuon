@@ -55,6 +55,9 @@ public partial class MainWindow : Window
     private void OnNavExplorer(object sender, RoutedEventArgs e) =>
         Navigate(Section.Explorer, "nav.explorer");
 
+    private void OnNavDuplicates(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Duplicates, "nav.duplicates");
+
     private void OnNavQuarantine(object sender, RoutedEventArgs e) =>
         Navigate(Section.Quarantine, "nav.quarantine");
 

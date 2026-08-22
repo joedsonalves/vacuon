@@ -19,7 +19,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Quarantine, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Duplicates, Quarantine, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -71,6 +71,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
+        FindDuplicatesCommand = new RelayCommand(async () => await FindDuplicatesAsync(),
+                                                () => !IsFindingDuplicates);
+        QuarantineDuplicatesCommand = new RelayCommand(QuarantineDuplicates);
+        SelectAllDuplicatesCommand = new RelayCommand(SelectAllDuplicates);
+        ClearDuplicateSelectionCommand = new RelayCommand(ClearDuplicateSelection);
         RefreshQuarantineCommand = new RelayCommand(RefreshQuarantine);
         RestoreBatchCommand = new RelayCommand(RestoreBatch);
         PurgeBatchCommand = new RelayCommand(PurgeBatch);
@@ -104,6 +109,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             if (!Set(ref _section, value)) return;
             Raise(nameof(IsDashboard));
             Raise(nameof(IsExplorer));
+            Raise(nameof(IsDuplicates));
             Raise(nameof(IsQuarantine));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
@@ -114,6 +120,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public bool IsDashboard => Section == Section.Dashboard;
     public bool IsExplorer => Section == Section.Explorer;
+    public bool IsDuplicates => Section == Section.Duplicates;
     public bool IsQuarantine => Section == Section.Quarantine;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
@@ -2015,6 +2022,250 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
         _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
     };
+
+    // ================= duplicados =================
+
+    public ObservableCollection<DuplicateGroupViewModel> DuplicateGroups { get; } = [];
+
+    private const int MaxGroupsShown = 300;
+
+    private bool _isFindingDuplicates;
+    public bool IsFindingDuplicates
+    {
+        get => _isFindingDuplicates;
+        private set
+        {
+            if (!Set(ref _isFindingDuplicates, value)) return;
+            (FindDuplicatesCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
+    private string _duplicateStatusText = L.T("dup.needScan");
+    public string DuplicateStatusText
+    {
+        get => _duplicateStatusText;
+        private set => Set(ref _duplicateStatusText, value);
+    }
+
+    private string _duplicateSelectionText = string.Empty;
+    public string DuplicateSelectionText
+    {
+        get => _duplicateSelectionText;
+        private set => Set(ref _duplicateSelectionText, value);
+    }
+
+    public bool HasDuplicateSelection => _duplicateSelectedBytes >= 0 && _duplicateSelectedCount > 0;
+
+    private int _duplicateSelectedCount;
+    private long _duplicateSelectedBytes;
+
+    public ICommand FindDuplicatesCommand { get; private set; } = null!;
+    public ICommand QuarantineDuplicatesCommand { get; private set; } = null!;
+    public ICommand SelectAllDuplicatesCommand { get; private set; } = null!;
+    public ICommand ClearDuplicateSelectionCommand { get; private set; } = null!;
+
+    private CancellationTokenSource? _duplicateCts;
+
+    private string _duplicateScopeText = string.Empty;
+    public string DuplicateScopeText
+    {
+        get => _duplicateScopeText;
+        private set => Set(ref _duplicateScopeText, value);
+    }
+
+    /// <summary>
+    /// Runs stage 1 and says what reading the rest would cost, before any of it happens.
+    /// <para>
+    /// It is free — every size is already in the index — and on the machine this was
+    /// developed on it comes back with 769 k candidates holding 102 GiB. Starting that
+    /// read on a button press with no figure on screen would be asking for a consent
+    /// nobody was given the information to give.
+    /// </para>
+    /// </summary>
+    public void MeasureDuplicateScope()
+    {
+        VolumeIndex? index = Index;
+
+        if (index is null)
+        {
+            DuplicateStatusText = L.T("dup.needScan");
+            DuplicateScopeText = string.Empty;
+            return;
+        }
+
+        DuplicateScope scope = new DuplicateFinder().Scope(index, new DuplicateOptions());
+
+        if (scope.CandidateFiles == 0)
+        {
+            DuplicateStatusText = L.T("dup.scopeNone");
+            DuplicateScopeText = string.Empty;
+            return;
+        }
+
+        DuplicateStatusText = L.T("dup.scope",
+                                  Format.Count(scope.CandidateFiles),
+                                  Format.Count(scope.SizeBuckets),
+                                  Format.Bytes(scope.CandidateBytes));
+        DuplicateScopeText = L.T("dup.scopeNote");
+    }
+
+    public void CancelDuplicateSearch() => _duplicateCts?.Cancel();
+
+    private async Task FindDuplicatesAsync()
+    {
+        VolumeIndex? index = Index;
+
+        if (index is null)
+        {
+            DuplicateStatusText = L.T("dup.needScan");
+            return;
+        }
+
+        IsFindingDuplicates = true;
+        DuplicateStatusText = L.T("dup.searching");
+        DuplicateScopeText = string.Empty;
+        DuplicateGroups.Clear();
+        ResetDuplicateSelection();
+
+        _duplicateCts?.Dispose();
+        _duplicateCts = new CancellationTokenSource();
+        CancellationToken token = _duplicateCts.Token;
+
+        var progress = new Progress<DuplicateProgress>(p =>
+            DuplicateStatusText = L.T("dup.progress",
+                                      Format.Count(p.FilesDone),
+                                      Format.Count(p.FilesTotal),
+                                      Format.Count(p.GroupsFound)));
+
+        try
+        {
+            DuplicateReport report = await Task.Run(
+                () => new DuplicateFinder().Find(index, new DuplicateOptions(), progress, token),
+                token);
+
+            foreach (DuplicateGroup group in report.Groups.Take(MaxGroupsShown))
+                DuplicateGroups.Add(new DuplicateGroupViewModel(group, UpdateDuplicateSelection));
+
+            string headline = report.GroupCount == 0
+                ? L.T("dup.none")
+                : report.GroupCount == 1
+                    ? L.T("dup.summaryOne", Format.Bytes(report.RecoverableBytes))
+                    : L.T("dup.summary", Format.Count(report.GroupCount),
+                          Format.Bytes(report.RecoverableBytes));
+
+            var parts = new List<string>(3) { headline };
+
+            if (report.GroupCount > MaxGroupsShown)
+                parts.Add(L.T("dup.groupsShown", Format.Count(MaxGroupsShown),
+                              Format.Count(report.GroupCount)));
+
+            // Hardlinked copies are identical and free nothing. Saying so keeps the
+            // recoverable figure above from reading as though it covered every copy listed.
+            if (report.HardLinkedCopies > 0)
+                parts.Add(L.T("dup.hardlinkNote", Format.Count(report.HardLinkedCopies)));
+
+            if (report.UnreadableFiles > 0)
+                parts.Add(L.T("dup.unreadable", Format.Count(report.UnreadableFiles)));
+
+            DuplicateStatusText = string.Join(" · ", parts);
+        }
+        catch (OperationCanceledException)
+        {
+            // Whatever was confirmed before stopping is real and stays on screen; a partial
+            // answer is still an answer, as long as it is labelled as one.
+            DuplicateStatusText = L.T("dup.cancelled");
+        }
+        finally
+        {
+            IsFindingDuplicates = false;
+        }
+    }
+
+    private void UpdateDuplicateSelection()
+    {
+        int count = 0;
+        long bytes = 0;
+
+        foreach (DuplicateGroupViewModel group in DuplicateGroups)
+        {
+            foreach (DuplicateCopyViewModel copy in group.Copies)
+            {
+                if (!copy.IsChecked) continue;
+                count++;
+                bytes += copy.RecoverableBytes;
+            }
+        }
+
+        _duplicateSelectedCount = count;
+        _duplicateSelectedBytes = bytes;
+
+        // The size shown is what the disk would give back, so a selection made entirely of
+        // hardlinks reads as zero rather than as the sum of their apparent sizes.
+        DuplicateSelectionText = count == 0
+            ? string.Empty
+            : L.T("dup.selectedCount", Format.Count(count), Format.Bytes(bytes));
+
+        Raise(nameof(HasDuplicateSelection));
+    }
+
+    private void ResetDuplicateSelection()
+    {
+        _duplicateSelectedCount = 0;
+        _duplicateSelectedBytes = 0;
+        DuplicateSelectionText = string.Empty;
+        Raise(nameof(HasDuplicateSelection));
+    }
+
+    /// <summary>
+    /// Ticks every redundant copy. It cannot reach a keeper: keepers are not in
+    /// <see cref="DuplicateGroupViewModel.Copies"/> and have no tick to set.
+    /// </summary>
+    private void SelectAllDuplicates()
+    {
+        foreach (DuplicateGroupViewModel group in DuplicateGroups)
+            foreach (DuplicateCopyViewModel copy in group.Copies)
+                copy.IsChecked = true;
+
+        UpdateDuplicateSelection();
+    }
+
+    private void ClearDuplicateSelection()
+    {
+        foreach (DuplicateGroupViewModel group in DuplicateGroups)
+            foreach (DuplicateCopyViewModel copy in group.Copies)
+                copy.IsChecked = false;
+
+        UpdateDuplicateSelection();
+    }
+
+    /// <summary>Sets the ticked copies aside, through the same quarantine as everything else.</summary>
+    private void QuarantineDuplicates(object? parameter)
+    {
+        if (parameter is not Window owner) return;
+
+        var paths = new List<string>();
+
+        foreach (DuplicateGroupViewModel group in DuplicateGroups)
+            foreach (DuplicateCopyViewModel copy in group.Copies)
+                if (copy.IsChecked) paths.Add(copy.Path);
+
+        if (paths.Count == 0) return;
+
+        var service = new QuarantineService();
+        QuarantineReport plan = service.Plan(paths, "duplicates");
+
+        if (!QuarantineDialog.Confirm(owner, plan)) return;
+
+        QuarantineReport report = service.Execute(paths, "duplicates");
+
+        ReportQuarantine(report, 0);
+
+        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+
+        // Whatever was set aside is no longer where the group says it is, so the listing is
+        // rebuilt from the disk rather than patched in place.
+        _ = FindDuplicatesAsync();
+    }
 
     // ================= quarentena =================
 

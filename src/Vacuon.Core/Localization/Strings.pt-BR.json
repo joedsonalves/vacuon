@@ -600,5 +600,22 @@
   "dup.hardlinkNote": "{0} cópias idênticas são hardlinks, e não entram no que é recuperável.",
   "dup.unreadable": "{0} arquivos não puderam ser lidos, e não foram agrupados.",
   "dup.nothingRecoverable": "idênticos, mas nada aqui seria liberado",
-  "dup.summaryOne": "1 grupo · {0} recuperáveis"
+  "dup.summaryOne": "1 grupo · {0} recuperáveis",
+  "nav.duplicates": "Duplicados",
+  "dup.subtitle": "Arquivos com conteúdo idêntico. O veredito é sempre o hash do arquivo inteiro — a amostragem só descarta cópias, nunca decide que duas são iguais.",
+  "dup.find": "Achar duplicados",
+  "dup.searching": "Lendo candidatos…",
+  "dup.needScan": "Varra uma unidade primeiro, depois volte aqui.",
+  "dup.keeperLabel": "fica",
+  "dup.selectedCount": "{0} cópias marcadas · {1}",
+  "dup.quarantineSelected": "Pôr as marcadas de lado",
+  "dup.selectAllRedundant": "Marcar todas as cópias",
+  "dup.clearSelection": "Limpar",
+  "dup.groupsShown": "mostrando {0} de {1} grupos",
+  "dup.scope": "{0} candidatos em {1} grupos de tamanho · até {2} para ler",
+  "dup.scopeNone": "Nenhum par de arquivos divide tamanho, então não há o que ler.",
+  "dup.scopeNote": "Este é o pior caso. Os estágios amostrados costumam ler uma fração disso, e quanto é essa fração não dá para saber antes de ler.",
+  "dup.progress": "{0} de {1} candidatos · {2} grupos até agora",
+  "dup.cancel": "Parar",
+  "dup.cancelled": "Parado. O que foi achado antes de parar está listado abaixo."
 }

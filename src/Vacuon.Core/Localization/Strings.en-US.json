@@ -600,5 +600,22 @@
   "dup.hardlinkNote": "{0} identical copies are hardlinks, and are not counted as recoverable.",
   "dup.unreadable": "{0} files could not be read, and were never grouped.",
   "dup.nothingRecoverable": "identical, but nothing here would be freed",
-  "dup.summaryOne": "1 group · {0} recoverable"
+  "dup.summaryOne": "1 group · {0} recoverable",
+  "nav.duplicates": "Duplicates",
+  "dup.subtitle": "Files with identical content. The verdict is always the full-file hash — sampling only rules copies out, it never decides one is a match.",
+  "dup.find": "Find duplicates",
+  "dup.searching": "Reading candidates…",
+  "dup.needScan": "Scan a drive first, then come back.",
+  "dup.keeperLabel": "keeping",
+  "dup.selectedCount": "{0} copies selected · {1}",
+  "dup.quarantineSelected": "Quarantine selected",
+  "dup.selectAllRedundant": "Select every copy",
+  "dup.clearSelection": "Clear",
+  "dup.groupsShown": "showing {0} of {1} groups",
+  "dup.scope": "{0} candidates in {1} size groups · up to {2} to read",
+  "dup.scopeNone": "No two files share a size, so there is nothing to read.",
+  "dup.scopeNote": "That is the worst case. The sampled stages usually read a fraction of it, and how big a fraction is not knowable before reading.",
+  "dup.progress": "{0} of {1} candidates · {2} groups so far",
+  "dup.cancel": "Stop",
+  "dup.cancelled": "Stopped. What was found before stopping is listed below."
 }
