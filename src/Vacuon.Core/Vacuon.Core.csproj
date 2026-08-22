@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <RootNamespace>Vacuon.Core</RootNamespace>
@@ -31,6 +31,18 @@
     <EmbeddedResource Include="Localization\Strings.pt-BR.json"
                       WithCulture="false"
                       LogicalName="Vacuon.Core.Localization.Strings.pt-BR.json" />
+  </ItemGroup>
+
+  <!--
+    Catalogo de regras embutido. WithCulture="false" pelo mesmo motivo dos dicionarios:
+    "catalog.json" nao casa com nome.cultura.extensao hoje, mas LogicalName fixa o nome
+    independente de RootNamespace e de onde o arquivo esteja na arvore, que e o que evita
+    o GetManifestResourceStream devolver null sem erro nenhum no build.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Cleanup\catalog.json"
+                      WithCulture="false"
+                      LogicalName="Vacuon.Core.Cleanup.catalog.json" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "Id": "windows.userTemp",
+      "Category": "cleanup.cat.windows",
+      "Name": "User temporary files",
+      "Description": "What programs write to %TEMP% and are supposed to delete afterwards. Installers and video tools are the usual offenders. Only files untouched for a day are matched, so nothing in use is caught.",
+      "Risk": "Safe",
+      "Paths": [ "%TEMP%\\**" ],
+      "MinimumAgeDays": 1
+    },
+    {
+      "Id": "windows.crashDumps",
+      "Category": "cleanup.cat.windows",
+      "Name": "Crash dumps",
+      "Description": "Memory dumps written when a program or the kernel crashed. Useful to whoever is debugging that crash, and to nobody else afterwards.",
+      "Risk": "Safe",
+      "Paths": [
+        "%LOCALAPPDATA%\\CrashDumps\\**",
+        "%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\**"
+      ]
+    },
+    {
+      "Id": "windows.errorReporting",
+      "Category": "cleanup.cat.windows",
+      "Name": "Error reports queued for Microsoft",
+      "Description": "Reports Windows collected to send to Microsoft. Removing them means those reports are never sent; nothing on the machine depends on them.",
+      "Risk": "Safe",
+      "Paths": [ "%PROGRAMDATA%\\Microsoft\\Windows\\WER\\**" ]
+    },
+    {
+      "Id": "windows.thumbnailCache",
+      "Category": "cleanup.cat.windows",
+      "Name": "Explorer thumbnail and icon cache",
+      "Description": "Rebuilt on demand. The first browse through a picture folder afterwards is slower, and that is the entire cost.",
+      "Risk": "Safe",
+      "Paths": [ "%LOCALAPPDATA%\\Microsoft\\Windows\\Explorer\\*.db" ],
+      "BlockedByProcesses": [ "explorer" ]
+    },
+    {
+      "Id": "windows.d3dShaderCache",
+      "Category": "cleanup.cat.windows",
+      "Name": "DirectX shader cache",
+      "Description": "Compiled shaders, rebuilt by games and GPU applications as they run. Costs one slower first launch each.",
+      "Risk": "Safe",
+      "Paths": [ "%LOCALAPPDATA%\\D3DSCache\\**" ]
+    },
+    {
+      "Id": "windows.dotnetTemp",
+      "Category": "cleanup.cat.windows",
+      "Name": ".NET temporary build files",
+      "Description": "Intermediate files left by ASP.NET and the .NET toolchain. Regenerated on the next build or request.",
+      "Risk": "Safe",
+      "Paths": [ "%LOCALAPPDATA%\\Temp\\.net\\**" ],
+      "MinimumAgeDays": 7
+    },
+    {
+      "Id": "browser.chromiumCache",
+      "Category": "cleanup.cat.browser",
+      "Name": "Chromium browser caches",
+      "Description": "Chrome, Edge, Opera and Brave page caches. Pages reload from the network afterwards; logins, history and bookmarks are untouched.",
+      "Risk": "Safe",
+      "Paths": [
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Cache\\**",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Code Cache\\**",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Cache\\**",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Code Cache\\**",
+        "%APPDATA%\\Opera Software\\*\\Cache\\**",
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Cache\\**"
+      ],
+      "BlockedByProcesses": [ "chrome", "msedge", "opera", "brave" ]
+    },
+    {
+      "Id": "browser.firefoxCache",
+      "Category": "cleanup.cat.browser",
+      "Name": "Firefox cache",
+      "Description": "Page and media cache. Reloaded from the network; nothing you are signed into is affected.",
+      "Risk": "Safe",
+      "Paths": [ "%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\cache2\\**" ],
+      "BlockedByProcesses": [ "firefox" ]
+    },
+    {
+      "Id": "dev.nugetCache",
+      "Category": "cleanup.cat.dev",
+      "Name": "NuGet package cache",
+      "Description": "Downloaded packages, re-fetched on the next restore. On a machine that builds .NET this is often the largest single cache. Needs a network connection to rebuild.",
+      "Risk": "Caution",
+      "Paths": [ "%USERPROFILE%\\.nuget\\packages\\**" ],
+      "MinimumAgeDays": 30
+    },
+    {
+      "Id": "dev.npmCache",
+      "Category": "cleanup.cat.dev",
+      "Name": "npm cache",
+      "Description": "Downloaded npm tarballs, re-fetched on the next install. Needs a network connection to rebuild.",
+      "Risk": "Caution",
+      "Paths": [ "%LOCALAPPDATA%\\npm-cache\\**" ],
+      "MinimumAgeDays": 30
+    },
+    {
+      "Id": "dev.pipCache",
+      "Category": "cleanup.cat.dev",
+      "Name": "pip cache",
+      "Description": "Downloaded Python wheels, re-fetched on the next install.",
+      "Risk": "Caution",
+      "Paths": [ "%LOCALAPPDATA%\\pip\\Cache\\**" ],
+      "MinimumAgeDays": 30
+    },
+    {
+      "Id": "dev.vsCode",
+      "Category": "cleanup.cat.dev",
+      "Name": "Visual Studio Code caches",
+      "Description": "Editor caches and crash reports. Settings, extensions and workspaces are not touched.",
+      "Risk": "Safe",
+      "Paths": [
+        "%APPDATA%\\Code\\Cache\\**",
+        "%APPDATA%\\Code\\CachedData\\**",
+        "%APPDATA%\\Code\\logs\\**"
+      ],
+      "BlockedByProcesses": [ "code" ]
+    },
+    {
+      "Id": "system.componentStore",
+      "Category": "cleanup.cat.system",
+      "Name": "Superseded Windows component store files",
+      "Description": "Old versions of updated components in WinSxS. Vacuon does not delete these itself — it runs DISM, which is the only supported way and the only one that keeps servicing working. After it runs, the updates it cleaned can no longer be uninstalled.",
+      "Risk": "Caution",
+      "Method": "SystemTool",
+      "Tool": "dism.componentCleanup",
+      "NeedsElevation": true,
+      "ReturnsAfterUpdate": true,
+      "LearnMore": "https://learn.microsoft.com/windows-hardware/manufacture/desktop/clean-up-the-winsxs-folder"
+    },
+    {
+      "Id": "system.hibernation",
+      "Category": "cleanup.cat.system",
+      "Name": "Turn hibernation off",
+      "Description": "Frees hiberfil.sys, which is a large fraction of your RAM. This is a configuration change, not a cleanup: hibernate and fast startup stop working until you turn it back on with powercfg /h on.",
+      "Risk": "Dangerous",
+      "Method": "SystemTool",
+      "Tool": "powercfg.hibernateOff",
+      "NeedsElevation": true
+    },
+    {
+      "Id": "system.oldRestorePoints",
+      "Category": "cleanup.cat.system",
+      "Name": "Old system restore points",
+      "Description": "Deletes every shadow copy except the most recent one. Those are recovery routes: after this, rolling Windows back to a date before the newest point is no longer possible.",
+      "Risk": "Dangerous",
+      "Method": "SystemTool",
+      "Tool": "vssadmin.deleteOldShadows",
+      "NeedsElevation": true
+    }
+  ]
+}
