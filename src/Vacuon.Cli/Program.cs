@@ -11,6 +11,7 @@ using Vacuon.Core.Monitoring;
 using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
+using Vacuon.Core.Scheduling;
 using Vacuon.Core.Security;
 using Vacuon.Native.Interop;
 
@@ -39,6 +40,8 @@ try
         "clean" => Commands.Clean(args[1..]),
         "similar" => Commands.Similar(args[1..]),
         "watch" => Commands.Watch(args[1..]),
+        "schedule" => Commands.Schedule(args[1..]),
+        "guard" => Commands.Guard(args[1..]),
         "media" => Commands.Media(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
@@ -110,6 +113,8 @@ static class Help
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
         Console.WriteLine($"    similar <drive|folder>     {L.T("cli.cmdSimilar")}");
         Console.WriteLine($"    watch <drive>              {L.T("cli.cmdWatch")}");
+        Console.WriteLine($"    schedule [list|create|…]   {L.T("cli.cmdSchedule")}");
+        Console.WriteLine($"    guard --below=10GB         {L.T("cli.cmdGuard")}");
         Console.WriteLine($"    media <file>               {L.T("cli.cmdMedia")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
@@ -131,6 +136,12 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.scheduleOptions")}");
+        Console.WriteLine($"    {L.T("cli.scheduleUsage")}");
+        Console.WriteLine($"    --at=HH:MM                 {L.T("cli.optAt")}");
+        Console.WriteLine($"    --frequency=daily|weekly|monthly {L.T("cli.optFrequency")}");
+        Console.WriteLine($"    --below=10GB               {L.T("cli.optBelow")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.watchOptions")}");
         Console.WriteLine($"    --every=N                  {L.T("cli.optEvery")}");
@@ -917,6 +928,179 @@ static class Commands
         Formatting.WriteMuted("  " + L.T("watch.stopping"));
         Console.WriteLine();
         return 0;
+    }
+
+    /// <summary>
+    /// Creates, lists and removes the scheduled cleanups Vacuon owns.
+    /// <para>
+    /// Every task it creates runs with <c>--to=quarantine</c>, and that is not configurable
+    /// here: an unattended run is the one case where nobody can stop a mistake, so it only
+    /// gets the reversible route. The command prints that sentence before creating anything.
+    /// </para>
+    /// </summary>
+    public static int Schedule(string[] args)
+    {
+        string action = args.Length == 0 ? "list" : args[0].ToLowerInvariant();
+        var scheduler = new ScheduledCleanup();
+
+        Formatting.WriteHeading(L.T("cli.headSchedule"));
+
+        switch (action)
+        {
+            case "list":
+            {
+                ScheduleListing listing = scheduler.List();
+
+                Console.WriteLine();
+
+                if (!listing.Succeeded)
+                {
+                    // Not the same sentence as "nothing scheduled": the app did not find out.
+                    Formatting.WriteError("  " + L.T("schedule.unreadable", listing.Error ?? string.Empty));
+                    return 1;
+                }
+
+                if (listing.Tasks.Count == 0)
+                {
+                    Console.WriteLine("  " + L.T("schedule.none"));
+                    Console.WriteLine();
+                    return 0;
+                }
+
+                foreach (ScheduledTask task in listing.Tasks)
+                {
+                    Console.WriteLine($"  {task.Name}");
+                    Formatting.WriteMuted($"    {task.Schedule}  ·  {L.T("schedule.nextRun", task.NextRun)}  ·  {task.Status}");
+                    Formatting.WriteMuted($"    {task.Command}");
+                }
+
+                Console.WriteLine();
+                return 0;
+            }
+
+            case "create":
+            {
+                if (!VolumeProbe.IsElevated())
+                {
+                    Formatting.WriteError(L.T("schedule.needsElevation"));
+                    return 3;
+                }
+
+                CleanupProfile profile = ArgString(args, "--profile", "quick").ToLowerInvariant() switch
+                {
+                    "deep" => CleanupProfile.Deep,
+                    "custom" => CleanupProfile.Custom,
+                    _ => CleanupProfile.Quick,
+                };
+
+                ScheduleFrequency frequency = ArgString(args, "--frequency", "daily").ToLowerInvariant() switch
+                {
+                    "weekly" => ScheduleFrequency.Weekly,
+                    "monthly" => ScheduleFrequency.Monthly,
+                    _ => ScheduleFrequency.Daily,
+                };
+
+                TimeOnly at = TimeOnly.TryParse(ArgString(args, "--at", "03:00"), out TimeOnly parsed)
+                    ? parsed
+                    : new TimeOnly(3, 0);
+
+                string exe = Environment.ProcessPath ?? "vacuon.exe";
+
+                ScheduleResult result = scheduler.Create(exe, frequency, at, profile);
+
+                Console.WriteLine();
+
+                if (!result.Succeeded)
+                {
+                    // Before the preview, not after: Build falls back to the quick profile
+                    // for anything it will not schedule, so printing the command line first
+                    // would show a run that is never going to happen.
+                    Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
+                    return 1;
+                }
+
+                Formatting.WriteMuted("  " + L.T("schedule.alwaysQuarantine"));
+                Console.WriteLine();
+                Console.WriteLine("  " + L.T("schedule.willRun", ScheduledCleanup.Build(exe, profile)));
+                Console.WriteLine();
+
+                Console.WriteLine("  " + L.T("schedule.created", $"{frequency} {at:HH\\:mm}"));
+                Console.WriteLine();
+                return 0;
+            }
+
+            case "delete":
+            {
+                string? name = args.Skip(1).FirstOrDefault(a => !a.StartsWith('-'));
+
+                if (name is null)
+                {
+                    Formatting.WriteError(L.T("cli.scheduleUsage"));
+                    return 2;
+                }
+
+                ScheduleResult result = scheduler.Delete(name);
+
+                Console.WriteLine();
+
+                if (!result.Succeeded)
+                {
+                    Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
+                    return 1;
+                }
+
+                Console.WriteLine("  " + L.T("schedule.deleted", name));
+                Console.WriteLine();
+                return 0;
+            }
+
+            default:
+                Formatting.WriteError(L.T("cli.scheduleUsage"));
+                return 2;
+        }
+    }
+
+    /// <summary>
+    /// Compares free space against a threshold and says so in the exit code.
+    /// <para>
+    /// It changes nothing, on purpose. A guard that also cleaned would be a timer that
+    /// deletes when a number moves — the response belongs in a second, deliberate step, and
+    /// the exit code is how a scheduler asks for one.
+    /// </para>
+    /// </summary>
+    public static int Guard(string[] args)
+    {
+        long threshold = ArgSize(args, "--below", 10L * 1024 * 1024 * 1024);
+        string? drive = args.FirstOrDefault(a => !a.StartsWith('-'));
+
+        char? letter = drive is { Length: > 0 } ? char.ToUpperInvariant(drive[0]) : null;
+
+        GuardReport report = SpaceGuard.Check(threshold, letter);
+
+        Formatting.WriteHeading(L.T("cli.headGuard"));
+        Console.WriteLine();
+
+        foreach (GuardReading volume in report.Volumes)
+        {
+            string line = volume.BelowThreshold
+                ? L.T("guard.below", volume.DriveLetter + ":",
+                      Formatting.Bytes(volume.FreeBytes), Formatting.Bytes(volume.TotalBytes),
+                      volume.FreePercent.ToString("N1"), Formatting.Bytes(threshold),
+                      Formatting.Bytes(volume.Shortfall))
+                : L.T("guard.above", volume.DriveLetter + ":",
+                      Formatting.Bytes(volume.FreeBytes), Formatting.Bytes(volume.TotalBytes),
+                      volume.FreePercent.ToString("N1"), Formatting.Bytes(threshold));
+
+            if (volume.BelowThreshold) Formatting.WriteWarning("  " + line);
+            else Console.WriteLine("  " + line);
+        }
+
+        Console.WriteLine();
+        Formatting.WriteMuted("  " + L.T("guard.noAction"));
+        Console.WriteLine();
+
+        // 6 is not an error: it is the answer. A scheduler branches on it.
+        return report.AnyBreached ? 6 : 0;
     }
 
     public static int Version()
