@@ -103,6 +103,8 @@ comment within minutes and a human review after that.
   <https://www.microsoft.com/en-us/wdsi/filesubmission> and link the ticket in the PR.
 - **`Tags` are capped at 16** and are matched literally by `winget search`. Which means a tag
   is a claim about what the app does, not a keyword to be generous with. `duplicate-finder`
-  shipped in 0.3.1 and was wrong: finding duplicates is milestone M6, still unbuilt, so
-  anyone searching that term found Vacuon and no such feature. Removed in 0.3.2. A tag naming
-  something the app does not do is the same defect as a false positive in the Security tab.
+  shipped in 0.3.1 and was wrong: finding duplicates was milestone M6, unbuilt at the time,
+  so anyone searching that term found Vacuon and no such feature. Removed in 0.3.2, and put
+  back in 0.4.0 once M6 actually shipped — which is the point. A tag naming something the app
+  does not do is the same defect as a false positive in the Security tab; the fix is to build
+  the thing or drop the tag, never to leave the claim standing.

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Gera os tres manifestos que o winget-pkgs exige para uma versao do Vacuon.
 
@@ -116,6 +116,10 @@ Description: |-
   Bin by default, and permanently only behind a confirmation you have to tick, with a
   protection list that refuses the volume root, Windows, System32 and kernel-owned files.
 
+  It also finds files with identical content, draws the volume as a treemap where every
+  box is sized by what it occupies, and can set files aside in a quarantine it can restore
+  them from, instead of deleting them.
+
   Every scan cross-checks the space it attributed to files against what the volume reports
   as used, and says so when the two disagree.
 
@@ -127,9 +131,11 @@ Tags:
 - disk-analyzer
 - disk-space
 - disk-usage
+- duplicate-finder
 - mft
 - ntfs
 - storage
+- treemap
 ReleaseNotesUrl: $repo/releases/tag/v$Version
 Documentations:
 - DocumentLabel: Readme
@@ -158,6 +164,10 @@ Description: |-
   renderizacoes grandes e a final sem abrir nenhuma. A exclusao vai para a Lixeira por
   padrao, e definitiva so atras de uma confirmacao que voce precisa marcar, com uma lista
   de protecao que recusa a raiz do volume, Windows, System32 e arquivos do kernel.
+
+  Ele tambem acha arquivos com conteudo identico, desenha o volume como um treemap onde
+  cada caixa tem o tamanho do que ocupa, e guarda arquivos numa quarentena de onde da para
+  restaurar, em vez de apagar de uma vez.
 
   Toda varredura confere o espaco atribuido a arquivos contra o que o volume declara em uso,
   e avisa quando os dois nao batem.
