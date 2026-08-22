@@ -36,6 +36,63 @@ public sealed class TreemapCanvas : FrameworkElement
     {
         _children = new VisualCollection(this) { _visual };
         ClipToBounds = true;
+
+        // A treemap is a picture, and no amount of markup makes one readable by ear. What
+        // this can honestly do is announce what it is and point at the equivalent that does
+        // work — the Explorer list carries the same numbers, item by item. Claiming the
+        // canvas is accessible by giving it a name and stopping there would be worse than
+        // saying plainly that the list is the way in.
+        SetValue(System.Windows.Automation.AutomationProperties.NameProperty,
+                 Vacuon.Core.Localization.L.T("a11y.treemap"));
+
+        // Reachable by keyboard, so it is not a hole in the tab order.
+        Focusable = true;
+        KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Once);
+    }
+
+    /// <summary>
+    /// Activates the box under the keyboard focus.
+    /// <para>
+    /// Enter and Space drill in, so the map can be walked without a mouse once the arrow
+    /// keys have moved the highlight.
+    /// </para>
+    /// </summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (_nodes.Count == 0) return;
+
+        switch (e.Key)
+        {
+            case Key.Right or Key.Down:
+                MoveHover(1);
+                e.Handled = true;
+                break;
+
+            case Key.Left or Key.Up:
+                MoveHover(-1);
+                e.Handled = true;
+                break;
+
+            case Key.Enter or Key.Space when _hoverIndex >= 0:
+                NodeActivated?.Invoke(this, _nodes[_hoverIndex]);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void MoveHover(int step)
+    {
+        int next = _hoverIndex < 0
+            ? (step > 0 ? 0 : _nodes.Count - 1)
+            : Math.Clamp(_hoverIndex + step, 0, _nodes.Count - 1);
+
+        if (next == _hoverIndex) return;
+
+        _hoverIndex = next;
+        Redraw();
+        NodeHovered?.Invoke(this, _nodes[next]);
     }
 
     protected override int VisualChildrenCount => _children.Count;

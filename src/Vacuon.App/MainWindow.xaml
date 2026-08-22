@@ -175,9 +175,12 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Content is a glyph from an icon font: a screen reader either
+                             reads a meaningless character or nothing at all. -->
                         <Button Style="{StaticResource Button.Ghost}" FontSize="15"
                                 FontFamily="{StaticResource Font.Icon}"
                                 Content="{Binding ThemeToggleGlyph}"
+                                AutomationProperties.Name="{DynamicResource S.a11y.themeToggle}"
                                 ToolTip="{Binding ThemeToggleTooltip}"
                                 Click="OnToggleTheme"/>
                         <Button Style="{StaticResource Button.Base}" Margin="8,0,0,0"

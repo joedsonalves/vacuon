@@ -725,5 +725,16 @@
   "watch.noProcess": "O diário de mudanças registra arquivos, não programas — ele não sabe dizer qual aplicativo está escrevendo. Apontar um seria chute.",
   "watch.stopping": "Parado.",
   "watch.gap": "O diário descartou registros antes de serem lidos: o volume mudou mais rápido do que o log guarda. Aquele intervalo está faltando, não estava quieto.",
-  "watch.counts": "+{0} novos · {1} sumiram · {2} escritos"
+  "watch.counts": "+{0} novos · {1} sumiram · {2} escritos",
+  "a11y.selectFile": "Marcar este arquivo",
+  "a11y.selectFolder": "Marcar esta pasta",
+  "a11y.selectRule": "Rodar esta regra",
+  "a11y.selectVersion": "Marcar esta versão para remoção",
+  "a11y.themeToggle": "Alternar entre tema claro e escuro",
+  "a11y.elevationIcon": "Estado de elevação",
+  "a11y.treemap": "Treemap da pasta atual. Cada caixa é um arquivo ou pasta, do tamanho do que ocupa em disco. Use a lista do Explorer para uma versão que se lê item a item.",
+  "a11y.preview": "Prévia do arquivo realçado",
+  "a11y.searchBox": "Buscar no volume varrido, por nome",
+  "a11y.folderTree": "Árvore de pastas, maiores primeiro",
+  "a11y.fileList": "Arquivos na visão atual"
 }

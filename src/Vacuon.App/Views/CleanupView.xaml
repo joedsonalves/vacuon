@@ -1,4 +1,4 @@
-<UserControl x:Class="Vacuon.App.Views.CleanupView"
+﻿<UserControl x:Class="Vacuon.App.Views.CleanupView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:infra="clr-namespace:Vacuon.App.Infra">
@@ -80,8 +80,11 @@
                                                     <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
 
+                                                <!-- Named after the rule: a column of
+                                                     unnamed ticks cannot be used without sight. -->
                                                 <CheckBox Grid.Column="0" VerticalAlignment="Top"
                                                           Margin="0,2,10,0"
+                                                          AutomationProperties.Name="{Binding Name}"
                                                           IsChecked="{Binding IsChecked}"
                                                           IsEnabled="{Binding CanRun}"/>
 

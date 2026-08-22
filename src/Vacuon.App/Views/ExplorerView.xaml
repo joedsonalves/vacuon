@@ -139,6 +139,7 @@
                                              deixa marcar varias pastas e apagar de uma vez. -->
                                         <StackPanel Orientation="Horizontal">
                                             <CheckBox Style="{StaticResource Check}" Margin="0,0,6,0"
+                                                      AutomationProperties.Name="{Binding Name}"
                                                       IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding Name}"/>
@@ -238,8 +239,12 @@
                             <GridViewColumn Width="34">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
+                                        <!-- Named after the file, not "select": walking
+                                             this list otherwise announces "checkbox" ninety
+                                             times with nothing to tell the rows apart. -->
                                         <CheckBox Style="{StaticResource Check}"
                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                  AutomationProperties.Name="{Binding Name}"
                                                   IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>

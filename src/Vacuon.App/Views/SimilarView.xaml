@@ -84,7 +84,11 @@
                                                                    Text="{DynamicResource S.similar.keeping}"/>
                                                     </Border>
 
+                                                    <!-- Content is the same word on every
+                                                         tile, so the name carries the file
+                                                         and the tiles can be told apart. -->
                                                     <CheckBox Margin="0,6,0,0" IsChecked="{Binding IsChecked}"
+                                                              AutomationProperties.Name="{Binding Name}"
                                                               Content="{DynamicResource S.similar.other}"
                                                               FontSize="11">
                                                         <CheckBox.Style>

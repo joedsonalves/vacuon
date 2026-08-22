@@ -725,5 +725,16 @@
   "watch.noProcess": "The change journal records files, not programs — it cannot say which application is writing. Naming one would be a guess.",
   "watch.stopping": "Stopped.",
   "watch.gap": "The journal purged records before they could be read: the volume changed faster than the log holds. That interval is missing, not quiet.",
-  "watch.counts": "+{0} new · {1} gone · {2} written"
+  "watch.counts": "+{0} new · {1} gone · {2} written",
+  "a11y.selectFile": "Select this file",
+  "a11y.selectFolder": "Select this folder",
+  "a11y.selectRule": "Run this rule",
+  "a11y.selectVersion": "Select this version for removal",
+  "a11y.themeToggle": "Switch between light and dark",
+  "a11y.elevationIcon": "Elevation status",
+  "a11y.treemap": "Treemap of the current folder. Each box is a file or folder, sized by what it takes on disk. Use the list in Explorer for a version that reads item by item.",
+  "a11y.preview": "Preview of the highlighted file",
+  "a11y.searchBox": "Search the scanned volume by name",
+  "a11y.folderTree": "Folder tree, biggest first",
+  "a11y.fileList": "Files in the current view"
 }
