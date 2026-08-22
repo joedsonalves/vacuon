@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using Vacuon.Core.Preview;
 using Vacuon.Native.Interop;
 
@@ -29,11 +29,17 @@ public sealed record VideoFingerprint(
 /// "both start black".
 /// </para>
 /// <para>
-/// <b>Measured on synthetic footage before any of the numbers below were chosen.</b> The same
-/// clip re-encoded at half the resolution and much lower quality came back at distance
-/// <b>0</b> on every frame; unrelated footage sat at <b>30 to 37</b> out of 64. Two clips
-/// sharing a two-second opening and nothing else measured 32 — because the samples are taken
-/// from the middle of the running time, where a video is actually itself.
+/// <b>Measured on synthetic footage before any of the numbers below were chosen.</b> One clip
+/// re-encoded down a whole ladder — 720p to 480p, 360p, 240p and 180p, each at worse quality
+/// than the last — stayed within <b>7 bits of 64</b> of the original at every step, and
+/// unrelated footage sat at <b>42 to 44</b>. Two clips sharing an opening and nothing else
+/// measured 32, because the samples come from the middle of the running time, where a video
+/// is actually itself.
+/// </para>
+/// <para>
+/// An earlier reading of those same files put half the downscales 32 bits away and looked
+/// exactly like quality loss defeating the fingerprint. It was not: it was a stride bug in
+/// the frame copy, and what settled it was writing three frames out and looking at them.
 /// </para>
 /// <para>
 /// <b>What it does not see.</b> dHash reads luminance, so a re-grade or a hue shift is
@@ -64,8 +70,8 @@ public static class VideoSimilarity
     /// <summary>
     /// How far apart two corresponding frames may be, in bits of 64.
     /// <para>
-    /// Ten, against measurements where true matches came in at 0 to 5 and unrelated footage
-    /// at 30 or more. The gap is wide enough that the exact figure hardly matters, which is
+    /// Ten, against measurements where true matches came in at 0 to 7 and unrelated footage
+    /// at 42 or more. The gap is wide enough that the exact figure hardly matters, which is
     /// the point: a threshold picked from the middle of a gap that big is not the thing
     /// holding the result together.
     /// </para>

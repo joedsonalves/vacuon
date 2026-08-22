@@ -782,5 +782,14 @@
   "watch.volume": "Volume",
   "watch.start": "Start watching",
   "watch.stop": "Stop",
-  "watch.watching": "Watching {0} — showing what changes from now on, not what came before."
+  "watch.watching": "Watching {0} — showing what changes from now on, not what came before.",
+  "cli.cmdSimilarVideo": "Videos that are the same footage, re-encoded or resized",
+  "cli.headSimilarVideo": "SIMILAR VIDEOS",
+  "similar.fromCache": "{0} came from the stored fingerprints, so they were not decoded again.",
+  "similarVideo.scope": "{0} videos to read, {1} in all. Frames are decoded from each one, so this takes minutes rather than seconds.",
+  "similarVideo.none": "No videos matched. Same footage means the running times agree and the sampled frames line up.",
+  "similarVideo.fingerprinted": "{0} videos fingerprinted.",
+  "similarVideo.unreadable": "{0} could not be read, or had no frame with enough detail to fingerprint. They were never compared.",
+  "similarVideo.tooShort": "{0} were shorter than {1} seconds. Sampling five moments out of a few seconds returns five views of one instant.",
+  "similarVideo.noAudio": "This compares pictures, not sound: a re-grade or hue shift is invisible to it, and a different cut of the same source will not match. Audio is not fingerprinted at all."
 }

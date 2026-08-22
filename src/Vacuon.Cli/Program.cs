@@ -112,6 +112,7 @@ static class Help
         Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
         Console.WriteLine($"    similar <drive|folder>     {L.T("cli.cmdSimilar")}");
+        Console.WriteLine($"    similar <drive> --video    {L.T("cli.cmdSimilarVideo")}");
         Console.WriteLine($"    watch <drive>              {L.T("cli.cmdWatch")}");
         Console.WriteLine($"    schedule [list|create|…]   {L.T("cli.cmdSchedule")}");
         Console.WriteLine($"    guard --below=10GB         {L.T("cli.cmdGuard")}");
@@ -781,6 +782,11 @@ static class Commands
 
         if (showProgress) ConsoleProgress.Clear();
 
+        // Videos are a separate finder, not a mode of this one: a picture is one fingerprint
+        // and a video is several, and two videos are only comparable when their running times
+        // agree. The flag chooses which question is being asked.
+        if (args.Contains("--video")) return SimilarVideos(scan, args, top, cts.Token);
+
         Formatting.WriteHeading(L.T("cli.headSimilar"));
 
         SimilarReport report = new NearDuplicateFinder().Find(scan.Index, options, null, cts.Token);
@@ -830,8 +836,99 @@ static class Commands
             Formatting.WriteMuted("  " + L.T("similar.belowMinimum",
                                              Formatting.Count(report.ImagesBelowMinimum)));
 
+        if (report.FromCache > 0)
+            Formatting.WriteMuted("  " + L.T("similar.fromCache", Formatting.Count(report.FromCache)));
+
         Console.WriteLine();
         return 0;
+    }
+
+    /// <summary>
+    /// The same question asked of videos, which needs different evidence to answer.
+    /// </summary>
+    private static int SimilarVideos(ScanResult scan, string[] args, int top, CancellationToken token)
+    {
+        var options = new VideoDuplicateOptions
+        {
+            Threshold = Math.Clamp(ArgInt(args, "--threshold", VideoSimilarity.FrameThreshold), 0, 32),
+            MinimumBytes = ArgSize(args, "--min-size", 4L * 1024 * 1024),
+            UseCache = !args.Contains("--no-cache"),
+        };
+
+        var finder = new VideoDuplicateFinder();
+
+        Formatting.WriteHeading(L.T("cli.headSimilarVideo"));
+
+        // Said before the reading starts, not after: decoding frames out of every video on a
+        // volume is minutes, and a run that begins with no number beside it is one nobody
+        // agreed to.
+        VideoScope scope = finder.Scope(scan.Index, options);
+
+        Console.WriteLine();
+        Console.WriteLine("  " + L.T("similarVideo.scope", Formatting.Count(scope.Candidates),
+                                     Formatting.Bytes(scope.CandidateBytes)));
+
+        VideoSimilarReport report = finder.Find(scan.Index, options, null, token);
+
+        foreach (VideoGroup group in report.Groups.Take(top))
+        {
+            int spread = group.Spread;
+
+            Console.WriteLine();
+            Console.WriteLine("  " + (spread == 0
+                ? L.T("similar.identical", Formatting.Count(group.Videos.Count),
+                      Formatting.Bytes(group.RecoverableBytes))
+                : L.T("similar.groupHeader", Formatting.Count(group.Videos.Count),
+                      Formatting.Bytes(group.RecoverableBytes), Formatting.Count(spread))));
+
+            Console.WriteLine($"    [{L.T("similar.keeping")}]     {Describe(group.Keeper)}");
+
+            foreach (SimilarVideo other in group.Others)
+                Console.WriteLine($"    [{L.T("similar.other")}]  {Describe(other)}");
+        }
+
+        Console.WriteLine();
+
+        if (report.Groups.Count == 0)
+        {
+            Console.WriteLine("  " + L.T("similarVideo.none"));
+        }
+        else
+        {
+            Console.WriteLine("  " + (report.Groups.Count == 1
+                ? L.T("similar.summaryOne", Formatting.Bytes(report.RecoverableBytes))
+                : L.T("similar.summary", Formatting.Count(report.Groups.Count),
+                      Formatting.Bytes(report.RecoverableBytes))));
+        }
+
+        Formatting.WriteMuted("  " + L.T("similarVideo.fingerprinted",
+                                         Formatting.Count(report.Fingerprinted)));
+
+        // A video this machine has no decoder for was never compared. Dropping it in silence
+        // would read as the app having looked at it and found it unique.
+        if (report.Unreadable > 0)
+            Formatting.WriteMuted("  " + L.T("similarVideo.unreadable", Formatting.Count(report.Unreadable)));
+
+        if (report.TooShort > 0)
+            Formatting.WriteMuted("  " + L.T("similarVideo.tooShort", Formatting.Count(report.TooShort),
+                                             (int)VideoSimilarity.MinimumDuration.TotalSeconds));
+
+        if (report.FromCache > 0)
+            Formatting.WriteMuted("  " + L.T("similar.fromCache", Formatting.Count(report.FromCache)));
+
+        Formatting.WriteMuted("  " + L.T("similarVideo.noAudio"));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    private static string Describe(SimilarVideo video)
+    {
+        string label = video.ResolutionLabel is null
+            ? Formatting.Bytes(video.SizeBytes)
+            : $"{video.ResolutionLabel,-7} {Formatting.Bytes(video.SizeBytes)}";
+
+        return $"{label,-20} {video.Duration.ToString(@"hh\:mm\:ss")}  {video.Path}";
     }
 
     private static string Describe(SimilarImage image)

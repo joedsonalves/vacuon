@@ -782,5 +782,14 @@
   "watch.volume": "Volume",
   "watch.start": "Comecar a observar",
   "watch.stop": "Parar",
-  "watch.watching": "Observando {0} — mostra o que mudar de agora em diante, nao o que veio antes."
+  "watch.watching": "Observando {0} — mostra o que mudar de agora em diante, nao o que veio antes.",
+  "cli.cmdSimilarVideo": "Vídeos que são a mesma filmagem, recodificada ou redimensionada",
+  "cli.headSimilarVideo": "VÍDEOS PARECIDOS",
+  "similar.fromCache": "{0} vieram das impressões guardadas, então não foram decodificados de novo.",
+  "similarVideo.scope": "{0} vídeos para ler, {1} no total. Os quadros são decodificados de cada um, então isso leva minutos, não segundos.",
+  "similarVideo.none": "Nenhum vídeo casou. Mesma filmagem quer dizer duração que bate e quadros amostrados que coincidem.",
+  "similarVideo.fingerprinted": "{0} vídeos com impressão.",
+  "similarVideo.unreadable": "{0} não puderam ser lidos, ou não tinham quadro com detalhe suficiente para uma impressão. Eles nunca foram comparados.",
+  "similarVideo.tooShort": "{0} eram mais curtos que {1} segundos. Amostrar cinco instantes de poucos segundos devolve cinco vistas do mesmo momento.",
+  "similarVideo.noAudio": "Isto compara imagem, não som: uma correção de cor é invisível para ele, e um corte diferente da mesma fonte não vai casar. Áudio não recebe impressão nenhuma."
 }

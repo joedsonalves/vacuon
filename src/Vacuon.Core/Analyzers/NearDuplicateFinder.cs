@@ -89,7 +89,8 @@ public sealed record SimilarReport(
     int ImagesFingerprinted,
     int ImagesSkipped,
     int ImagesBelowMinimum = 0,
-    bool WasCancelled = false)
+    bool WasCancelled = false,
+    int FromCache = 0)
 {
     public long RecoverableBytes
     {
@@ -135,6 +136,15 @@ public sealed record NearDuplicateOptions
     /// </para>
     /// </summary>
     public ThumbnailSize Size { get; init; } = ThumbnailSize.Large;
+
+    /// <summary>
+    /// Whether to read and write the on-disk fingerprint cache.
+    /// <para>
+    /// On by default. Fifty thousand pictures take about nine minutes to decode on this
+    /// author's disk, and almost none of them change between one run and the next.
+    /// </para>
+    /// </summary>
+    public bool UseCache { get; init; } = true;
 }
 
 /// <summary>
@@ -230,8 +240,11 @@ public sealed class NearDuplicateFinder
 
         using var thumbnails = new ThumbnailProvider(cacheCapacity: 64);
 
+        FingerprintCache? cache = options.UseCache ? new FingerprintCache() : null;
+
         var fingerprints = new List<SimilarImage>(candidates.Count);
         int skipped = 0;
+        int fromCache = 0;
         bool cancelled = false;
 
         for (int i = 0; i < candidates.Count; i++)
@@ -249,17 +262,26 @@ public sealed class NearDuplicateFinder
             string path = index.GetFullPath(entry);
             if (path.Length == 0) continue;
 
-            ulong? hash = PerceptualHash.Compute(
-                thumbnails.Get(path, options.Size, preferContent: true));
+            // The property store is milliseconds; decoding the picture is not. So the probe
+            // runs either way and only the fingerprint comes from the cache.
+            MediaInfo media = MediaProbe.Read(path);
+
+            ulong? hash = Cached(cache, path, ref fromCache);
 
             if (hash is null)
             {
-                // No content thumbnail: an icon, or a file the shell would not decode.
-                skipped++;
-                continue;
-            }
+                hash = PerceptualHash.Compute(thumbnails.Get(path, options.Size, preferContent: true));
 
-            MediaInfo media = MediaProbe.Read(path);
+                if (hash is null)
+                {
+                    // No content thumbnail: an icon, a file the shell would not decode, or a
+                    // picture too flat to fingerprint honestly.
+                    skipped++;
+                    continue;
+                }
+
+                Remember(cache, path, hash.Value);
+            }
 
             fingerprints.Add(new SimilarImage(
                 entry, path, index.Entries[entry].LogicalSize, hash.Value,
@@ -274,11 +296,49 @@ public sealed class NearDuplicateFinder
         // CancellationToken.None on purpose: the grouping runs over what is already in
         // memory and finishes in milliseconds, so cancelling it again would only throw
         // away the partial answer the user just asked to see.
+        cache?.Save();
+
         List<SimilarGroup> groups = Group(fingerprints, options.Threshold, CancellationToken.None);
 
         groups.Sort(static (a, b) => b.RecoverableBytes.CompareTo(a.RecoverableBytes));
 
-        return new SimilarReport(groups, fingerprints.Count, skipped, belowMinimum, cancelled);
+        return new SimilarReport(groups, fingerprints.Count, skipped, belowMinimum, cancelled, fromCache);
+    }
+
+    /// <summary>The stored fingerprint, if the file is still the one it was computed from.</summary>
+    private static ulong? Cached(FingerprintCache? cache, string path, ref int hits)
+    {
+        if (cache is null) return null;
+
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists) return null;
+
+            if (cache.Get(path, info.Length, info.LastWriteTimeUtc, out _) is not { Length: 1 } hashes)
+                return null;
+
+            hits++;
+            return hashes[0];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static void Remember(FingerprintCache? cache, string path, ulong hash)
+    {
+        if (cache is null) return;
+
+        try
+        {
+            var info = new FileInfo(path);
+            if (info.Exists) cache.Put(path, info.Length, info.LastWriteTimeUtc, [hash]);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+        }
     }
 
     /// <summary>

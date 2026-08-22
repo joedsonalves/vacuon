@@ -230,6 +230,7 @@ public static class VideoFrames
     private static readonly Guid Rgb32 = new("00000016-0000-0010-8000-00AA00389B71");
 
     private static readonly Guid FrameSize = new("1652c33d-d6b2-4012-b834-72030849a37d");
+    private static readonly Guid DefaultStride = new("644b4e48-1e02-4516-b0eb-c01ca9d49ac6");
     private static readonly Guid EnableVideoProcessing = new("fb394f3d-ccf1-42ee-bbb3-f9b845d5681d");
     private static readonly Guid TimeFormatNull = Guid.Empty;
 
@@ -276,7 +277,7 @@ public static class VideoFrames
             reader.SetStreamSelection(AllStreams, false);
             reader.SetStreamSelection(FirstVideoStream, true);
 
-            if (!TryUseRgb32(reader, out int width, out int height, out int typeHr))
+            if (!TryUseRgb32(reader, out int width, out int height, out int stride, out int typeHr))
                 return new VideoReadResult(frames, VideoReadFailure.NoDecoder, typeHr);
 
             for (int i = 0; i < count; i++)
@@ -287,7 +288,7 @@ public static class VideoFrames
                 double fraction = (i + 1.0) / (count + 1.0);
                 TimeSpan at = duration * fraction;
 
-                VideoFrame? frame = ReadAt(reader, at, width, height);
+                VideoFrame? frame = ReadAt(reader, at, width, height, stride);
                 if (frame is not null) frames.Add(frame);
             }
         }
@@ -308,9 +309,11 @@ public static class VideoFrames
     /// <summary>
     /// Asks the reader for uncompressed BGRA and reads back the size it settled on.
     /// </summary>
-    private static bool TryUseRgb32(IMFSourceReader reader, out int width, out int height, out int hr)
+    private static bool TryUseRgb32(IMFSourceReader reader, out int width, out int height,
+                                    out int stride, out int hr)
     {
         width = height = 0;
+        stride = 0;
         hr = 0;
 
         hr = MFCreateMediaType(out IMFMediaType? type);
@@ -348,7 +351,24 @@ public static class VideoFrames
             width = (int)(packed >> 32);
             height = (int)(packed & 0xFFFFFFFF);
 
-            return width > 0 && height > 0;
+            if (width <= 0 || height <= 0) return false;
+
+            // MF_MT_DEFAULT_STRIDE is a UINT32 holding a SIGNED value, and its sign is the
+            // image orientation: negative means the buffer is bottom-up.
+            //
+            // This is not cosmetic and ignoring it was a real bug. The sign is chosen by
+            // whichever converter Media Foundation picks, which varies with the resolution —
+            // so a 720p file and its own 480p downscale came back one flipped and one not,
+            // and their fingerprints landed 32 bits apart out of 64. Exactly half the bits,
+            // which is what a vertical flip costs, and precisely the false negative that made
+            // two copies of the same video look unrelated.
+            Guid strideKey = DefaultStride;
+
+            stride = current.GetUINT32(ref strideKey, out uint raw) == 0
+                ? unchecked((int)raw)
+                : width * 4;
+
+            return true;
         }
         finally
         {
@@ -372,7 +392,8 @@ public static class VideoFrames
     /// decoding a minute of, and the frame reached by then is returned rather than nothing.
     /// </para>
     /// </summary>
-    private static VideoFrame? ReadAt(IMFSourceReader reader, TimeSpan at, int width, int height)
+    private static VideoFrame? ReadAt(IMFSourceReader reader, TimeSpan at,
+                                      int width, int height, int stride)
     {
         var position = PropVariant.FromLong(at.Ticks);   // both are 100-nanosecond units
 
@@ -415,7 +436,7 @@ public static class VideoFrames
                 if (timestamp >= at.Ticks) break;
             }
 
-            return best is null ? null : Copy(best, width, height, TimeSpan.FromTicks(bestTimestamp));
+            return best is null ? null : Copy(best, width, height, stride, TimeSpan.FromTicks(bestTimestamp));
         }
         finally
         {
@@ -423,7 +444,10 @@ public static class VideoFrames
         }
     }
 
-    private static VideoFrame? Copy(IMFSample sample, int width, int height, TimeSpan position)
+    /// <summary>
+    /// Copies the sample's pixels out as top-down BGRA, whatever orientation they arrived in.
+    /// </summary>
+    private static VideoFrame? Copy(IMFSample sample, int width, int height, int stride, TimeSpan position)
     {
         if (sample.ConvertToContiguousBuffer(out IMFMediaBuffer? buffer) != 0 || buffer is null)
             return null;
@@ -434,16 +458,40 @@ public static class VideoFrames
 
             try
             {
-                int expected = width * height * 4;
-                if (length < expected) return null;
+                // The pitch comes from the buffer that actually arrived, not from
+                // MF_MT_DEFAULT_STRIDE.
+                //
+                // This cost a real bug. A row of BGRA is width*4 bytes, but the buffer pads
+                // each row out to an alignment boundary, and 854*4 = 3416 is not a multiple
+                // of 64 while 1280*4 = 5120 is. So 720p and 360p copies decoded correctly and
+                // their 480p and 240p siblings came back shredded into diagonal stripes —
+                // every row offset a little further than the last. Their fingerprints then sat
+                // 32 bits from the original, as far as unrelated footage, and the same video
+                // at two resolutions looked like two different videos.
+                //
+                // The evidence was a picture. Three frames written out and looked at settled
+                // in seconds what the numbers alone had made me blame on quality loss.
+                int pitch = width * 4;
 
-                var pixels = new byte[expected];
-                Marshal.Copy(scan0, pixels, 0, expected);
+                if (height > 0 && length % (uint)height == 0)
+                {
+                    int actual = (int)(length / (uint)height);
+                    if (actual >= pitch) pitch = actual;
+                }
 
-                // RGB32 out of Media Foundation is commonly bottom-up, and no attempt is made
-                // to correct it: every video goes through the same path, so a flip applied to
-                // all of them cancels out in a comparison between them. Frames are never
-                // compared against a shell thumbnail, which is the only place it would matter.
+                if (length < (long)pitch * height) return null;
+
+                var pixels = new byte[width * height * 4];
+                int row = width * 4;
+
+                for (int y = 0; y < height; y++)
+                {
+                    // Bottom-up: the first row in the buffer is the last row of the image.
+                    int source = stride < 0 ? (height - 1 - y) * pitch : y * pitch;
+
+                    Marshal.Copy(scan0 + source, pixels, y * row, row);
+                }
+
                 return new VideoFrame(width, height, pixels, position);
             }
             finally

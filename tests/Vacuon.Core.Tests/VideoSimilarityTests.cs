@@ -8,10 +8,10 @@ namespace Vacuon.Core.Tests;
 /// Milestone M8, F4.6 — video near-duplicates.
 /// <para>
 /// The numbers these tests guard were measured before they were chosen, on synthetic footage
-/// built with ffmpeg. The same clip re-encoded at half resolution came back at distance 0 on
-/// every frame; unrelated footage sat between 30 and 37 out of 64; two clips sharing a
-/// two-second opening and nothing else measured 32. The threshold sits in the middle of a gap
-/// that wide, which is why none of these tests are about the threshold itself.
+/// built with ffmpeg. One clip taken down a whole ladder of re-encodes — 720p to 480p, 360p,
+/// 240p and 180p, each worse than the last — stayed within 7 bits of 64 of the original at
+/// every step; unrelated footage sat between 42 and 44. The threshold sits in the middle of a
+/// gap that wide, which is why none of these tests are about the threshold itself.
 /// </para>
 /// </summary>
 public class VideoSimilarityTests
@@ -257,6 +257,40 @@ public class VideoDecodingTests : IDisposable
 
         Run($"-y -f lavfi -i \"{first}\" -f lavfi -i \"{second}\" -t 7 " +
             $"-filter_complex \"[0:v][1:v]concat=n=2:v=1\" -c:v libx264 -preset ultrafast -crf 28 -pix_fmt yuv420p \"{output}\"");
+    }
+
+    [SkippableFact]
+    public void AWidthWhoseRowsNeedPaddingDecodesTheSameAsOneThatDoesNot()
+    {
+        // The regression this exists for. A row of BGRA is width*4 bytes, but the buffer pads
+        // each row out to an alignment boundary: 854*4 = 3416 is not a multiple of 64, while
+        // 1280*4 = 5120 is. Reading the padded one at the unpadded pitch shears every row a
+        // little further than the last, and the frame comes back as diagonal stripes.
+        //
+        // It did not look like a decoding bug from the numbers. It looked like heavy quality
+        // loss defeating the fingerprint, because the copies that broke were the smaller ones.
+        // Writing three frames out and looking at them settled it in seconds.
+        Skip.If(Ffmpeg is null, NeedsFfmpeg);
+
+        string source = Make("wide.mp4", "testsrc2=size=1280x720:rate=25");
+
+        string padded = Path.Combine(_directory, "padded.mp4");    // 854 wide: not aligned
+        string aligned = Path.Combine(_directory, "aligned.mp4");  // 640 wide: aligned
+
+        Run($"-y -i \"{source}\" -vf scale=854:480 -c:v libx264 -preset ultrafast -crf 28 \"{padded}\"");
+        Run($"-y -i \"{source}\" -vf scale=640:360 -c:v libx264 -preset ultrafast -crf 28 \"{aligned}\"");
+
+        VideoFingerprint? a = VideoSimilarity.Of(padded);
+        VideoFingerprint? b = VideoSimilarity.Of(aligned);
+
+        Assert.NotNull(a);
+        Assert.NotNull(b);
+
+        int? distance = VideoSimilarity.Distance(a!, b!);
+
+        Assert.True(distance <= VideoSimilarity.FrameThreshold,
+            $"two downscales of one clip measured {distance} bits apart; a padded row pitch " +
+            "read at the unpadded width shears the frame and costs about half the bits");
     }
 
     [Fact]
