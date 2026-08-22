@@ -21,6 +21,8 @@ public enum ProtectionReason
     Credentials,
     /// <summary>Vacuon's own installation. Self-deletion is never useful.</summary>
     Vacuon,
+    /// <summary>Vacuon's quarantine. Deleting it through the app would destroy the undo.</summary>
+    Quarantine,
 }
 
 public readonly record struct ProtectionVerdict(ProtectionReason Reason, string? Detail = null)
@@ -46,6 +48,17 @@ public readonly record struct ProtectionVerdict(ProtectionReason Reason, string?
 [SupportedOSPlatform("windows")]
 public static class ProtectedPaths
 {
+    /// <summary>
+    /// The quarantine folder, at the root of every volume it is used on.
+    /// <para>
+    /// It lives here rather than beside the quarantine code because both sides need the
+    /// same spelling: the service that writes into it, and the list that refuses to let
+    /// anything delete it. A second copy of a name that must agree is how the version
+    /// number came to read 0.3.2 in one place and 0.3.1 in another.
+    /// </para>
+    /// </summary>
+    public const string QuarantineFolderName = "$Vacuon.Quarantine";
+
     /// <summary>Folders that must survive, matched on the whole path.</summary>
     private static readonly (string Folder, ProtectionReason Reason)[] ExactFolders = BuildExactFolders();
 
@@ -221,6 +234,12 @@ public static class ProtectedPaths
             list.Add(($@"{root}\$recycle.bin", ProtectionReason.OperatingSystem));
             list.Add(($@"{root}\recovery", ProtectionReason.OperatingSystem));
             list.Add(($@"{root}\boot", ProtectionReason.OperatingSystem));
+
+            // The quarantine is the undo. Letting a scan list it and a delete take it
+            // would mean the app offering to destroy everything it promised to hold —
+            // and the files inside are exactly the ones the user already said to remove,
+            // so they look like excellent deletion candidates.
+            list.Add(($@"{root}\{QuarantineFolderName.ToLowerInvariant()}", ProtectionReason.Quarantine));
         }
 
         return [.. list];
