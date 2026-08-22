@@ -127,7 +127,7 @@ Tags:
 - disk-analyzer
 - disk-space
 - disk-usage
-- duplicate-finder
+- mft
 - ntfs
 - storage
 ReleaseNotesUrl: $repo/releases/tag/v$Version

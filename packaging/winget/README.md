@@ -101,4 +101,8 @@ comment within minutes and a human review after that.
 - **The binary must not be flagged.** An unsigned self-contained .NET executable of 62 MB
   sometimes trips a heuristic. If that happens, submit the file at
   <https://www.microsoft.com/en-us/wdsi/filesubmission> and link the ticket in the PR.
-- **`Tags` are capped at 16** and are matched literally by `winget search`.
+- **`Tags` are capped at 16** and are matched literally by `winget search`. Which means a tag
+  is a claim about what the app does, not a keyword to be generous with. `duplicate-finder`
+  shipped in 0.3.1 and was wrong: finding duplicates is milestone M6, still unbuilt, so
+  anyone searching that term found Vacuon and no such feature. Removed in 0.3.2. A tag naming
+  something the app does not do is the same defect as a false positive in the Security tab.
