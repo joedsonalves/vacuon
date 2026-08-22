@@ -36,6 +36,7 @@ try
         "quarantine" => Commands.Quarantine(args[1..]),
         "duplicates" or "dupes" => Commands.Duplicates(args[1..]),
         "clean" => Commands.Clean(args[1..]),
+        "media" => Commands.Media(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -104,6 +105,7 @@ static class Help
         Console.WriteLine($"    quarantine [list|…]        {L.T("cli.cmdQuarantine")}");
         Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
+        Console.WriteLine($"    media <file>               {L.T("cli.cmdMedia")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -672,6 +674,60 @@ static class Commands
         RuleSkipReason.RiskAboveProfile => L.T("cleanup.skipRisk"),
         _ => L.T("cleanup.skipNothing"),
     };
+
+    /// <summary>
+    /// Prints what Windows knows about a media file. Read-only, and it decodes nothing —
+    /// the answers come from the same property handlers Explorer's details pane uses.
+    /// </summary>
+    public static int Media(string[] args)
+    {
+        string? target = args.FirstOrDefault(a => !a.StartsWith('-'));
+
+        if (target is null || !File.Exists(target))
+        {
+            Formatting.WriteError(L.T("cli.needFile"));
+            return 2;
+        }
+
+        MediaInfo info = MediaProbe.Read(target);
+
+        Formatting.WriteHeading(L.T("cli.headMedia"));
+        Console.WriteLine();
+        Console.WriteLine($"  {Path.GetFileName(target)}");
+        Console.WriteLine();
+
+        if (info.IsEmpty)
+        {
+            // Said plainly rather than printed as a row of dashes: nothing known is a
+            // different statement from nothing there.
+            Formatting.WriteMuted("  " + L.T("media.nothing"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        void Row(string labelKey, string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            Console.WriteLine($"  {L.T(labelKey),-22} {value}");
+        }
+
+        Row("media.duration", info.Duration?.ToString(@"hh\:mm\:ss"));
+        Row("media.resolution", info.Dimensions is null
+            ? null
+            : $"{info.Dimensions}  ({info.ResolutionLabel})");
+        Row("media.frameRate", info.FrameRate is null ? null : L.T("media.fps", info.FrameRate.Value.ToString("N3").TrimEnd('0').TrimEnd('.', ',')));
+        Row("media.videoCodec", info.VideoCodec);
+        Row("media.videoBitrate", info.VideoBitrate is null ? null : L.T("media.perSecond", Formatting.Bytes((long)(info.VideoBitrate.Value / 8))));
+        Row("media.audioCodec", info.AudioCodec);
+        Row("media.audioBitrate", info.AudioBitrate is null ? null : L.T("media.perSecond", Formatting.Bytes((long)(info.AudioBitrate.Value / 8))));
+        Row("media.sampleRate", info.SampleRate is null ? null : $"{info.SampleRate} Hz");
+        Row("media.channels", info.Channels?.ToString());
+        Row("media.camera", info.CameraModel);
+        Row("media.dateTaken", info.DateTaken?.ToString("yyyy-MM-dd HH:mm"));
+
+        Console.WriteLine();
+        return 0;
+    }
 
     public static int Version()
     {

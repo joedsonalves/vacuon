@@ -668,5 +668,21 @@
   "cleanup.toQuarantine": "Set aside",
   "cleanup.toRecycle": "Recycle Bin",
   "cleanup.toPermanent": "Delete for good",
-  "cleanup.rulesEditable": "Rules live in a JSON file you can edit: {0}"
+  "cleanup.rulesEditable": "Rules live in a JSON file you can edit: {0}",
+  "cli.cmdMedia": "What Windows knows about a media file",
+  "cli.headMedia": "MEDIA",
+  "media.duration": "Duration",
+  "media.resolution": "Resolution",
+  "media.frameRate": "Frame rate",
+  "media.videoCodec": "Video codec",
+  "media.videoBitrate": "Video bitrate",
+  "media.audioCodec": "Audio codec",
+  "media.audioBitrate": "Audio bitrate",
+  "media.sampleRate": "Sample rate",
+  "media.channels": "Channels",
+  "media.camera": "Camera",
+  "media.dateTaken": "Taken",
+  "media.nothing": "Windows has no property handler for this file, so it says nothing about it. That is not the same as the file being empty or broken.",
+  "media.perSecond": "{0}/s",
+  "media.fps": "{0} fps"
 }
