@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
@@ -14,6 +15,33 @@ public class AppInfoTests
         // The number used to be typed out in the window footer, the CLI banner and
         // `vacuon version`. Three copies that must agree is three chances to disagree.
         Assert.Matches(@"^\d+\.\d+\.\d+$", AppInfo.Version);
+    }
+
+    [Fact]
+    public void Version_MatchesWhatTheAssemblyItselfCarries()
+    {
+        // AppInfo says "bump it here and nowhere else", but Directory.Build.props holds a
+        // second copy that feeds AssemblyVersion and FileVersion. Nothing compared them, so
+        // AppInfo read 0.3.2 while the file properties Windows shows read 0.3.1.0 — for
+        // weeks. Two numbers derived from the same fact must be compared by the build, not
+        // by whoever remembers to look.
+        var assembly = typeof(AppInfo).Assembly;
+
+        var informational = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+            .InformationalVersion;
+        Assert.NotNull(informational);
+
+        // SourceLink appends "+<commit sha>" to the informational version.
+        var plus = informational!.IndexOf('+');
+        var declared = plus < 0 ? informational : informational[..plus];
+        Assert.Equal(AppInfo.Version, declared);
+
+        var assemblyVersion = assembly.GetName().Version;
+        Assert.NotNull(assemblyVersion);
+        Assert.Equal(
+            AppInfo.Version,
+            $"{assemblyVersion!.Major}.{assemblyVersion.Minor}.{assemblyVersion.Build}");
     }
 }
 

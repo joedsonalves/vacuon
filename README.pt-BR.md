@@ -65,9 +65,9 @@ O [`vacuon-cli.exe`](https://github.com/joedsonalves/vacuon/releases/latest/down
 é o mesmo núcleo sem janela, para scripts. Coloque em algum lugar do `PATH` e veja
 [a seção da CLI](#interface-gráfica-e-linha-de-comando).
 
-O winget instala o app assim que o pacote for aceito. Repare que ele entrega a **interface
-gráfica**, e a coloca no seu `PATH` como `vacuon` — digitar `vacuon` no terminal abre a janela.
-A CLI acima é um download separado:
+O winget instala o app. Repare que ele entrega a **interface gráfica**, e a coloca no seu
+`PATH` como `vacuon` — digitar `vacuon` no terminal abre a janela. A CLI acima é um download
+separado:
 
 ```powershell
 winget install vacuon
@@ -80,6 +80,13 @@ ambígua:
 ```powershell
 winget install --id Joedsonalves.Vacuon --exact
 ```
+
+**Ele não aparece no menu Iniciar, e isso não é instalação que falhou.** O pacote é
+`InstallerType: portable`: o winget guarda o executável e põe `vacuon` no seu `PATH`, e
+pacote portátil não ganha entrada no menu Iniciar — vale para todo pacote portátil, não só
+para este. Então procurar "Vacuon" no Iniciar não acha nada, e a porta de entrada é digitar
+`vacuon` no terminal. Se quiser no menu Iniciar, crie o atalho você mesmo: o `where vacuon`
+mostra o caminho para onde apontá-lo.
 
 ### Compilar do código
 

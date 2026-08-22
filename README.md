@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-262-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-263-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -64,9 +64,9 @@ never `GENERIC_WRITE`.
 is the same core without a window, for scripting. Put it somewhere on your `PATH` and see
 [the CLI section](#gui-and-command-line).
 
-Winget installs the app once the package is accepted. Note that it ships the **GUI** and puts
-it on your `PATH` as `vacuon` — typing `vacuon` in a terminal opens the window. The CLI above
-is a separate download:
+Winget installs the app. Note that it ships the **GUI** and puts it on your `PATH` as
+`vacuon` — typing `vacuon` in a terminal opens the window. The CLI above is a separate
+download:
 
 ```powershell
 winget install vacuon
@@ -79,6 +79,13 @@ the one that can never turn ambiguous:
 ```powershell
 winget install --id Joedsonalves.Vacuon --exact
 ```
+
+**It does not land in the Start menu, and that is not a failed install.** The package is
+`InstallerType: portable`: winget stores the executable and puts `vacuon` on your `PATH`,
+and portable packages get no Start menu entry — the same is true of every portable package,
+not just this one. So searching Start for "Vacuon" finds nothing, and the way in is to type
+`vacuon` in a terminal. If you want it in the Start menu, make the shortcut yourself:
+`where vacuon` prints the path to point it at.
 
 ### Build it yourself
 
