@@ -36,6 +36,7 @@ try
         "quarantine" => Commands.Quarantine(args[1..]),
         "duplicates" or "dupes" => Commands.Duplicates(args[1..]),
         "clean" => Commands.Clean(args[1..]),
+        "similar" => Commands.Similar(args[1..]),
         "media" => Commands.Media(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
@@ -105,6 +106,7 @@ static class Help
         Console.WriteLine($"    quarantine [list|…]        {L.T("cli.cmdQuarantine")}");
         Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
+        Console.WriteLine($"    similar <drive|folder>     {L.T("cli.cmdSimilar")}");
         Console.WriteLine($"    media <file>               {L.T("cli.cmdMedia")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
@@ -126,6 +128,9 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.similarOptions")}");
+        Console.WriteLine($"    --threshold=0..20          {L.T("cli.optThreshold")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.cleanOptions")}");
         Console.WriteLine($"    --profile=quick|deep|custom {L.T("cli.optProfile")}");
@@ -727,6 +732,98 @@ static class Commands
 
         Console.WriteLine();
         return 0;
+    }
+
+    /// <summary>
+    /// Finds pictures that look alike. Read-only: it names versions, it removes nothing.
+    /// </summary>
+    public static int Similar(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        int top = ArgInt(args, "--top", 20);
+
+        var options = new NearDuplicateOptions
+        {
+            Threshold = Math.Clamp(ArgInt(args, "--threshold", PerceptualHash.DefaultThreshold), 0, 20),
+            MinimumBytes = ArgSize(args, "--min-size", 16 * 1024),
+        };
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        bool showProgress = !args.Contains("--no-progress") && !Console.IsOutputRedirected;
+        var orchestrator = new ScanOrchestrator(new MftScanOptions
+        {
+            Progress = showProgress ? new ConsoleProgress() : null,
+        });
+
+        ScanResult scan = IsWholeVolume(target)
+            ? orchestrator.Refresh(char.ToUpperInvariant(target[0]), StrategyPreference.Auto,
+                                   allowSnapshot: !args.Contains("--fresh"), cts.Token)
+            : orchestrator.ScanFolder(target, cts.Token);
+
+        if (showProgress) ConsoleProgress.Clear();
+
+        Formatting.WriteHeading(L.T("cli.headSimilar"));
+
+        SimilarReport report = new NearDuplicateFinder().Find(scan.Index, options, null, cts.Token);
+
+        foreach (SimilarGroup group in report.Groups.Take(top))
+        {
+            int spread = group.Spread;
+
+            Console.WriteLine();
+            Console.WriteLine("  " + (spread == 0
+                ? L.T("similar.identical", Formatting.Count(group.Images.Count),
+                      Formatting.Bytes(group.RecoverableBytes))
+                : L.T("similar.groupHeader", Formatting.Count(group.Images.Count),
+                      Formatting.Bytes(group.RecoverableBytes), Formatting.Count(spread))));
+
+            // The keeper first and labelled: these files are genuinely different, so the
+            // list must never read as though every path on it were interchangeable.
+            Console.WriteLine($"    [{L.T("similar.keeping")}]     {Describe(group.Keeper)}");
+
+            foreach (SimilarImage other in group.Others)
+                Console.WriteLine($"    [{L.T("similar.other")}]  {Describe(other)}");
+        }
+
+        Console.WriteLine();
+
+        if (report.Groups.Count == 0)
+        {
+            Console.WriteLine("  " + L.T("similar.none"));
+        }
+        else
+        {
+            Console.WriteLine("  " + (report.Groups.Count == 1
+                ? L.T("similar.summaryOne", Formatting.Bytes(report.RecoverableBytes))
+                : L.T("similar.summary", Formatting.Count(report.Groups.Count),
+                      Formatting.Bytes(report.RecoverableBytes))));
+        }
+
+        Formatting.WriteMuted("  " + L.T("similar.fingerprinted",
+                                         Formatting.Count(report.ImagesFingerprinted)));
+
+        // Said out loud: a file the shell answered with an icon was never compared, and
+        // silently dropping it would look like the app decided it was unique.
+        if (report.ImagesSkipped > 0)
+            Formatting.WriteMuted("  " + L.T("similar.skipped", Formatting.Count(report.ImagesSkipped)));
+
+        if (report.ImagesBelowMinimum > 0)
+            Formatting.WriteMuted("  " + L.T("similar.belowMinimum",
+                                             Formatting.Count(report.ImagesBelowMinimum)));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    private static string Describe(SimilarImage image)
+    {
+        string size = image.ResolutionLabel is null
+            ? Formatting.Bytes(image.Bytes)
+            : $"{image.ResolutionLabel,-7} {Formatting.Bytes(image.Bytes)}";
+
+        return $"{size,-20} {image.Path}";
     }
 
     public static int Version()
