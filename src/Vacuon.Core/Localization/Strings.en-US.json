@@ -617,5 +617,14 @@
   "dup.scopeNote": "That is the worst case. The sampled stages usually read a fraction of it, and how big a fraction is not knowable before reading.",
   "dup.progress": "{0} of {1} candidates · {2} groups so far",
   "dup.cancel": "Stop",
-  "dup.cancelled": "Stopped. What was found before stopping is listed below."
+  "dup.cancelled": "Stopped. What was found before stopping is listed below.",
+  "nav.treemap": "Treemap",
+  "treemap.subtitle": "Every box is sized by what it takes on disk, so the biggest thing on screen is the biggest thing on the volume. Click a folder to go in.",
+  "treemap.needScan": "Scan a drive first, then come back.",
+  "treemap.up": "Up",
+  "treemap.root": "Whole volume",
+  "treemap.hover": "{0} · {1}",
+  "treemap.boxes": "{0} boxes · laid out in {1} ms",
+  "treemap.emptyFolder": "Nothing in this folder takes any space.",
+  "treemap.tooManyToDraw": "showing the {0} biggest of {1}"
 }

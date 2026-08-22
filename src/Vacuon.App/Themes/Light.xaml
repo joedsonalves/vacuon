@@ -1,4 +1,4 @@
-<!--
+﻿<!--
     Tema claro. Mesmas chaves do Dark.xaml, uma a uma — é o contrato que permite
     trocar o dicionário em runtime sem tocar em nenhuma View.
 
@@ -51,6 +51,9 @@
     <SolidColorBrush x:Key="Cat.Document"  Color="#4B5FD6"/>
     <SolidColorBrush x:Key="Cat.Archive"   Color="#B35B00"/>
     <SolidColorBrush x:Key="Cat.Code"      Color="#1A7F37"/>
+    <SolidColorBrush x:Key="Cat.Disk"      Color="#CF222E"/>
+    <SolidColorBrush x:Key="Cat.Binary"    Color="#8250DF"/>
+    <SolidColorBrush x:Key="Cat.Log"       Color="#6E7781"/>
     <SolidColorBrush x:Key="Cat.Other"     Color="#656D7A"/>
 
 </ResourceDictionary>

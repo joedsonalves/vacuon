@@ -19,7 +19,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Duplicates, Quarantine, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Treemap, Duplicates, Quarantine, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -109,6 +109,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             if (!Set(ref _section, value)) return;
             Raise(nameof(IsDashboard));
             Raise(nameof(IsExplorer));
+            Raise(nameof(IsTreemap));
             Raise(nameof(IsDuplicates));
             Raise(nameof(IsQuarantine));
             Raise(nameof(IsSecurity));
@@ -120,6 +121,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public bool IsDashboard => Section == Section.Dashboard;
     public bool IsExplorer => Section == Section.Explorer;
+    public bool IsTreemap => Section == Section.Treemap;
     public bool IsDuplicates => Section == Section.Duplicates;
     public bool IsQuarantine => Section == Section.Quarantine;
     public bool IsSecurity => Section == Section.Security;

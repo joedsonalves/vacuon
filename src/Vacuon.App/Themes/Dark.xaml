@@ -1,4 +1,4 @@
-<!--
+﻿<!--
     Tema escuro — o padrão, porque o Vacuon é ferramenta de trabalho.
 
     As cores de risco (verde/amarelo/laranja/vermelho) são EXCLUSIVAS da escala de
@@ -51,6 +51,9 @@
     <SolidColorBrush x:Key="Cat.Document"  Color="#8FA8FF"/>
     <SolidColorBrush x:Key="Cat.Archive"   Color="#FFB84C"/>
     <SolidColorBrush x:Key="Cat.Code"      Color="#7EE787"/>
+    <SolidColorBrush x:Key="Cat.Disk"      Color="#FF7B72"/>
+    <SolidColorBrush x:Key="Cat.Binary"    Color="#D2A8FF"/>
+    <SolidColorBrush x:Key="Cat.Log"       Color="#9CA3AF"/>
     <SolidColorBrush x:Key="Cat.Other"     Color="#7C8497"/>
 
 </ResourceDictionary>

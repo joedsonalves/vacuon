@@ -1,0 +1,57 @@
+<UserControl x:Class="Vacuon.App.Views.TreemapView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra"
+             xmlns:views="clr-namespace:Vacuon.App.Views">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,20,24,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource Text.Sub}" TextWrapping="Wrap"
+                   MaxWidth="880" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource Text.Secondary}"
+                   Text="{DynamicResource S.treemap.subtitle}"/>
+
+        <!-- breadcrumb: where you are, and the way back out -->
+        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="12,9">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="UpButton" Style="{StaticResource Button.Base}"
+                        FontSize="12" Padding="10,4"
+                        Content="{DynamicResource S.treemap.up}" Click="OnUp"/>
+
+                <TextBlock x:Name="PathText" Style="{StaticResource Text.Sub}"
+                           Margin="14,0,0,0" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" MaxWidth="620"/>
+
+                <TextBlock x:Name="StatsText" Style="{StaticResource Text.Sub}"
+                           Margin="14,0,0,0" VerticalAlignment="Center" FontSize="11"
+                           Foreground="{DynamicResource Text.Muted}"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Margin="0,12,0,0" CornerRadius="6"
+                BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1">
+            <Grid>
+                <views:TreemapCanvas x:Name="Map"/>
+
+                <TextBlock x:Name="EmptyText" Style="{StaticResource Text.Sub}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{DynamicResource Text.Muted}"/>
+            </Grid>
+        </Border>
+
+        <!-- what the pointer is over, printed rather than floated in a tooltip -->
+        <TextBlock x:Name="HoverText" Grid.Row="3" Style="{StaticResource Text.Sub}"
+                   Margin="0,10,0,0" TextTrimming="CharacterEllipsis"/>
+    </Grid>
+</UserControl>

@@ -617,5 +617,14 @@
   "dup.scopeNote": "Este é o pior caso. Os estágios amostrados costumam ler uma fração disso, e quanto é essa fração não dá para saber antes de ler.",
   "dup.progress": "{0} de {1} candidatos · {2} grupos até agora",
   "dup.cancel": "Parar",
-  "dup.cancelled": "Parado. O que foi achado antes de parar está listado abaixo."
+  "dup.cancelled": "Parado. O que foi achado antes de parar está listado abaixo.",
+  "nav.treemap": "Treemap",
+  "treemap.subtitle": "Cada caixa é do tamanho do que ocupa em disco, então a maior coisa na tela é a maior coisa no volume. Clique numa pasta para entrar.",
+  "treemap.needScan": "Varra uma unidade primeiro, depois volte aqui.",
+  "treemap.up": "Subir",
+  "treemap.root": "Volume inteiro",
+  "treemap.hover": "{0} · {1}",
+  "treemap.boxes": "{0} caixas · dispostas em {1} ms",
+  "treemap.emptyFolder": "Nada nesta pasta ocupa espaço.",
+  "treemap.tooManyToDraw": "mostrando as {0} maiores de {1}"
 }
