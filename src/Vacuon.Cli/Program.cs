@@ -14,6 +14,7 @@ using Vacuon.Core.Scan;
 using Vacuon.Core.Scheduling;
 using Vacuon.Core.Security;
 using Vacuon.Native.Interop;
+using Vacuon.Native.Ntfs;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -42,6 +43,9 @@ try
         "watch" => Commands.Watch(args[1..]),
         "schedule" => Commands.Schedule(args[1..]),
         "guard" => Commands.Guard(args[1..]),
+        "residue" => Commands.Residue(args[1..]),
+        "compress" => Commands.Compress(args[1..]),
+        "diff" => Commands.Diff(args[1..]),
         "media" => Commands.Media(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
@@ -116,6 +120,9 @@ static class Help
         Console.WriteLine($"    watch <drive>              {L.T("cli.cmdWatch")}");
         Console.WriteLine($"    schedule [list|create|…]   {L.T("cli.cmdSchedule")}");
         Console.WriteLine($"    guard --below=10GB         {L.T("cli.cmdGuard")}");
+        Console.WriteLine($"    residue <drive>            {L.T("cli.cmdResidue")}");
+        Console.WriteLine($"    compress <drive>           {L.T("cli.cmdCompress")}");
+        Console.WriteLine($"    diff <drive>               {L.T("cli.cmdDiff")}");
         Console.WriteLine($"    media <file>               {L.T("cli.cmdMedia")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
@@ -1206,6 +1213,223 @@ static class Commands
 
         // 6 is not an error: it is the answer. A scheduler branches on it.
         return report.AnyBreached ? 6 : 0;
+    }
+
+    /// <summary>
+    /// Folders under the user roots that nothing installed claims.
+    /// <para>
+    /// Read-only, and every row is a guess built on a name. It says so at the end rather than
+    /// leaving somebody to read the list as a verdict.
+    /// </para>
+    /// </summary>
+    public static int Residue(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        int top = ArgInt(args, "--top", 30);
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        ScanResult scan = ScanFor(target, args, cts.Token);
+
+        Formatting.WriteHeading(L.T("cli.headResidue"));
+
+        ResidueReport report = UninstallResidue.Find(
+            scan.Index,
+            ArgSize(args, "--min-size", UninstallResidue.MinimumBytes),
+            TimeSpan.FromDays(ArgInt(args, "--older-than", (int)UninstallResidue.MinimumAge.TotalDays)));
+
+        Console.WriteLine();
+
+        foreach (Residue residue in report.Residues.Take(top))
+        {
+            Console.WriteLine($"  {Formatting.Bytes(residue.Bytes),12}  {residue.Folder}");
+            Formatting.WriteMuted("                " + L.T("residue.detail",
+                Formatting.Count(residue.FileCount), (int)residue.Age.TotalDays));
+        }
+
+        Console.WriteLine();
+
+        Console.WriteLine("  " + (report.Residues.Count == 0
+            ? L.T("residue.none")
+            : L.T("residue.summary", Formatting.Count(report.Residues.Count),
+                  Formatting.Bytes(report.Bytes))));
+
+        Formatting.WriteMuted("  " + L.T("residue.read", Formatting.Count(report.InstalledProgramsRead),
+                                         Formatting.Count(report.FoldersExamined)));
+
+        // The caveat is the point, not a footnote: this matches names, and a name is not an
+        // identity. Nothing was deleted and nothing here is a recommendation to delete.
+        Formatting.WriteMuted("  " + L.T("residue.guess"));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>Folders NTFS would compress well, that are not compressed.</summary>
+    public static int Compress(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        int top = ArgInt(args, "--top", 20);
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        ScanResult scan = ScanFor(target, args, cts.Token);
+
+        Formatting.WriteHeading(L.T("cli.headCompress"));
+
+        CompressionReport report = CompressionCandidates.Find(
+            scan.Index, ArgSize(args, "--min-size", CompressionCandidates.MinimumFolderBytes));
+
+        Console.WriteLine();
+
+        foreach (CompressionCandidate candidate in report.Candidates.Take(top))
+        {
+            Console.WriteLine($"  {Formatting.Bytes(candidate.Bytes),12}  {candidate.Folder}");
+            Formatting.WriteMuted("                " + L.T("compress.detail",
+                Formatting.Count(candidate.FileCount), L.T(candidate.Category),
+                Formatting.Bytes(candidate.EstimatedSaving)));
+        }
+
+        Console.WriteLine();
+
+        Console.WriteLine("  " + (report.Candidates.Count == 0
+            ? L.T("compress.none")
+            : L.T("compress.summary", Formatting.Count(report.Candidates.Count),
+                  Formatting.Bytes(report.EstimatedSaving))));
+
+        if (report.AlreadyCompressed > 0)
+            Formatting.WriteMuted("  " + L.T("compress.already", Formatting.Count(report.AlreadyCompressed),
+                                             Formatting.Bytes(report.AlreadyCompressedBytes)));
+
+        // The only figure in this application that was not measured, labelled where it is read.
+        Formatting.WriteMuted("  " + L.T("compress.estimate"));
+        Formatting.WriteMuted("  " + L.T("compress.howTo"));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>What changed between the stored snapshot and the volume as it is now.</summary>
+    public static int Diff(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        int top = ArgInt(args, "--top", 25);
+
+        if (!IsWholeVolume(target))
+        {
+            Formatting.WriteError(L.T("diff.needsVolume"));
+            return 2;
+        }
+
+        char letter = char.ToUpperInvariant(target[0]);
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        Formatting.WriteHeading(L.T("cli.headDiff"));
+
+        // The snapshot is keyed by the NTFS volume serial, which lives in the volume metadata
+        // and needs the device open to read. GetVolumeInformation's serial is a different,
+        // 32-bit number and would name a snapshot that does not exist — which it quietly did,
+        // reporting "no earlier scan" on a machine that had one sitting on disk.
+        long serial;
+
+        try
+        {
+            using VolumeDevice device = VolumeDevice.Open(letter);
+            serial = device.SerialNumber;
+        }
+        catch (Exception ex) when (ex is VolumeAccessException or UnauthorizedAccessException or IOException)
+        {
+            Formatting.WriteError(L.T("diff.needsElevation"));
+            return 3;
+        }
+
+        LoadedSnapshot? before = IndexSnapshot.Load(IndexSnapshot.PathFor(serial), serial);
+
+        if (before is null)
+        {
+            // Not an error: it is the first run. Saying so beats an empty table that reads
+            // as "nothing changed".
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("diff.noBaseline"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        // Deliberately a fresh read. Allowing the snapshot here would compare it against
+        // itself and report that nothing ever changes.
+        bool showProgress = !args.Contains("--no-progress") && !Console.IsOutputRedirected;
+
+        var orchestrator = new ScanOrchestrator(new MftScanOptions
+        {
+            Progress = showProgress ? new ConsoleProgress() : null,
+        });
+
+        ScanResult now = orchestrator.Refresh(letter, StrategyPreference.Auto,
+                                              allowSnapshot: false, cts.Token);
+
+        if (showProgress) ConsoleProgress.Clear();
+
+        var after = new LoadedSnapshot(now.Index, JournalMark.None, DateTime.UtcNow);
+
+        SnapshotComparison diff = SnapshotDiff.Compare(
+            before, after, ArgSize(args, "--min-delta", SnapshotDiff.MinimumDelta));
+
+        Console.WriteLine();
+        Console.WriteLine("  " + L.T("diff.window", Formatting.Duration(diff.Elapsed),
+                                     Signed(diff.ByteDelta)));
+        Console.WriteLine();
+
+        foreach (FolderChange change in diff.Changes.Take(top))
+        {
+            string line = $"  {Signed(change.ByteDelta),14}  {change.Folder}";
+
+            if (change.Grew) Console.WriteLine(line);
+            else Formatting.WriteMuted(line);
+        }
+
+        Console.WriteLine();
+
+        if (diff.Changes.Count == 0)
+            Console.WriteLine("  " + L.T("diff.nothing", Formatting.Bytes(SnapshotDiff.MinimumDelta)));
+
+        Formatting.WriteMuted("  " + L.T("diff.folders"));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>
+    /// A byte count that keeps its sign, because on this screen the direction is the answer.
+    /// </summary>
+    private static string Signed(long bytes) => bytes switch
+    {
+        0 => "0",
+        > 0 => "+" + Formatting.Bytes(bytes),
+        _ => "-" + Formatting.Bytes(-bytes),
+    };
+
+    /// <summary>The scan every read-only report starts from.</summary>
+    private static ScanResult ScanFor(string target, string[] args, CancellationToken token)
+    {
+        bool showProgress = !args.Contains("--no-progress") && !Console.IsOutputRedirected;
+
+        var orchestrator = new ScanOrchestrator(new MftScanOptions
+        {
+            Progress = showProgress ? new ConsoleProgress() : null,
+        });
+
+        ScanResult scan = IsWholeVolume(target)
+            ? orchestrator.Refresh(char.ToUpperInvariant(target[0]), StrategyPreference.Auto,
+                                   allowSnapshot: !args.Contains("--fresh"), token)
+            : orchestrator.ScanFolder(target, token);
+
+        if (showProgress) ConsoleProgress.Clear();
+
+        return scan;
     }
 
     public static int Version()
