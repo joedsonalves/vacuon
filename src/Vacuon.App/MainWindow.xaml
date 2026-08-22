@@ -70,6 +70,9 @@
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.treemap}" Tag=""
                                  IsChecked="{Binding IsTreemap, Mode=OneWay}"
                                  Checked="OnNavTreemap"/>
+                    <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.cleanup}" Tag=""
+                                 IsChecked="{Binding IsCleanup, Mode=OneWay}"
+                                 Checked="OnNavCleanup"/>
                     <RadioButton Style="{StaticResource NavItem}" Content="{DynamicResource S.nav.duplicates}" Tag=""
                                  IsChecked="{Binding IsDuplicates, Mode=OneWay}"
                                  Checked="OnNavDuplicates"/>
@@ -190,6 +193,7 @@
                 <views:DashboardView Visibility="{Binding IsDashboard, Converter={StaticResource Visible}}"/>
                 <views:ExplorerView  Visibility="{Binding IsExplorer,  Converter={StaticResource Visible}}"/>
                 <views:TreemapView    Visibility="{Binding IsTreemap,    Converter={StaticResource Visible}}"/>
+                <views:CleanupView    Visibility="{Binding IsCleanup,    Converter={StaticResource Visible}}"/>
                 <views:DuplicatesView Visibility="{Binding IsDuplicates, Converter={StaticResource Visible}}"/>
                 <views:QuarantineView Visibility="{Binding IsQuarantine, Converter={StaticResource Visible}}"/>
                 <views:SecurityView  Visibility="{Binding IsSecurity,  Converter={StaticResource Visible}}"/>

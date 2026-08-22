@@ -139,6 +139,27 @@ public sealed class InverseBoolToVisibilityConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>
+/// Resource key to the brush it names, resolved against the live theme.
+/// <para>
+/// Lets a view model say "this is dangerous" as a key instead of holding a Brush, which it
+/// must not: the view models are shared with a Core that never references a UI assembly,
+/// and a hard-coded colour would also stop following the light/dark switch.
+/// </para>
+/// </summary>
+public sealed class ResourceKeyToBrushConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        if (value is not string key || key.Length == 0) return Brushes.Transparent;
+
+        return Application.Current?.TryFindResource(key) as Brush ?? Brushes.Gray;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>String vazia → Collapsed. Evita espaço reservado para texto que não existe.</summary>
 public sealed class EmptyStringToVisibilityConverter : IValueConverter
 {

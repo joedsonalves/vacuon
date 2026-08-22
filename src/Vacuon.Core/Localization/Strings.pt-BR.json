@@ -659,5 +659,14 @@
   "cleanup.donePartial": "{0} tratados · {1} falharam",
   "cleanup.needsElevationNote": "{0} regras precisam de Administrador e foram puladas.",
   "cleanup.catalogProblem": "Catálogo de regras: {0}",
-  "cleanup.planSummaryOne": "{0} arquivos · {1} casados por 1 regra"
+  "cleanup.planSummaryOne": "{0} arquivos · {1} casados por 1 regra",
+  "cleanup.subtitle": "Lixo achado por regra. Cada regra diz o que remove e o que isso custa, e nada roda até você apertar o botão embaixo.",
+  "cleanup.scan": "Procurar lixo",
+  "cleanup.profileQuick": "Rápida",
+  "cleanup.profileDeep": "Profunda",
+  "cleanup.profileCustom": "Tudo",
+  "cleanup.toQuarantine": "Pôr de lado",
+  "cleanup.toRecycle": "Lixeira",
+  "cleanup.toPermanent": "Apagar de vez",
+  "cleanup.rulesEditable": "As regras ficam num arquivo JSON que você pode editar: {0}"
 }

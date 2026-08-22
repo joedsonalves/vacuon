@@ -9,6 +9,7 @@ using Vacuon.Core;
 using Vacuon.Core.Actions;
 using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
+using Vacuon.Core.Cleanup;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Optimization;
@@ -19,7 +20,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Treemap, Duplicates, Quarantine, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Treemap, Cleanup, Duplicates, Quarantine, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -71,6 +72,15 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
+        ScanForJunkCommand = new RelayCommand(ScanForJunk);
+        RunCleanupCommand = new RelayCommand(RunCleanup);
+        SetCleanupProfileCommand = new RelayCommand(p =>
+            CleanupProfileChoice = (p as string) switch
+            {
+                "deep" => CleanupProfile.Deep,
+                "custom" => CleanupProfile.Custom,
+                _ => CleanupProfile.Quick,
+            });
         FindDuplicatesCommand = new RelayCommand(async () => await FindDuplicatesAsync(),
                                                 () => !IsFindingDuplicates);
         QuarantineDuplicatesCommand = new RelayCommand(QuarantineDuplicates);
@@ -110,6 +120,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsDashboard));
             Raise(nameof(IsExplorer));
             Raise(nameof(IsTreemap));
+            Raise(nameof(IsCleanup));
             Raise(nameof(IsDuplicates));
             Raise(nameof(IsQuarantine));
             Raise(nameof(IsSecurity));
@@ -122,6 +133,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsDashboard => Section == Section.Dashboard;
     public bool IsExplorer => Section == Section.Explorer;
     public bool IsTreemap => Section == Section.Treemap;
+    public bool IsCleanup => Section == Section.Cleanup;
     public bool IsDuplicates => Section == Section.Duplicates;
     public bool IsQuarantine => Section == Section.Quarantine;
     public bool IsSecurity => Section == Section.Security;
@@ -2024,6 +2036,203 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         SwitchOutcome.NotActionable => L.T("ai.outcomeNotActionable"),
         _ => L.T("ai.outcomeFailed", result.Message ?? string.Empty),
     };
+
+    // ================= limpeza por regras =================
+
+    public ObservableCollection<CleanupCategoryViewModel> CleanupCategories { get; } = [];
+
+    private CleanupPlan? _cleanupPlan;
+
+    private CleanupProfile _cleanupProfile = CleanupProfile.Quick;
+    public CleanupProfile CleanupProfileChoice
+    {
+        get => _cleanupProfile;
+        set
+        {
+            if (!Set(ref _cleanupProfile, value)) return;
+            Raise(nameof(IsQuickProfile));
+            Raise(nameof(IsDeepProfile));
+            Raise(nameof(IsCustomProfile));
+            ScanForJunk();
+        }
+    }
+
+    public bool IsQuickProfile => _cleanupProfile == CleanupProfile.Quick;
+    public bool IsDeepProfile => _cleanupProfile == CleanupProfile.Deep;
+    public bool IsCustomProfile => _cleanupProfile == CleanupProfile.Custom;
+
+    private string _cleanupStatusText = string.Empty;
+    public string CleanupStatusText
+    {
+        get => _cleanupStatusText;
+        private set => Set(ref _cleanupStatusText, value);
+    }
+
+    private string _cleanupSelectionText = string.Empty;
+    public string CleanupSelectionText
+    {
+        get => _cleanupSelectionText;
+        private set => Set(ref _cleanupSelectionText, value);
+    }
+
+    private bool _hasCleanupSelection;
+    public bool HasCleanupSelection
+    {
+        get => _hasCleanupSelection;
+        private set => Set(ref _hasCleanupSelection, value);
+    }
+
+    public ICommand ScanForJunkCommand { get; private set; } = null!;
+    public ICommand RunCleanupCommand { get; private set; } = null!;
+    public ICommand SetCleanupProfileCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// Builds the plan. Reads the disk and changes nothing — the button that changes things
+    /// is a different one, and it can only act on what this produced.
+    /// </summary>
+    public void ScanForJunk()
+    {
+        RuleCatalog.CatalogLoad catalog = RuleCatalog.LoadWithProblems();
+
+        CleanupPlan plan = new RuleEngine().Plan(
+            catalog.Rules, _cleanupProfile, IsElevated);
+
+        _cleanupPlan = plan;
+
+        CleanupCategories.Clear();
+
+        // Group by category, keeping the biggest rule first inside each.
+        var byCategory = new Dictionary<string, List<CleanupRuleViewModel>>(StringComparer.Ordinal);
+
+        foreach (RulePlan rule in plan.Rules)
+        {
+            // A rule the profile excluded is not this screen's business — the profile
+            // buttons already say what is being run.
+            if (rule.Skipped == RuleSkipReason.RiskAboveProfile) continue;
+
+            if (!byCategory.TryGetValue(rule.Rule.Category, out List<CleanupRuleViewModel>? list))
+                byCategory[rule.Rule.Category] = list = [];
+
+            list.Add(new CleanupRuleViewModel(rule, UpdateCleanupSelection));
+        }
+
+        foreach ((string category, List<CleanupRuleViewModel> rules) in byCategory)
+            CleanupCategories.Add(new CleanupCategoryViewModel(category, rules));
+
+        // Everything that can run starts ticked: the plan is the proposal, and the screen
+        // shows it in full before anything happens.
+        foreach (CleanupCategoryViewModel category in CleanupCategories)
+            foreach (CleanupRuleViewModel rule in category.Rules)
+                rule.IsChecked = rule.CanRun;
+
+        var parts = new List<string>(3);
+
+        parts.Add(plan.FileCount == 0
+            ? L.T("cleanup.planNothing")
+            : L.T("cleanup.planSummary", Format.Count(plan.FileCount),
+                  Format.Bytes(plan.MatchedBytes),
+                  Format.Count(plan.Rules.Count(r => r.WillDoSomething))));
+
+        int needElevation = plan.Rules.Count(r => r.Skipped == RuleSkipReason.NeedsElevation);
+        if (needElevation > 0)
+            parts.Add(L.T("cleanup.needsElevationNote", Format.Count(needElevation)));
+
+        // A broken rules.json is said out loud, never swallowed.
+        foreach (string problem in catalog.Problems)
+            parts.Add(L.T("cleanup.catalogProblem", problem));
+
+        CleanupStatusText = string.Join(" · ", parts);
+        UpdateCleanupSelection();
+    }
+
+    private void UpdateCleanupSelection()
+    {
+        long bytes = 0;
+        int files = 0;
+        int rules = 0;
+
+        foreach (CleanupCategoryViewModel category in CleanupCategories)
+        {
+            foreach (CleanupRuleViewModel rule in category.Rules)
+            {
+                if (!rule.IsChecked) continue;
+                rules++;
+                files += rule.Plan.Matches.Count;
+                bytes += rule.Plan.Bytes;
+            }
+        }
+
+        HasCleanupSelection = rules > 0;
+        CleanupSelectionText = rules == 0
+            ? string.Empty
+            : L.T("cleanup.planSummary", Format.Count(files), Format.Bytes(bytes),
+                  Format.Count(rules));
+    }
+
+    /// <summary>Carries out only the ticked rules, through the disposal the caller chose.</summary>
+    private void RunCleanup(object? parameter)
+    {
+        if (_cleanupPlan is null) return;
+
+        var ticked = new List<RulePlan>();
+
+        foreach (CleanupCategoryViewModel category in CleanupCategories)
+            foreach (CleanupRuleViewModel rule in category.Rules)
+                if (rule.IsChecked) ticked.Add(rule.Plan);
+
+        if (ticked.Count == 0) return;
+
+        // The plan handed to Execute contains exactly the ticked rules, so nothing that was
+        // shown-but-unticked can be swept up by accident.
+        var plan = new CleanupPlan(ticked, _cleanupProfile);
+
+        CleanupDisposal disposal = (parameter as string) switch
+        {
+            "permanent" => CleanupDisposal.Permanent,
+            "recycle" => CleanupDisposal.RecycleBin,
+            _ => CleanupDisposal.Quarantine,
+        };
+
+        var engine = new RuleEngine();
+        CleanupReport report = engine.Execute(plan, disposal);
+
+        var parts = new List<string>(3)
+        {
+            report.Failed > 0
+                ? L.T("cleanup.donePartial", Format.Count(report.Handled), Format.Count(report.Failed))
+                : disposal switch
+                {
+                    CleanupDisposal.Permanent => L.T("cleanup.donePermanent",
+                        Format.Count(report.Handled), Format.Bytes(report.Bytes)),
+                    CleanupDisposal.RecycleBin => L.T("cleanup.doneRecycle",
+                        Format.Count(report.Handled), Format.Bytes(report.Bytes)),
+                    _ => L.T("cleanup.doneQuarantine",
+                        Format.Count(report.Handled), Format.Bytes(report.Bytes)),
+                },
+        };
+
+        // The Windows tools run after the files, and each reports its own measured gain.
+        var tools = new SystemTools();
+
+        foreach (RulePlan rule in plan.SystemTools)
+        {
+            ToolResult result = tools.Run(rule.Rule.Tool!);
+
+            parts.Add(!result.Succeeded
+                ? L.T("cleanup.toolFailed", result.Error ?? $"exit {result.ExitCode}")
+                : result.FreedBytesMeasured
+                    ? L.T("cleanup.toolFreed", Format.Bytes(result.FreedBytes))
+                    : L.T("cleanup.toolNoMeasure"));
+        }
+
+        CleanupStatusText = string.Join(" · ", parts);
+        StatusText = parts[0];
+
+        if (report.Failed > 0) LastFailures = [.. report.Failures];
+
+        // What is gone is gone; the list has to be rebuilt from the disk.
+        ScanForJunk();
+    }
 
     // ================= duplicados =================
 

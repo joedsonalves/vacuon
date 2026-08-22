@@ -58,6 +58,9 @@ public partial class MainWindow : Window
     private void OnNavTreemap(object sender, RoutedEventArgs e) =>
         Navigate(Section.Treemap, "nav.treemap");
 
+    private void OnNavCleanup(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Cleanup, "nav.cleanup");
+
     private void OnNavDuplicates(object sender, RoutedEventArgs e) =>
         Navigate(Section.Duplicates, "nav.duplicates");
 

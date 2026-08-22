@@ -659,5 +659,14 @@
   "cleanup.donePartial": "{0} handled · {1} failed",
   "cleanup.needsElevationNote": "{0} rules need Administrator and were skipped.",
   "cleanup.catalogProblem": "Rule catalog: {0}",
-  "cleanup.planSummaryOne": "{0} files · {1} matched by 1 rule"
+  "cleanup.planSummaryOne": "{0} files · {1} matched by 1 rule",
+  "cleanup.subtitle": "Junk found by rule. Every rule says what it removes and what that costs, and nothing runs until you press the button below.",
+  "cleanup.scan": "Look for junk",
+  "cleanup.profileQuick": "Quick",
+  "cleanup.profileDeep": "Deep",
+  "cleanup.profileCustom": "Everything",
+  "cleanup.toQuarantine": "Set aside",
+  "cleanup.toRecycle": "Recycle Bin",
+  "cleanup.toPermanent": "Delete for good",
+  "cleanup.rulesEditable": "Rules live in a JSON file you can edit: {0}"
 }
