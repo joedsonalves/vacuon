@@ -33,6 +33,7 @@ try
         "ai" => Commands.Ai(),
         "startup" => Commands.Startup(),
         "quarantine" => Commands.Quarantine(args[1..]),
+        "duplicates" or "dupes" => Commands.Duplicates(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
         "version" or "--version" => Commands.Version(),
@@ -99,6 +100,7 @@ static class Help
         Console.WriteLine($"    ai                         {L.T("cli.cmdAi")}");
         Console.WriteLine($"    startup                    {L.T("cli.cmdStartup")}");
         Console.WriteLine($"    quarantine [list|…]        {L.T("cli.cmdQuarantine")}");
+        Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
         Console.WriteLine($"    version                    {L.T("cli.cmdVersion")}");
@@ -119,6 +121,11 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.duplicateOptions")}");
+        Console.WriteLine($"    --min-size=4KB             {L.T("cli.optMinSize")}");
+        Console.WriteLine($"    --keep=oldest|newest|shallow {L.T("cli.optKeep")}");
+        Console.WriteLine($"    --verify                   {L.T("cli.optVerify")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.quarantineOptions")}");
         Console.WriteLine($"    {L.T("cli.quarantineUsage")}");
@@ -396,6 +403,102 @@ static class Commands
         RestoreOutcome.AccessDenied => "quarantine.outcomeAccessDenied",
         _ => "quarantine.outcomeFailed",
     });
+
+    /// <summary>
+    /// Finds files with identical content. Read-only: it never removes a copy, it only says
+    /// which ones are the same and what removing the redundant ones would actually free.
+    /// </summary>
+    public static int Duplicates(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        int top = ArgInt(args, "--top", 20);
+
+        var options = new DuplicateOptions
+        {
+            MinimumBytes = ArgSize(args, "--min-size", 4096),
+            VerifyByteForByte = args.Contains("--verify"),
+            Keep = ArgString(args, "--keep", "oldest").ToLowerInvariant() switch
+            {
+                "newest" => KeepPreference.Newest,
+                "shallow" or "shallowest" => KeepPreference.ShallowestPath,
+                _ => KeepPreference.Oldest,
+            },
+        };
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        bool showProgress = !args.Contains("--no-progress") && !Console.IsOutputRedirected;
+        var orchestrator = new ScanOrchestrator(new MftScanOptions
+        {
+            Progress = showProgress ? new ConsoleProgress() : null,
+        });
+
+        ScanResult scan = IsWholeVolume(target)
+            ? orchestrator.Refresh(char.ToUpperInvariant(target[0]), StrategyPreference.Auto,
+                                   allowSnapshot: !args.Contains("--fresh"), cts.Token)
+            : orchestrator.ScanFolder(target, cts.Token);
+
+        if (showProgress) ConsoleProgress.Clear();
+
+        Formatting.WriteHeading(L.T("cli.headDuplicates"));
+
+        var watch = Stopwatch.StartNew();
+        DuplicateReport report = new DuplicateFinder().Find(scan.Index, options, null, cts.Token);
+        watch.Stop();
+
+        if (report.GroupCount == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("dup.none"));
+            Console.WriteLine();
+            return 0;
+        }
+
+        foreach (DuplicateGroup group in report.Groups.Take(top))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("dup.groupHeader",
+                                         Formatting.Count(group.CopyCount),
+                                         Formatting.Bytes(group.Bytes),
+                                         Formatting.Bytes(group.RecoverableBytes)));
+
+            // The keeper is printed first and labelled, so the list never reads as though
+            // every path on it were up for deletion.
+            Console.WriteLine($"    [{L.T("dup.keeping")}]  {group.Keeper.Path}");
+
+            foreach (DuplicateFile copy in group.Redundant)
+            {
+                Console.WriteLine($"    [{L.T("dup.redundant")}]  {copy.Path}");
+                if (copy.IsHardLinked) Formatting.WriteMuted($"             {L.T("dup.hardlinked")}");
+            }
+
+            if (group.RecoverableBytes == 0)
+                Formatting.WriteMuted("    " + L.T("dup.nothingRecoverable"));
+        }
+
+        Console.WriteLine();
+        // Singular matters: "1 groups" is the kind of seam that makes a tool look unfinished,
+        // and this project has already had to fix it once for items and folders.
+        Console.WriteLine("  " + (report.GroupCount == 1
+            ? L.T("dup.summaryOne", Formatting.Bytes(report.RecoverableBytes))
+            : L.T("dup.summary", Formatting.Count(report.GroupCount),
+                  Formatting.Bytes(report.RecoverableBytes))));
+        Formatting.WriteMuted("  " + L.T("dup.read", Formatting.Bytes(report.BytesRead),
+                                         Formatting.Count(report.FilesHashed)) +
+                              $"  ·  {Formatting.Duration(watch.Elapsed)}");
+
+        if (report.HardLinkedCopies > 0)
+            Formatting.WriteMuted("  " + L.T("dup.hardlinkNote",
+                                             Formatting.Count(report.HardLinkedCopies)));
+
+        if (report.UnreadableFiles > 0)
+            Formatting.WriteMuted("  " + L.T("dup.unreadable",
+                                             Formatting.Count(report.UnreadableFiles)));
+
+        Console.WriteLine();
+        return 0;
+    }
 
     public static int Version()
     {
@@ -787,6 +890,34 @@ static class Commands
         int filled = (int)Math.Round(percent / 100.0 * width);
         filled = Math.Clamp(filled, 0, width);
         return new string('█', filled) + new string('░', width - filled);
+    }
+
+    /// <summary>Parses <c>--min-size=500MB</c> and friends. Plain digits mean bytes.</summary>
+    private static long ArgSize(string[] args, string name, long fallback)
+    {
+        string raw = ArgString(args, name, string.Empty).Trim();
+        if (raw.Length == 0) return fallback;
+
+        long multiplier = 1;
+
+        foreach ((string suffix, long factor) in new[]
+                 {
+                     ("KB", 1024L), ("KIB", 1024L),
+                     ("MB", 1024L * 1024), ("MIB", 1024L * 1024),
+                     ("GB", 1024L * 1024 * 1024), ("GIB", 1024L * 1024 * 1024),
+                 })
+        {
+            if (!raw.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+
+            multiplier = factor;
+            raw = raw[..^suffix.Length].Trim();
+            break;
+        }
+
+        return double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                               System.Globalization.CultureInfo.InvariantCulture, out double value)
+            ? (long)(value * multiplier)
+            : fallback;
     }
 
     private static int ArgInt(string[] args, string name, int fallback)
