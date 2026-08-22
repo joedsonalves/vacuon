@@ -53,6 +53,31 @@ public sealed class AppSettings
     /// <summary>Última unidade varrida, para reabrir onde parou.</summary>
     public string? LastVolume { get; set; }
 
+    /// <summary>Icon in the notification area, showing free space.</summary>
+    public bool ShowTrayIcon { get; set; } = true;
+
+    /// <summary>
+    /// Whether crossing the threshold below raises a Windows notification.
+    /// <para>
+    /// Separate from <see cref="ShowTrayIcon"/> even though the notification is posted
+    /// through the icon: wanting the icon out of the way is a different wish from wanting to
+    /// hear nothing when the disk fills.
+    /// </para>
+    /// </summary>
+    public bool NotifyOnLowSpace { get; set; } = true;
+
+    /// <summary>Free space below which a volume is worth a notification. Default 10 GiB.</summary>
+    public long LowSpaceThresholdBytes { get; set; } = 10L * 1024 * 1024 * 1024;
+
+    /// <summary>
+    /// Whether closing the window leaves the app running in the notification area.
+    /// <para>
+    /// Off by default. An app that keeps running after being closed, without having been
+    /// asked, is one people find in the tray days later wondering what put it there.
+    /// </para>
+    /// </summary>
+    public bool CloseToTray { get; set; }
+
     // ---------------------------------------------------------------
 
     [JsonIgnore]

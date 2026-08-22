@@ -449,7 +449,25 @@ vacuon thumb video.mkv --size=256   # extract the content thumbnail
 vacuon reveal "C:\path\file.mp4"    # open Explorer with the file selected
 vacuon scan C: --fresh              # ignore the snapshot, measure the disk again
 vacuon scan C: --language=pt-BR     # output in Portuguese
+
+vacuon watch C:                     # what is being written to the volume right now
+vacuon guard --below=20GB           # exit 6 if a volume is below the threshold
+vacuon schedule create --at=03:00   # a nightly cleanup, into quarantine
+vacuon schedule list                # what Vacuon has scheduled
 ```
+
+Two things `watch` will not do, said here rather than discovered later. It **cannot name the
+program** writing to the disk: a change-journal record carries the file, its parent, the reason
+and the attributes, and no process id — the journal is a file-system log, not an audit trail.
+Pointing at a culprit would mean guessing from the path, and "this folder belongs to Chrome, so
+Chrome did it" is invention. And its byte counts come from the size of the files **now**, because
+the journal reports *that* something changed and never by how much; a file created and deleted
+inside the same interval measures zero, which is correct.
+
+`guard` and `schedule` are built to be run by the Windows Task Scheduler. A scheduled cleanup
+only ever moves files to the quarantine — the disposal is not a parameter anyone can widen, and
+`--profile=custom` cannot be scheduled at all. `guard` changes nothing whatsoever; it measures,
+reports, and answers in its exit code so that a schedule can branch on it.
 
 <details>
 <summary><b>Sample output — <code>vacuon scan C:</code></b></summary>
@@ -515,7 +533,7 @@ Details in [SECURITY.md](SECURITY.md).
 | **M6** | **Exact duplicates, four-stage** | ✅ |
 | **M7** | **Squarified treemap with drill-down** | ✅ |
 | M8 | Similar pictures by perceptual hash · **video and audio deferred** | 🟨 |
-| M9 | Live change-journal monitor · **scheduling deferred** | 🟨 |
+| **M9** | **Live monitor with a screen, scheduled cleanups, space guard, tray icon and low-space warning** | ✅ |
 | M10 | Portable, i18n, docs, accessible controls · **signing deferred** | 🟨 |
 
 ## Architecture

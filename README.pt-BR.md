@@ -449,7 +449,25 @@ vacuon scan C: --suspicious        # inclui a caça a arquivos disfarçados
 vacuon security                    # chaves de persistência do registro
 vacuon thumb video.mkv --size=256  # extrai a miniatura do conteúdo
 vacuon reveal "C:\caminho\arq.mp4" # abre o Explorer com o arquivo selecionado
+
+vacuon watch C:                    # o que está sendo escrito no volume agora
+vacuon guard --below=20GB          # sai com 6 se um volume estiver abaixo do limite
+vacuon schedule create --at=03:00  # uma limpeza noturna, para a quarentena
+vacuon schedule list               # o que o Vacuon tem agendado
 ```
+
+Duas coisas que o `watch` **não** faz, ditas aqui em vez de descobertas depois. Ele **não
+consegue nomear o programa** que escreve no disco: um registro do diário de mudanças traz o
+arquivo, a pasta, a razão e os atributos, e nenhum id de processo — o diário é um log do
+sistema de arquivos, não uma trilha de auditoria. Apontar um culpado seria adivinhar pelo
+caminho, e "esta pasta é do Chrome, então foi o Chrome" é invenção. E os bytes vêm do tamanho
+dos arquivos **agora**, porque o diário diz *que* algo mudou e nunca quanto; arquivo criado e
+apagado dentro do mesmo intervalo mede zero, e está certo.
+
+O `guard` e o `schedule` existem para serem chamados pelo Agendador de Tarefas do Windows. Uma
+limpeza agendada só move para a quarentena — o destino não é um parâmetro que alguém possa
+alargar, e `--profile=custom` não pode ser agendado de jeito nenhum. O `guard` não altera
+absolutamente nada; ele mede, informa, e responde no código de saída para o agendador decidir.
 
 <details>
 <summary><b>Exemplo de saída — <code>vacuon scan C:</code></b></summary>
@@ -515,7 +533,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | **M6** | **Duplicados exatos, em quatro estágios** | ✅ |
 | **M7** | **Treemap squarified com drill-down** | ✅ |
 | M8 | Imagens parecidas por hash perceptual · **vídeo e áudio adiados** | 🟨 |
-| M9 | Monitor do diário de mudanças ao vivo · **agendamento adiado** | 🟨 |
+| **M9** | **Monitor com tela, limpeza agendada, guarda de espaço, ícone na bandeja e aviso de disco cheio** | ✅ |
 | M10 | Portátil, i18n, docs, controles acessíveis · **assinatura adiada** | 🟨 |
 
 ## Arquitetura

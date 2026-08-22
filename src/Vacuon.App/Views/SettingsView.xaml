@@ -119,6 +119,39 @@
                 </StackPanel>
             </Border>
 
+            <!-- ==================== área de notificação ==================== -->
+            <TextBlock Style="{StaticResource Text.Section}" Margin="0,22,0,8" Text="{DynamicResource S.settings.trayTitle}"/>
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <CheckBox Style="{StaticResource Check}"
+                              Content="{DynamicResource S.settings.showTray}"
+                              IsChecked="{Binding ShowTrayIcon, Mode=TwoWay}"/>
+
+                    <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
+                              Content="{DynamicResource S.settings.notifyLow}"
+                              IsChecked="{Binding NotifyOnLowSpace, Mode=TwoWay}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="27,10,0,0">
+                        <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.Muted}"
+                                   Text="{DynamicResource S.settings.lowThreshold}"/>
+                        <TextBox Width="70" Margin="10,0,6,0" TextAlignment="Right"
+                                 AutomationProperties.Name="{DynamicResource S.settings.lowThreshold}"
+                                 Text="{Binding LowSpaceThresholdGiB, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"/>
+                        <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Text.Muted}" Text="GiB"/>
+                    </StackPanel>
+
+                    <CheckBox Style="{StaticResource Check}" Margin="0,16,0,0"
+                              Content="{DynamicResource S.settings.closeToTray}"
+                              IsChecked="{Binding CloseToTray, Mode=TwoWay}"/>
+
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,14,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{DynamicResource S.settings.trayNote}"/>
+                </StackPanel>
+            </Border>
+
             <!-- ==================== o que esta versão faz ==================== -->
             <TextBlock Style="{StaticResource Text.Section}" Margin="0,22,0,8" Text="{DynamicResource S.settings.thisVersion}"/>
             <Border Style="{StaticResource Card}">

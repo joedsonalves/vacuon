@@ -9,6 +9,7 @@ using Vacuon.Core;
 using Vacuon.Core.Actions;
 using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
+using Vacuon.Core.Monitoring;
 using Vacuon.Core.Cleanup;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
@@ -20,7 +21,7 @@ using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
 
-public enum Section { Dashboard, Explorer, Treemap, Cleanup, Duplicates, Similar, Quarantine, Security, Optimize, Settings }
+public enum Section { Dashboard, Explorer, Treemap, Cleanup, Duplicates, Similar, Quarantine, Monitor, Security, Optimize, Settings }
 
 /// <summary>
 /// The two panels inside Optimize.
@@ -71,6 +72,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
+        StartWatchCommand = new RelayCommand(StartWatch);
+        StopWatchCommand = new RelayCommand(Monitor.Stop);
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
         FindSimilarCommand = new RelayCommand(async () => await FindSimilarAsync(),
                                              () => !IsFindingSimilar);
@@ -128,6 +131,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             Raise(nameof(IsDuplicates));
             Raise(nameof(IsSimilar));
             Raise(nameof(IsQuarantine));
+            Raise(nameof(IsMonitor));
             Raise(nameof(IsSecurity));
             Raise(nameof(IsOptimize));
             Raise(nameof(IsSettings));
@@ -142,6 +146,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsDuplicates => Section == Section.Duplicates;
     public bool IsSimilar => Section == Section.Similar;
     public bool IsQuarantine => Section == Section.Quarantine;
+    public bool IsMonitor => Section == Section.Monitor;
     public bool IsSecurity => Section == Section.Security;
     public bool IsOptimize => Section == Section.Optimize;
 
@@ -317,6 +322,42 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                              _settings.LastVolume is not null &&
                              v.Header.StartsWith(_settings.LastVolume, StringComparison.OrdinalIgnoreCase))
                          ?? Volumes.FirstOrDefault();
+
+        LoadTrends();
+    }
+
+    /// <summary>
+    /// Reads the stored free-space history and hands each card its trend.
+    /// <para>
+    /// One file read for every volume at once. Nothing is computed that the readings do not
+    /// support — a volume with no history gets a trend that refuses and says why, which is
+    /// what the card shows.
+    /// </para>
+    /// </summary>
+    private void LoadTrends()
+    {
+        var history = new SpaceHistory();
+
+        foreach (VolumeCardViewModel card in Volumes)
+            card.Trend = SpaceTrend.Of(card.DriveLetter, history.Read(card.DriveLetter));
+    }
+
+    /// <summary>The tray icon, once the window has one. Null before the handle exists.</summary>
+    public TrayService? Tray { get; set; }
+
+    // ---------------- live monitor (M9) ----------------
+
+    /// <summary>The live view of what a volume is doing right now.</summary>
+    public MonitorViewModel Monitor { get; } = new();
+
+    public ICommand StartWatchCommand { get; private set; } = null!;
+    public ICommand StopWatchCommand { get; private set; } = null!;
+
+    private void StartWatch()
+    {
+        if (SelectedVolume is null) return;
+
+        Monitor.Start(SelectedVolume.DriveLetter);
     }
 
     // ================= varredura =================
@@ -1160,6 +1201,58 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     {
         get => _settings.ShowSizeOnDisk;
         set { if (_settings.ShowSizeOnDisk == value) return; _settings.ShowSizeOnDisk = value; _settings.Save(); Raise(); }
+    }
+
+    // ---------------- notification area (F8.3, F8.4) ----------------
+
+    public bool ShowTrayIcon
+    {
+        get => _settings.ShowTrayIcon;
+        set
+        {
+            if (_settings.ShowTrayIcon == value) return;
+            _settings.ShowTrayIcon = value;
+            _settings.Save();
+            Raise();
+
+            // Takes effect now. A setting that needs a restart to be believed is one people
+            // toggle twice and then distrust.
+            Tray?.ApplySettings();
+        }
+    }
+
+    public bool NotifyOnLowSpace
+    {
+        get => _settings.NotifyOnLowSpace;
+        set { if (_settings.NotifyOnLowSpace == value) return; _settings.NotifyOnLowSpace = value; _settings.Save(); Raise(); }
+    }
+
+    public bool CloseToTray
+    {
+        get => _settings.CloseToTray;
+        set { if (_settings.CloseToTray == value) return; _settings.CloseToTray = value; _settings.Save(); Raise(); }
+    }
+
+    /// <summary>
+    /// The low-space threshold, in whole gibibytes.
+    /// <para>
+    /// Typed in the unit people think in. A box holding 10737418240 invites a typo that turns
+    /// a warning off by three orders of magnitude without looking wrong.
+    /// </para>
+    /// </summary>
+    public int LowSpaceThresholdGiB
+    {
+        get => (int)(_settings.LowSpaceThresholdBytes / (1024L * 1024 * 1024));
+        set
+        {
+            long bytes = Math.Clamp(value, 1, 4096) * 1024L * 1024 * 1024;
+
+            if (_settings.LowSpaceThresholdBytes == bytes) return;
+
+            _settings.LowSpaceThresholdBytes = bytes;
+            _settings.Save();
+            Raise();
+        }
     }
 
     public bool ShowHiddenAndSystem
@@ -2448,6 +2541,20 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public ICommand SetCleanupProfileCommand { get; private set; } = null!;
 
     /// <summary>
+    /// What the tray menu's "quick cleanup" does: selects the profile and builds the plan.
+    /// <para>
+    /// It stops there. A menu item that ran a cleanup would be this app deleting on one
+    /// click from a corner of the screen, with no chance to see what was matched — the
+    /// opposite of every other route into the same operation.
+    /// </para>
+    /// </summary>
+    public void StartQuickCleanupScan()
+    {
+        CleanupProfileChoice = CleanupProfile.Quick;
+        ScanForJunk();
+    }
+
+    /// <summary>
     /// Builds the plan. Reads the disk and changes nothing — the button that changes things
     /// is a different one, and it can only act on what this produced.
     /// </summary>
@@ -3204,5 +3311,6 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         _scanCts?.Dispose();
         _thumbnailCts.Dispose();
         _thumbnails.Dispose();
+        Monitor.Dispose();
     }
 }

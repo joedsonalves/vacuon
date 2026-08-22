@@ -16,12 +16,19 @@ public sealed record FolderActivity(
 }
 
 /// <summary>One slice of what the volume did.</summary>
+/// <param name="JournalGap">
+/// The journal discarded records before they could be read — the volume changed faster than
+/// the log holds. When this is set the folder breakdown is <b>incomplete</b>, and an empty
+/// one means unknown rather than quiet. Callers must say so: those two are identical on
+/// screen and only one of them is something the app measured.
+/// </param>
 public sealed record ActivitySnapshot(
     IReadOnlyList<FolderActivity> Folders,
     int RecordsRead,
     long FreeBytes,
     long FreeBytesDelta,
-    TimeSpan Elapsed)
+    TimeSpan Elapsed,
+    bool JournalGap = false)
 {
     public long BytesAdded
     {
@@ -139,10 +146,18 @@ public sealed class DiskMonitor : IDisposable
         {
             // The journal purged past our position — the volume was busier than the log is
             // large. Skipping ahead loses records, and saying so beats pretending the gap
-            // was quiet.
+            // was quiet. Which is what the flag is for: without it this return is an empty
+            // folder list, byte for byte the same thing a quiet minute produces.
             UsnJournalData? data = _journal.Query();
             _lastUsn = data?.NextUsn ?? _lastUsn;
-            return new ActivitySnapshot([], 0, FreeSpace(), 0, watch.Elapsed);
+
+            // The free-space delta survives the gap — it is two reads subtracted, and owes
+            // the journal nothing. What is lost is which folders account for it.
+            long freeNow = FreeSpace();
+            long deltaNow = freeNow - _lastFree;
+            _lastFree = freeNow;
+
+            return new ActivitySnapshot([], 0, freeNow, deltaNow, watch.Elapsed, JournalGap: true);
         }
 
         _lastUsn = next;

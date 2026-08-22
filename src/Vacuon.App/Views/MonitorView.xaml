@@ -1,0 +1,106 @@
+<UserControl x:Class="Vacuon.App.Views.MonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+
+    <!-- Cada view declara os próprios conversores. Recurso da MainWindow NÃO está no
+         escopo de um UserControl, e usar um sem declarar aqui derruba o app inteiro na
+         abertura, não só esta aba. -->
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible"/>
+        <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+    </UserControl.Resources>
+
+    <Grid Margin="24,20,24,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Style="{StaticResource Text.Sub}" TextWrapping="Wrap"
+                   MaxWidth="760" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource Text.Secondary}"
+                   Text="{DynamicResource S.watch.subtitle}"/>
+
+        <!-- controles -->
+        <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,11">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
+                           Margin="0,0,10,0" Foreground="{DynamicResource Text.Muted}"
+                           Text="{DynamicResource S.watch.volume}"/>
+
+                <ComboBox Width="180" VerticalAlignment="Center"
+                          AutomationProperties.Name="{DynamicResource S.watch.volume}"
+                          ItemsSource="{Binding Volumes}"
+                          DisplayMemberPath="Header"
+                          SelectedItem="{Binding SelectedVolume, Mode=TwoWay}"/>
+
+                <Button Style="{StaticResource Button.Base}" Margin="14,0,0,0" Padding="14,6"
+                        Content="{DynamicResource S.watch.start}"
+                        Visibility="{Binding Monitor.IsStopped, Converter={StaticResource Visible}}"
+                        Command="{Binding StartWatchCommand}"/>
+
+                <Button Style="{StaticResource Button.Base}" Margin="14,0,0,0" Padding="14,6"
+                        Content="{DynamicResource S.watch.stop}"
+                        Visibility="{Binding Monitor.IsWatching, Converter={StaticResource Visible}}"
+                        Command="{Binding StopWatchCommand}"/>
+
+                <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0"
+                           VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="420"
+                           Foreground="{DynamicResource Text.Muted}"
+                           Text="{Binding Monitor.Status}"
+                           Visibility="{Binding Monitor.Status, Converter={StaticResource NotEmpty}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- linha do intervalo; em lacuna do diário vira aviso -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="14,10"
+                Visibility="{Binding Monitor.Headline, Converter={StaticResource NotEmpty}}">
+            <TextBlock Style="{StaticResource Text.Body}" TextWrapping="Wrap"
+                       Text="{Binding Monitor.Headline}"/>
+        </Border>
+
+        <ScrollViewer Grid.Row="3" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Monitor.Folders}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Style="{StaticResource Text.Body}" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding Folder}"/>
+                                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,3,0,0"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding CountsText}"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="1" Style="{StaticResource Text.Body}"
+                                           VerticalAlignment="Center" Margin="14,0,0,0"
+                                           FontWeight="SemiBold"
+                                           Text="{Binding BytesText}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!--
+            Dito em toda execução, como no CLI. O diário registra arquivos, não programas;
+            apontar um culpado pelo caminho seria invenção plausível, que é exatamente o
+            que este projeto trata como bug.
+        -->
+        <TextBlock Grid.Row="4" Style="{StaticResource Text.Sub}" Margin="0,12,0,14"
+                   TextWrapping="Wrap" MaxWidth="760" HorizontalAlignment="Left"
+                   Foreground="{DynamicResource Text.Muted}"
+                   Text="{DynamicResource S.watch.noProcess}"/>
+    </Grid>
+</UserControl>

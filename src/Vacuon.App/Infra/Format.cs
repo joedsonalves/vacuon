@@ -18,6 +18,21 @@ public static class Format
         : value.TotalSeconds < 60 ? $"{value.TotalSeconds:N1} s"
         : $"{(int)value.TotalMinutes} min {value.Seconds} s";
 
+    /// <summary>
+    /// A count of days, rounded to what the estimate can support.
+    /// <para>
+    /// Two decimals on a projection built from a fitted line would dress a rough estimate as
+    /// a measurement. Under a fortnight it is worth a whole number; past that, weeks and
+    /// months carry the same information without implying precision nobody has.
+    /// </para>
+    /// </summary>
+    public static string Days(double days) => days switch
+    {
+        < 14 => string.Format(CultureInfo.CurrentCulture, "{0:N0}", Math.Max(1, Math.Round(days))),
+        < 60 => string.Format(CultureInfo.CurrentCulture, "~{0:N0}", Math.Round(days / 7) * 7),
+        _ => string.Format(CultureInfo.CurrentCulture, "~{0:N0}", Math.Round(days / 30) * 30),
+    };
+
     public static string DateOrDash(DateTime value) =>
         value == DateTime.MinValue
             ? "—"

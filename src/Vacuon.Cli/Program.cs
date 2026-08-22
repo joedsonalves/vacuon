@@ -889,6 +889,14 @@ static class Commands
                 Console.WriteLine();
                 Console.WriteLine($"  {DateTime.Now:HH:mm:ss}");
 
+                // Before the quiet line, because a gap produces the same empty snapshot and
+                // must not be reported as nothing having happened.
+                if (snapshot.JournalGap)
+                {
+                    Formatting.WriteWarning("    " + L.T("watch.gap"));
+                    continue;
+                }
+
                 if (snapshot.RecordsRead == 0)
                 {
                     Formatting.WriteMuted("    " + L.T("watch.quiet"));

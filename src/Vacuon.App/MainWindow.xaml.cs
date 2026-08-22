@@ -18,14 +18,30 @@ public partial class MainWindow : Window
 
         // A barra de título é do Windows, não do WPF: sem sincronizar, o tema escuro
         // fica com uma faixa branca no topo.
-        SourceInitialized += (_, _) => ApplyTitleBar();
+        SourceInitialized += (_, _) =>
+        {
+            ApplyTitleBar();
+
+            // After the handle exists: the tray icon addresses a window, and the message
+            // hook needs a source to hang from.
+            _tray = new TrayService(this, App.Settings);
+            _tray.QuickCleanupRequested += OnQuickCleanupFromTray;
+            _tray.Attach();
+
+            _model.Tray = _tray;
+        };
+
         ThemeManager.Changed += ApplyTitleBar;
         L.Changed += RefreshHeader;
+
+        Closing += OnClosing;
 
         Closed += (_, _) =>
         {
             ThemeManager.Changed -= ApplyTitleBar;
             L.Changed -= RefreshHeader;
+
+            _tray?.Dispose();
             _model.Dispose();
         };
     }
@@ -49,6 +65,30 @@ public partial class MainWindow : Window
 
     private string _headerKey = "nav.dashboard";
 
+    private TrayService? _tray;
+
+    /// <summary>
+    /// Closing the window ends the app, unless someone asked otherwise.
+    /// <para>
+    /// The opposite default — closing to the tray — leaves a process running that the person
+    /// believes they closed, and they find it days later wondering what put it there. The
+    /// setting exists because some people do want it; it is off until they say so.
+    /// </para>
+    /// </summary>
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!App.Settings.CloseToTray || _tray is null || !App.Settings.ShowTrayIcon) return;
+
+        e.Cancel = true;
+        Hide();
+    }
+
+    private void OnQuickCleanupFromTray()
+    {
+        Navigate(Section.Cleanup, "nav.cleanup");
+        _model.StartQuickCleanupScan();
+    }
+
     private void OnNavDashboard(object sender, RoutedEventArgs e) =>
         Navigate(Section.Dashboard, "nav.dashboard");
 
@@ -69,6 +109,9 @@ public partial class MainWindow : Window
 
     private void OnNavQuarantine(object sender, RoutedEventArgs e) =>
         Navigate(Section.Quarantine, "nav.quarantine");
+
+    private void OnNavMonitor(object sender, RoutedEventArgs e) =>
+        Navigate(Section.Monitor, "nav.monitor");
 
     private void OnNavSecurity(object sender, RoutedEventArgs e) =>
         Navigate(Section.Security, "nav.security");
