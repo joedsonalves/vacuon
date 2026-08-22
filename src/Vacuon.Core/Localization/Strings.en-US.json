@@ -712,5 +712,18 @@
   "similar.scope": "{0} pictures to read · {1}. Each one has to be decoded, so this takes minutes on a full disk.",
   "similar.scopeNone": "No pictures big enough to compare.",
   "similar.progress": "{0} of {1} pictures read",
-  "similar.cancelled": "Stopped early — this is only part of the volume."
+  "similar.cancelled": "Stopped early — this is only part of the volume.",
+  "cli.cmdWatch": "Watch what is being written to a drive, right now",
+  "cli.headWatch": "WATCHING {0}",
+  "cli.watchOptions": "WATCH OPTIONS",
+  "cli.optEvery": "Seconds between readings (default 5)",
+  "watch.noJournal": "This volume has no change journal, so there is nothing to watch.",
+  "watch.needsElevation": "Watching needs Administrator: reading the change journal opens the volume directly.",
+  "watch.header": "{0} changes in {1} folders · free space {2} {3}",
+  "watch.quiet": "Nothing changed.",
+  "watch.folderLine": "{0}  (+{1} new, {2} gone, {3} written)",
+  "watch.noProcess": "The change journal records files, not programs — it cannot say which application is writing. Naming one would be a guess.",
+  "watch.stopping": "Stopped.",
+  "watch.gap": "The journal purged records before they could be read: the volume changed faster than the log holds. That interval is missing, not quiet.",
+  "watch.counts": "+{0} new · {1} gone · {2} written"
 }

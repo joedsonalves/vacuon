@@ -7,6 +7,7 @@ using Vacuon.Core.Analyzers;
 using Vacuon.Core.Cleanup;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
+using Vacuon.Core.Monitoring;
 using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
@@ -37,6 +38,7 @@ try
         "duplicates" or "dupes" => Commands.Duplicates(args[1..]),
         "clean" => Commands.Clean(args[1..]),
         "similar" => Commands.Similar(args[1..]),
+        "watch" => Commands.Watch(args[1..]),
         "media" => Commands.Media(args[1..]),
         "thumb" => Commands.Thumb(args[1..]),
         "reveal" => Commands.Reveal(args[1..]),
@@ -107,6 +109,7 @@ static class Help
         Console.WriteLine($"    duplicates <drive|folder>  {L.T("cli.cmdDuplicates")}");
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
         Console.WriteLine($"    similar <drive|folder>     {L.T("cli.cmdSimilar")}");
+        Console.WriteLine($"    watch <drive>              {L.T("cli.cmdWatch")}");
         Console.WriteLine($"    media <file>               {L.T("cli.cmdMedia")}");
         Console.WriteLine($"    thumb <file>               {L.T("cli.cmdThumb")}");
         Console.WriteLine($"    reveal <file>              {L.T("cli.cmdReveal")}");
@@ -128,6 +131,9 @@ static class Help
         Console.WriteLine($"    --size=16..512             {L.T("cli.optSize")}");
         Console.WriteLine($"    --out=file.bmp             {L.T("cli.optOut")}");
         Console.WriteLine($"    --icon                     {L.T("cli.optIcon")}");
+        Console.WriteLine();
+        Console.WriteLine($"  {L.T("cli.watchOptions")}");
+        Console.WriteLine($"    --every=N                  {L.T("cli.optEvery")}");
         Console.WriteLine();
         Console.WriteLine($"  {L.T("cli.similarOptions")}");
         Console.WriteLine($"    --threshold=0..20          {L.T("cli.optThreshold")}");
@@ -824,6 +830,93 @@ static class Commands
             : $"{image.ResolutionLabel,-7} {Formatting.Bytes(image.Bytes)}";
 
         return $"{size,-20} {image.Path}";
+    }
+
+    /// <summary>
+    /// Watches the change journal and prints what is being written, folder by folder.
+    /// <para>
+    /// Read-only, and it answers <b>where</b>, never <b>who</b>: a USN record has no process
+    /// in it. The footer says so on every run rather than letting the reader assume.
+    /// </para>
+    /// </summary>
+    public static int Watch(string[] args)
+    {
+        string target = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "C:";
+        char drive = char.ToUpperInvariant(target.TrimStart()[0]);
+        int every = Math.Clamp(ArgInt(args, "--every", 5), 1, 3600);
+        int top = ArgInt(args, "--top", 10);
+
+        if (!VolumeProbe.IsElevated())
+        {
+            Formatting.WriteError(L.T("watch.needsElevation"));
+            return 3;
+        }
+
+        using DiskMonitor? monitor = DiskMonitor.Start(drive);
+
+        if (monitor is null)
+        {
+            Formatting.WriteError(L.T("watch.noJournal"));
+            return 4;
+        }
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        Formatting.WriteHeading(L.T("cli.headWatch", drive + ":"));
+        Console.WriteLine();
+        Formatting.WriteMuted("  " + L.T("watch.noProcess"));
+
+        try
+        {
+            while (!cts.IsCancellationRequested)
+            {
+                Task.Delay(TimeSpan.FromSeconds(every), cts.Token).GetAwaiter().GetResult();
+
+                ActivitySnapshot snapshot = monitor.Poll(cts.Token);
+
+                Console.WriteLine();
+                Console.WriteLine($"  {DateTime.Now:HH:mm:ss}");
+
+                if (snapshot.RecordsRead == 0)
+                {
+                    Formatting.WriteMuted("    " + L.T("watch.quiet"));
+                    continue;
+                }
+
+                // Free space is signed on purpose: a volume that gained space is as
+                // interesting as one losing it, and hiding the sign would flatten both.
+                string delta = snapshot.FreeBytesDelta == 0
+                    ? string.Empty
+                    : (snapshot.FreeBytesDelta > 0 ? "+" : "-")
+                      + Formatting.Bytes(Math.Abs(snapshot.FreeBytesDelta));
+
+                Console.WriteLine("    " + L.T("watch.header",
+                                               Formatting.Count(snapshot.RecordsRead),
+                                               Formatting.Count(snapshot.Folders.Count),
+                                               Formatting.Bytes(snapshot.FreeBytes),
+                                               delta));
+
+                foreach (FolderActivity folder in snapshot.Folders.Take(top))
+                {
+                    string bytes = folder.BytesAdded > 0
+                        ? $"  {Formatting.Bytes(folder.BytesAdded)}"
+                        : string.Empty;
+
+                    Console.WriteLine($"      {Formatting.Truncate(folder.Folder, 64),-66}{bytes}");
+                    Formatting.WriteMuted("        " + L.T("watch.counts",
+                        Formatting.Count(folder.Created),
+                        Formatting.Count(folder.Deleted),
+                        Formatting.Count(folder.Modified)));
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+
+        Console.WriteLine();
+        Formatting.WriteMuted("  " + L.T("watch.stopping"));
+        Console.WriteLine();
+        return 0;
     }
 
     public static int Version()

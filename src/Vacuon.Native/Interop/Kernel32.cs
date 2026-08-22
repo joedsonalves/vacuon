@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
 namespace Vacuon.Native.Interop;
@@ -195,6 +195,92 @@ public static class FileIdentity
                                         or ArgumentException or NotSupportedException)
         {
             return -1;
+        }
+    }
+
+    /// <summary>FILE_ID_DESCRIPTOR, in its FileId form.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileIdDescriptor
+    {
+        public uint Size;
+        public uint Type;        // 0 = FileIdType
+        public long FileId;
+        private readonly long _padding;   // the union is 16 bytes wide (GUID form)
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern SafeFileHandle OpenFileById(
+        SafeFileHandle volumeHandle, in FileIdDescriptor fileId, uint desiredAccess,
+        uint shareMode, nint securityAttributes, uint flags);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern uint GetFinalPathNameByHandle(
+        SafeFileHandle handle, [Out] char[] path, uint size, uint flags);
+
+    /// <summary>
+    /// The path a file reference points at, or null when it no longer resolves.
+    /// <para>
+    /// The reverse of <see cref="RecordNumberOf"/>, and the piece the change-journal monitor
+    /// needs: a USN record names a parent by <b>id</b>, never by path. Resolving is a real
+    /// open, so it fails for anything already deleted — which on a busy volume is a great
+    /// deal of what the journal just reported, and is why the caller must handle null rather
+    /// than treat it as an error.
+    /// </para>
+    /// </summary>
+    public static string? PathFromFileId(string volumeRoot, ulong fileReference)
+    {
+        try
+        {
+            // The volume must be opened as a directory to serve as OpenFileById's anchor.
+            using SafeFileHandle volume = Kernel32.CreateFile(
+                volumeRoot,
+                Kernel32.GENERIC_READ,
+                Kernel32.FILE_SHARE_READ | Kernel32.FILE_SHARE_WRITE | Kernel32.FILE_SHARE_DELETE,
+                0,
+                Kernel32.OPEN_EXISTING,
+                Kernel32.FILE_FLAG_BACKUP_SEMANTICS,
+                0);
+
+            if (volume.IsInvalid) return null;
+
+            var descriptor = new FileIdDescriptor
+            {
+                Size = (uint)Marshal.SizeOf<FileIdDescriptor>(),
+                Type = 0,
+                FileId = unchecked((long)fileReference),
+            };
+
+            using SafeFileHandle handle = OpenFileById(
+                volume, descriptor, 0,
+                Kernel32.FILE_SHARE_READ | Kernel32.FILE_SHARE_WRITE | Kernel32.FILE_SHARE_DELETE,
+                0, Kernel32.FILE_FLAG_BACKUP_SEMANTICS);
+
+            if (handle.IsInvalid) return null;
+
+            var buffer = new char[1024];
+            uint length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Length, 0);
+
+            if (length == 0 || length >= buffer.Length) return null;
+
+            string path = new(buffer, 0, (int)length);
+
+            // GetFinalPathNameByHandle returns the \?\ form; callers want the plain one.
+            // The \\?\ prefix, four characters. Getting this literal wrong is silent:
+            // the path still works for the file APIs, but it reaches the screen as
+            // \\?\C:\Users\... and every consumer that inspects it for a drive letter or a
+            // question mark starts misbehaving. That is exactly what happened — the
+            // monitor stopped measuring folder sizes because its own guard saw the "?".
+            const string ExtendedPrefix = @"\\?\";
+
+            return path.StartsWith(ExtendedPrefix, StringComparison.Ordinal)
+                ? path[ExtendedPrefix.Length..]
+                : path;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                        or ArgumentException or NotSupportedException
+                                        or EntryPointNotFoundException)
+        {
+            return null;
         }
     }
 }

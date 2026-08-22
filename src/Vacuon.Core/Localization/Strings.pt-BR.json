@@ -712,5 +712,18 @@
   "similar.scope": "{0} imagens para ler · {1}. Cada uma precisa ser decodificada, então isto leva minutos num disco cheio.",
   "similar.scopeNone": "Nenhuma imagem grande o bastante para comparar.",
   "similar.progress": "{0} de {1} imagens lidas",
-  "similar.cancelled": "Parado antes do fim — isto é só parte do volume."
+  "similar.cancelled": "Parado antes do fim — isto é só parte do volume.",
+  "cli.cmdWatch": "Vê o que está sendo escrito numa unidade, agora",
+  "cli.headWatch": "OBSERVANDO {0}",
+  "cli.watchOptions": "OPÇÕES DE OBSERVAÇÃO",
+  "cli.optEvery": "Segundos entre leituras (padrão 5)",
+  "watch.noJournal": "Este volume não tem diário de mudanças, então não há o que observar.",
+  "watch.needsElevation": "Observar exige Administrador: ler o diário de mudanças abre o volume direto.",
+  "watch.header": "{0} mudanças em {1} pastas · espaço livre {2} {3}",
+  "watch.quiet": "Nada mudou.",
+  "watch.folderLine": "{0}  (+{1} novos, {2} sumiram, {3} escritos)",
+  "watch.noProcess": "O diário de mudanças registra arquivos, não programas — ele não sabe dizer qual aplicativo está escrevendo. Apontar um seria chute.",
+  "watch.stopping": "Parado.",
+  "watch.gap": "O diário descartou registros antes de serem lidos: o volume mudou mais rápido do que o log guarda. Aquele intervalo está faltando, não estava quieto.",
+  "watch.counts": "+{0} novos · {1} sumiram · {2} escritos"
 }
