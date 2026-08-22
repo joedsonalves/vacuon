@@ -1,4 +1,4 @@
-namespace Vacuon.Core;
+﻿namespace Vacuon.Core;
 
 /// <summary>
 /// The version, in one place.
@@ -18,5 +18,5 @@ public static class AppInfo
     /// and must keep describing it, whatever the working tree says today.
     /// </para>
     /// </summary>
-    public const string Version = "0.3.2";
+    public const string Version = "0.4.0";
 }
