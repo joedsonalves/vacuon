@@ -9,7 +9,7 @@ Reads the NTFS MFT straight off the volume, shows the real content of what you a
 to delete, and never claims a number it did not measure.
 
 [![Build](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml/badge.svg)](https://github.com/joedsonalves/vacuon/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-429-3FB950.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-587-3FB950.svg)](tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 [![Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4.svg)](#requirements)
@@ -136,7 +136,7 @@ Three questions, answered in seconds:
 
 And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **Milestones M1 through M9 are in `main`; the last published release is v0.4.0.** Vacuon measures, explains, shows — and removes things three different ways, only one of which is final. **Quarantine** sets items aside on the same volume and puts them back on demand; the Recycle Bin and permanent deletion are each a separate, explicit choice. Purging a quarantine batch is the one step with no undo, and the app says so where it matters.
+> **Milestones M1 through M9, shipped in v0.5.0.** Vacuon measures, explains, shows — and removes things three different ways, only one of which is final. **Quarantine** sets items aside on the same volume and puts them back on demand; the Recycle Bin and permanent deletion are each a separate, explicit choice. Purging a quarantine batch is the one step with no undo, and the app says so where it matters.
 
 ---
 
@@ -298,6 +298,64 @@ rule refuses any single stream claiming more space than the volume has occupied.
 Measured on a 476 GiB volume with 2.34 million files: **359 GiB attributed to files against
 376 GiB reported as used, 95.4%.** The missing 4.6% is directory indexes, `$LogFile`, `$Bitmap`
 and shadow copies — clusters that belong to no file.
+
+### Treemap — the volume as one picture
+
+<img src="docs/img/15-treemap-escuro.png" width="900" alt="Treemap of C: with one box per folder, sized by what it occupies, the hovered box highlighted">
+
+Every box is sized by what it takes **on disk**, so the biggest thing on screen is the biggest thing on the volume. Click a folder to go in, and the bar says where you are.
+
+The layout is **squarified, not slice-and-dice**. The naive algorithm gives each item the full height of its strip, so a small folder becomes a one-pixel line nobody can click. There is a test that runs both over the same data: the worst aspect ratio under squarified stays below 12, while slice-and-dice passes 200.
+
+Two invariants are held by tests, and the second matters more than it sounds: area is proportional to weight, and the tiling has **no gaps and no overlaps**. An overlapping box is a byte drawn twice, and then the picture stops adding up to the disk.
+
+It draws into a **single `DrawingVisual`**. One `Rectangle` element per box does not survive the hundred thousand the design calls for. Laying out 100,000 boxes takes under 500 ms in the test; the 48 boxes above took **1 ms**.
+
+> The boxes carry no labels of their own — the name and size appear at the bottom as you move over them, which is what the highlighted box above is showing. Labels drawn inside the larger boxes are still to come.
+
+### Cleanup — junk by rule, and what each rule costs
+
+<img src="docs/img/16-limpeza-escuro.png" width="900" alt="Cleanup screen listing rules with what each removes, what it costs, and the count and size matched">
+
+Every rule says **what it removes and what that costs** — the shader cache line admits it costs one slower first launch per application. Nothing runs until you press a button, and there are three of them, in the order of how much you get back and how permanently: set aside, Recycle Bin, delete for good.
+
+Rules that matched nothing say **"nothing matched"** instead of disappearing, and a rule blocked because its owner is running says which one — *"explorer is running"* above. A rule that quietly vanishes is indistinguishable from a rule that was never there.
+
+**Nothing under `%WINDIR%` is deleted by hand.** The protected-path list refuses everything below the Windows folder and has no override, so rules that need to work in there call **DISM, powercfg and vssadmin** instead. That is better for a second reason: deleting WinSxS by hand is how people end up unable to install the next update.
+
+**Space freed by a tool is measured, never quoted from the tool.** Free space is read before and after. If it went *down* in between, the result says there is no honest number rather than inventing one.
+
+### Similar pictures — the same photo twice, at two sizes
+
+<img src="docs/img/17-parecidas-escuro.png" width="900" alt="Groups of visually similar pictures, each with its thumbnail, resolution, size and the distance in bits">
+
+> The faces in this screenshot were **blurred before publishing**. Vacuon does not blur anything — it shows your pictures as they are.
+
+The top group is the case this exists for: the same photograph kept **four times**, at 2.7 MiB and 986 KiB, under two different names. Byte for byte those files have nothing in common, so no duplicate finder will ever pair them. This compares what the picture *looks like* — a 64-bit fingerprint over the pixels Windows already decoded for the thumbnail, with **no image library linked**.
+
+Because it compares appearance, **it can be wrong, and the bit distance is shown so you can judge**. `identical fingerprint` and `6 bits apart` are different claims, and the screen makes you the one who decides.
+
+Three corrections came out of running it on a real disk, where one group announced **110 different images as the same**: a near-uniform image gets no fingerprint at all, the group is re-checked against the keeper rather than the seed it grew from, and the aspect ratio has to match within 2%. The last one is what actually resolved it.
+
+Note what the header admits: **900 pictures were skipped** because Windows returned an icon rather than a picture, and **128,913 were under the size floor and never compared**. The floor is 256 KiB, and raising it there is what removed the playing cards, sprites and wordmarks that no threshold could separate — 24 *different* cards at 70 px had a minimum distance of zero.
+
+### Search — filter the whole volume, and see what carries a hidden stream
+
+<img src="docs/img/19-busca-escuro.png" width="900" alt="Search results filtered by extension, with two files marked as carrying an Alternate Data Stream">
+
+The filters run against the whole index rather than the open folder: an extension, a minimum size, an age, and whether folders count as results. Above, one extension across the volume returns **1,357 items** out of two and a half million. A result set large enough to be capped says so on that same line — *"showing 5,000 of 5,578 — narrow the search"* — rather than being truncated in silence.
+
+Two of those rows carry an **`ADS`** badge — an Alternate Data Stream, a second body of data hanging off the same file that Explorer never shows you and that most size tools never count. Usually it is a harmless `Zone.Identifier` marking a download; occasionally it is a large payload hiding behind a small file. Either way the bytes are on your disk, so Vacuon counts them and says which files have them.
+
+### Monitor — what is being written right now
+
+<img src="docs/img/18-monitor-escuro.png" width="900" alt="Monitor screen with the volume selector and the note that the change journal records files, not programs">
+
+Every other screen in Vacuon is a photograph of a moment. This one watches: it reads the NTFS change journal at intervals and shows, folder by folder, what is being created, deleted and written **as it happens**. It needs Administrator.
+
+**It cannot tell you which process is responsible, and it says so on every run** — the line at the bottom of the screen is always there. A USN record carries the file, the folder, the reason and the attributes; it has **no process id**, because the journal is a filesystem log and not an audit trail. Naming a culprit would mean guessing from the path, and "this folder belongs to Chrome, so it was Chrome" is a plausible invention. Real attribution needs the ETW I/O provider, which is a different piece of work.
+
+Bytes come from the file's **current size**, because the journal says *that* something changed and never *how much*. A file created and deleted inside the same interval measures zero, and that is correct. A journal that dropped records is reported as a **gap**, not as a quiet interval.
 
 ### Security — registry persistence points
 

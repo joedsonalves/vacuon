@@ -137,7 +137,7 @@ Três perguntas, respondidas em segundos:
 
 E uma quarta, que quase nenhum utilitário de disco responde: **tem alguma coisa estranha se alojando na minha máquina?**
 
-> **Os marcos M1 a M9 estão na `main`; a última versão publicada é a v0.4.0.** O Vacuon mede, explica, mostra — e tira coisa do lugar de três jeitos, sendo que só um deles é definitivo. A **Quarentena** põe os itens de lado no mesmo volume e devolve quando você pedir; a Lixeira e a exclusão permanente são cada uma uma escolha explícita à parte. Expurgar um lote da quarentena é o único passo sem volta, e o app diz isso onde importa.
+> **Os marcos M1 a M9, publicados na v0.5.0.** O Vacuon mede, explica, mostra — e tira coisa do lugar de três jeitos, sendo que só um deles é definitivo. A **Quarentena** põe os itens de lado no mesmo volume e devolve quando você pedir; a Lixeira e a exclusão permanente são cada uma uma escolha explícita à parte. Expurgar um lote da quarentena é o único passo sem volta, e o app diz isso onde importa.
 
 ---
 
@@ -299,6 +299,64 @@ segunda regra recusa qualquer stream que declare mais espaço do que o volume te
 Medido num volume de 476 GiB com 2,34 milhões de arquivos: **359 GiB atribuídos a arquivos
 contra 376 GiB declarados em uso, 95,4%.** Os 4,6% que faltam são índices de diretório,
 `$LogFile`, `$Bitmap` e cópias de sombra — clusters que não pertencem a arquivo nenhum.
+
+### Treemap — o volume numa figura só
+
+<img src="docs/img/15-treemap-escuro.png" width="900" alt="Treemap do C: com uma caixa por pasta, do tamanho do que ocupa, com a caixa sob o cursor destacada">
+
+Cada caixa tem o tamanho do que ocupa **em disco**, então a maior coisa na tela é a maior coisa no volume. Clique numa pasta para entrar, e a barra diz onde você está.
+
+O layout é **squarified, não slice-and-dice**. O ingênuo dá a altura inteira da faixa a cada item, então uma pasta pequena vira uma linha de um pixel que ninguém clica. Há teste que roda os dois sobre os mesmos dados: o pior aspecto do squarified fica abaixo de 12, e o do slice passa de 200.
+
+Duas invariantes estão em teste, e a segunda pesa mais do que parece: área proporcional ao peso, e ladrilhamento **sem buraco e sem sobreposição**. Caixa sobreposta é byte desenhado duas vezes, e aí a figura deixa de somar o disco.
+
+Desenha num **`DrawingVisual` só**. Um elemento `Rectangle` por caixa não aguenta as cem mil que o desenho pede. Dispor 100.000 caixas leva menos de 500 ms no teste; as 48 acima levaram **1 ms**.
+
+> As caixas não trazem rótulo próprio — o nome e o tamanho aparecem embaixo conforme você passa o mouse, que é o que a caixa destacada acima está mostrando. Rótulos dentro das caixas maiores ainda estão por vir.
+
+### Limpeza — lixo por regra, e o que cada regra custa
+
+<img src="docs/img/16-limpeza-escuro.png" width="900" alt="Tela de limpeza listando regras com o que cada uma remove, o que custa, e a contagem e o tamanho que casaram">
+
+Cada regra diz **o que remove e o que isso custa** — a linha do cache de shaders admite que custa uma primeira execução mais lenta por aplicativo. Nada roda até você apertar um botão, e são três, na ordem de quanto se recupera e quão definitivamente: separar, Lixeira, apagar de vez.
+
+Regra que não casou com nada diz **"nothing matched"** em vez de sumir, e regra bloqueada porque o dono está aberto diz qual é — *"explorer is running"* acima. Regra que desaparece calada é indistinguível de regra que nunca existiu.
+
+**Nada abaixo de `%WINDIR%` é apagado na mão.** A lista de proteção recusa tudo abaixo da pasta do Windows e não tem override, então as regras que precisam trabalhar lá dentro chamam **DISM, powercfg e vssadmin**. É melhor por um segundo motivo: apagar WinSxS na unha é como as pessoas ficam sem conseguir instalar a próxima atualização.
+
+**Espaço liberado por ferramenta é medido, nunca copiado do que ela diz.** O livre é lido antes e depois. Se ele *caiu* no meio, o resultado diz que não há número honesto em vez de inventar um.
+
+### Imagens parecidas — a mesma foto duas vezes, em dois tamanhos
+
+<img src="docs/img/17-parecidas-escuro.png" width="900" alt="Grupos de imagens visualmente parecidas, cada uma com miniatura, resolução, tamanho e a distância em bits">
+
+> Os rostos deste print foram **borrados antes de publicar**. O Vacuon não borra nada — ele mostra suas imagens como elas são.
+
+O grupo de cima é o caso para o qual isso existe: a mesma fotografia guardada **quatro vezes**, com 2,7 MiB e 986 KiB, sob dois nomes diferentes. Byte a byte esses arquivos não têm nada em comum, então nenhum buscador de duplicados vai juntá-los. Aqui se compara o que a imagem *parece* — uma impressão de 64 bits sobre os pixels que o Windows já decodificou para a miniatura, **sem nenhuma biblioteca de imagem linkada**.
+
+Como compara aparência, **pode errar, e a distância em bits é mostrada para você julgar**. `identical fingerprint` e `6 bits apart` são afirmações diferentes, e a tela deixa a decisão com você.
+
+Três correções saíram de rodar isso num disco real, onde um grupo anunciou **110 imagens diferentes como a mesma**: imagem quase uniforme não ganha impressão nenhuma, o grupo é reconferido contra o keeper e não contra a semente de onde cresceu, e a proporção tem que bater dentro de 2%. Foi a última que resolveu de verdade.
+
+Repare no que o cabeçalho admite: **900 imagens foram puladas** porque o Windows devolveu ícone e não imagem, e **128.913 ficaram abaixo do piso de tamanho e nunca foram comparadas**. O piso é 256 KiB, e subi-lo até ali foi o que tirou as cartas de baralho, sprites e wordmarks que limiar nenhum separava — 24 cartas *diferentes* de 70 px tinham distância mínima zero.
+
+### Busca — filtrar o volume inteiro, e ver o que carrega fluxo escondido
+
+<img src="docs/img/19-busca-escuro.png" width="900" alt="Resultados de busca filtrados por extensão, com dois arquivos marcados como portadores de Alternate Data Stream">
+
+Os filtros rodam contra o índice inteiro, não contra a pasta aberta: extensão, tamanho mínimo, idade, e se pasta conta como resultado. Acima, uma extensão no volume todo devolve **1.357 itens** de dois milhões e meio. Resultado grande o bastante para ser limitado diz isso na mesma linha — *"showing 5,000 of 5,578 — narrow the search"* — em vez de ser truncado em silêncio.
+
+Duas dessas linhas trazem o selo **`ADS`** — um Alternate Data Stream, um segundo corpo de dados pendurado no mesmo arquivo que o Explorer nunca mostra e que a maioria das ferramentas de tamanho nunca conta. Em geral é um `Zone.Identifier` inofensivo marcando um download; de vez em quando é uma carga grande escondida atrás de um arquivo pequeno. De um jeito ou de outro os bytes estão no seu disco, então o Vacuon os conta e diz quais arquivos os têm.
+
+### Monitor — o que está sendo escrito agora
+
+<img src="docs/img/18-monitor-escuro.png" width="900" alt="Tela do monitor com o seletor de volume e o aviso de que o diário registra arquivos, não programas">
+
+Toda outra tela do Vacuon é a fotografia de um instante. Esta observa: lê o diário de alterações do NTFS em intervalos e mostra, pasta por pasta, o que está sendo criado, apagado e escrito **agora**. Exige Administrador.
+
+**Ele não consegue dizer qual processo é o responsável, e diz isso em toda execução** — a linha no rodapé da tela está sempre lá. Um registro USN carrega o arquivo, a pasta, a razão e os atributos; **não tem id de processo**, porque o diário é um log do sistema de arquivos e não uma trilha de auditoria. Apontar um culpado seria adivinhar pelo caminho, e "esta pasta é do Chrome, então foi o Chrome" é invenção plausível. Processo de verdade exige o provider de I/O do ETW, que é outro trabalho inteiro.
+
+Os bytes vêm do **tamanho atual** do arquivo, porque o diário diz *que* algo mudou e nunca *quanto*. Arquivo criado e apagado no mesmo intervalo mede zero, e está certo. Diário que descartou registros é reportado como **falta**, não como intervalo quieto.
 
 ### Segurança — pontos de persistência no registro
 
