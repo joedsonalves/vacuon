@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="assets/vacuon-logo.svg" width="112" alt="Vacuon">
 
@@ -526,7 +526,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | M1c | Miniaturas do Shell em seis tamanhos | ✅ |
 | **M2** | **GUI: painel, explorer virtualizado, busca, temas claro/escuro, elevação, i18n** | ✅ |
 | **M1d** | **Snapshot binário + atualização incremental por USN** | ✅ |
-| M3 | Prévia com zoom, cores de sintaxe, galeria, lado a lado, menu do shell · **player adiado** | 🟨 |
+| M3 | Prévia com zoom, cores de sintaxe, galeria, lado a lado, menu do shell, EXIF câmera/data/local · **player adiado** | 🟨 |
 | M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
 | **M4** | **Quarentena reversível, restaurar, expurgar** | ✅ |
 | **M5** | **Motor de regras, catálogo JSON, ferramentas do Windows** | ✅ |
@@ -552,12 +552,14 @@ src/
 │  ├─ Safety/       ProtectedPaths — a lista que nada contorna
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (base en-US + pt-BR opcional, JSON embutido)
-│  └─ Preview/      ThumbnailProvider · BmpWriter
+│  └─ Preview/      ThumbnailProvider · BmpWriter · MediaProbe · FilePreview
 ├─ Vacuon.App/      WPF — MVVM escrito à mão, sem dependência externa
 │  ├─ Themes/       Dark.xaml · Light.xaml · Controls.xaml
 │  ├─ ViewModels/   MainViewModel · FileRowViewModel · FolderNodeViewModel
 │  └─ Views/        Dashboard · Explorer · Security · Settings
-└─ Vacuon.Cli/      subcomandos scan/volumes/security/thumb/reveal
+└─ Vacuon.Cli/      19 subcomandos: scan · volumes · security · duplicates · similar
+                    clean · quarantine · watch · schedule · guard · residue
+                    compress · diff · ai · startup · media · thumb · reveal · version
 ```
 
 O índice são **arrays planos de `struct`**, não um grafo de objetos: 1 milhão de arquivos = **64 MB previsíveis**, sem um objeto no heap por arquivo. Um grafo de `class FileNode` com `Parent`/`Children` custaria ~400 MB e manteria a Gen2 sofrendo durante toda a varredura. O teste `FileEntry_IsExactlySixtyFourBytes` existe para que ninguém encoste nesse contrato sem perceber — foi ele que empurrou os bytes de Alternate Data Stream para uma tabela lateral, já que ADS é raro e um campo em toda entrada guardaria zeros.
@@ -581,6 +583,7 @@ Se você for escrever um leitor de MFT ou temas em WPF, estas custam caro:
 11. **`GridViewRowPresenter` exige um `GridView`.** Reusar o estilo de linha de um `ListView` com colunas em outro sem `View` faz o item simplesmente não aparecer.
 12. **`FOF_NOCONFIRMATION` num movimento quer dizer "sobrescreve sem perguntar".** O Shell não recusa um nome que já existe no destino — ele substitui, informa sucesso, e o arquivo que estava lá acabou. Quem chama tem que calcular um nome livre por conta própria, e tem que contar os nomes que o **mesmo lote** já reservou: dois `clip.mkv` vindos de pastas diferentes veem o destino vazio os dois.
 13. **Um recurso chamado `Strings.en-US.json` vira assembly satélite.** Ele casa com o padrão `nome.cultura.extensão`, então o MSBuild infere a cultura e manda o arquivo para `bin\en-US\*.resources.dll` em vez do assembly principal. O build passa, `GetManifestResourceStream` devolve null e a interface inteira aparece como `[chave]`. `WithCulture="false"` é obrigatório — e há um teste guardando isso.
+14. **O EXIF guarda o sinal de uma coordenada separado da magnitude, em três lugares diferentes.** `System.GPS.Latitude` devolve graus, minutos e segundos sem hemisfério nenhum; quem tem a letra é `System.GPS.LatitudeRef`. Ler só a magnitude põe o Rio de Janeiro no Atlântico Norte. A altitude tem a mesma divisão e é mais fácil de deixar passar: dois JPEGs escritos para diferirem **só** no `System.GPS.AltitudeRef` reportaram `412,3` os dois — medido, não suposto — então uma foto do Mar Morto sai quatrocentos metros acima do nível do mar em vez de abaixo. E o `System.GPS.LatitudeDecimal`, o atalho de uma leitura só, **costuma vir vazio em arquivo que claramente tem posição**, falhando igual a uma chave errada: devolve nada, e nada é indistinguível de foto que nunca foi geolocalizada.
 
 ## Contribuindo
 

@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="assets/vacuon-logo.svg" width="112" alt="Vacuon">
 
@@ -526,7 +526,7 @@ Details in [SECURITY.md](SECURITY.md).
 | M1c | Shell thumbnails in six sizes | ✅ |
 | **M2** | **GUI: dashboard, virtualized explorer, search, light/dark themes, elevation, i18n** | ✅ |
 | **M1d** | **Binary snapshot + incremental USN update** | ✅ |
-| M3 | Preview with zoom, syntax colouring, gallery, side-by-side, shell menu · **player deferred** | 🟨 |
+| M3 | Preview with zoom, syntax colouring, gallery, side-by-side, shell menu, EXIF camera/date/location · **player deferred** | 🟨 |
 | M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
 | **M4** | **Reversible quarantine, restore, purge** | ✅ |
 | **M5** | **Rule engine, JSON catalog, Windows tools** | ✅ |
@@ -553,12 +553,14 @@ src/
 │  ├─ Safety/       ProtectedPaths — the list nothing overrides
 │  ├─ Security/     RegistryPersistenceScanner · SuspiciousFileAnalyzer
 │  ├─ Localization/ L (en-US base + optional pt-BR, embedded JSON)
-│  └─ Preview/      ThumbnailProvider · BmpWriter
+│  └─ Preview/      ThumbnailProvider · BmpWriter · MediaProbe · FilePreview
 ├─ Vacuon.App/      WPF — hand-written MVVM, no external dependency
 │  ├─ Themes/       Dark.xaml · Light.xaml · Controls.xaml
 │  ├─ ViewModels/   MainViewModel · FileRowViewModel · FolderNodeViewModel
 │  └─ Views/        Dashboard · Explorer · Security · Settings
-└─ Vacuon.Cli/      subcommands scan/volumes/security/thumb/reveal
+└─ Vacuon.Cli/      19 subcommands: scan · volumes · security · duplicates · similar
+                    clean · quarantine · watch · schedule · guard · residue
+                    compress · diff · ai · startup · media · thumb · reveal · version
 ```
 
 The index is made of **flat `struct` arrays**, not an object graph: 1 million files = **64 predictable MB**, with no per-file heap object. A `class FileNode` graph with `Parent`/`Children` would cost ~400 MB and keep Gen2 suffering for the whole scan. The `FileEntry_IsExactlySixtyFourBytes` test exists so nobody touches that contract by accident — it is what pushed the Alternate Data Stream bytes into a side table, since ADS is rare and a field on every entry would store zeros.
@@ -594,6 +596,8 @@ If you are going to write an MFT reader, or themes and i18n in WPF, these cost r
 20. **For a compressed or sparse attribute, the size on disk is at 0x40, not 0x28.** Field 0x28 holds the run space *as if nothing had been compressed or punched out*; `CompressedSize` at 0x40 — present only when the flag is set — is what is really occupied. And in those attributes the stream name starts at **0x48**, not 0x40.
 21. **`$BadClus:$Bad` is the size of the whole volume and occupies zero.** Every NTFS volume carries that sparse named stream, and `$Extend\$UsnJrnl:$J` is another. Using their logical size as occupancy added **568 GiB to a 476 GiB disk**. A fallback like `allocated > 0 ? allocated : logical` looks harmless — a resident stream does report 0 — and is exactly what turns them into hundreds of imaginary gigabytes.
 22. **Two totals that are never compared drift apart unnoticed.** The app printed `Size on disk 758 GiB` one line above `377 GiB used of 476 GiB` for an entire release. Measuring *more* than the volume reports as used is arithmetically impossible and always a bug; measuring slightly less is the healthy case, because directory indexes and metadata occupy clusters without being files. Hence `VolumeIndex.CheckAgainstFileSystem()`, the cross-check that would have caught traps 19, 20 and 21 on the first run.
+
+23. **EXIF keeps a coordinate's sign apart from its magnitude, in three separate places.** `System.GPS.Latitude` hands back degrees, minutes and seconds with no hemisphere; `System.GPS.LatitudeRef` holds the letter. Read the magnitude alone and Rio de Janeiro lands in the North Atlantic. The altitude has the same split and is easier to miss: two JPEGs written to differ *only* in `System.GPS.AltitudeRef` both reported `412.3` — measured, not assumed — so a photograph from the Dead Sea reads as four hundred metres above the sea instead of below it. And `System.GPS.LatitudeDecimal`, the one-read shortcut, is **often empty on files that plainly carry a position**, which fails the same way a missing key does: it returns nothing, and nothing is indistinguishable from a picture that was never geotagged.
 
 ## Contributing
 
