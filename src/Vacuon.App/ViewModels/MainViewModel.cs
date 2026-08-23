@@ -900,6 +900,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         Add("media.videoCodec", media.VideoCodec);
         Add("media.camera", media.CameraModel);
         Add("media.dateTaken", media.DateTaken?.ToString("yyyy-MM-dd HH:mm"));
+        Add("media.location", media.LocationText);
+        Add("media.altitude", media.AltitudeText);
 
         return string.Join(Environment.NewLine, lines);
     }

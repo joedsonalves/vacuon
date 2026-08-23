@@ -754,6 +754,8 @@ static class Commands
         Row("media.channels", info.Channels?.ToString());
         Row("media.camera", info.CameraModel);
         Row("media.dateTaken", info.DateTaken?.ToString("yyyy-MM-dd HH:mm"));
+        Row("media.location", info.LocationText);
+        Row("media.altitude", info.AltitudeText);
 
         Console.WriteLine();
         return 0;

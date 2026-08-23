@@ -1,4 +1,5 @@
 ﻿using System.Runtime.Versioning;
+using Vacuon.Core.Localization;
 using Vacuon.Native.Interop;
 
 namespace Vacuon.Core.Preview;
@@ -31,12 +32,43 @@ public sealed record MediaInfo
     public string? CameraModel { get; init; }
     public DateTime? DateTaken { get; init; }
 
+    /// <summary>Where the picture was taken, in signed degrees, when the file says so.</summary>
+    public double? Latitude { get; init; }
+    public double? Longitude { get; init; }
+
+    /// <summary>Metres above sea level, when the file says so.</summary>
+    public double? Altitude { get; init; }
+
+    public bool HasLocation => Latitude is not null && Longitude is not null;
+
+    /// <summary>
+    /// The coordinate as text, at six decimals.
+    /// <para>
+    /// Six is about a tenth of a metre, which is finer than any consumer receiver, and stops
+    /// there. Printing the full double would dress a reading with a few metres of error as a
+    /// measurement to the millimetre.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// The altitude as text, with the side of the sea spelled out instead of left to a minus
+    /// sign — a lone "-412 m" is read as a typo more often than as a depression.
+    /// </summary>
+    public string? AltitudeText => Altitude is not { } metres
+        ? null
+        : L.T(metres < 0 ? "media.metresBelow" : "media.metres",
+              Math.Abs(metres).ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
+
+    public string? LocationText => HasLocation
+        ? string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "{0:F6}, {1:F6}", Latitude, Longitude)
+        : null;
+
     /// <summary>True when the shell answered nothing at all about this file.</summary>
     public bool IsEmpty =>
         Duration is null && Width is null && Height is null
         && VideoCodec is null && AudioCodec is null
         && VideoBitrate is null && AudioBitrate is null
-        && CameraModel is null && DateTaken is null;
+        && CameraModel is null && DateTaken is null && !HasLocation;
 
     /// <summary>
     /// The vertical resolution rounded to how people say it — 2160, 1080, 720.
@@ -105,12 +137,79 @@ public static class MediaProbe
 
                 CameraModel = PropertySystem.ReadString(store, PropertySystem.Keys.CameraModel),
                 DateTaken = ParseDate(PropertySystem.ReadString(store, PropertySystem.Keys.DateTaken)),
+
+                Latitude = Coordinate(store, PropertySystem.Keys.GpsLatitudeDecimal,
+                                      PropertySystem.Keys.GpsLatitude, PropertySystem.Keys.GpsLatitudeRef,
+                                      negativeWhen: 'S'),
+                Longitude = Coordinate(store, PropertySystem.Keys.GpsLongitudeDecimal,
+                                       PropertySystem.Keys.GpsLongitude, PropertySystem.Keys.GpsLongitudeRef,
+                                       negativeWhen: 'W'),
+                Altitude = Altitude(store),
             };
         }
         finally
         {
             System.Runtime.InteropServices.Marshal.ReleaseComObject(store);
         }
+    }
+
+    /// <summary>
+    /// One half of a coordinate, in signed degrees, or null when the file carries none.
+    /// <para>
+    /// The decimal property is tried first because it costs one read — but it is <b>often
+    /// empty</b>, which is the whole reason the second path exists. Measured on a JPEG whose
+    /// EXIF plainly held a position: <c>System.GPS.LatitudeDecimal</c> came back with nothing,
+    /// while <c>System.GPS.Latitude</c> handed over the degrees, minutes and seconds. Only
+    /// asking for the decimal would have reported a geotagged photograph as having no location.
+    /// </para>
+    /// <para>
+    /// EXIF stores the magnitude and the hemisphere apart, so a coordinate read without its
+    /// reference letter puts the southern hemisphere in the northern one.
+    /// </para>
+    /// </summary>
+    private static double? Coordinate(IPropertyStore store, PropertyKey decimalKey,
+                                      PropertyKey dmsKey, PropertyKey refKey, char negativeWhen)
+    {
+        if (PropertySystem.ReadDouble(store, decimalKey) is { } already && already != 0)
+            return already;
+
+        double[]? parts = PropertySystem.ReadDoubleVector(store, dmsKey);
+        if (parts is null || parts.Length == 0) return null;
+
+        double degrees = parts[0]
+                       + (parts.Length > 1 ? parts[1] / 60 : 0)
+                       + (parts.Length > 2 ? parts[2] / 3600 : 0);
+
+        string? hemisphere = PropertySystem.ReadString(store, refKey);
+
+        if (hemisphere is { Length: > 0 } &&
+            char.ToUpperInvariant(hemisphere[0]) == negativeWhen)
+        {
+            degrees = -degrees;
+        }
+
+        return degrees;
+    }
+
+    /// <summary>
+    /// Metres above sea level, signed, or null when the file carries none.
+    /// <para>
+    /// Windows hands back the magnitude alone — measured on two JPEGs written to differ only
+    /// in their reference byte, <c>System.GPS.Altitude</c> came back <c>412.3</c> for both,
+    /// and <c>System.GPS.AltitudeRef</c> was the only thing that told them apart. Taking the
+    /// magnitude at face value would put a photograph from the Dead Sea four hundred metres
+    /// above the sea instead of below it — the same mistake as the hemisphere, one axis over.
+    /// </para>
+    /// </summary>
+    private static double? Altitude(IPropertyStore store)
+    {
+        if (PropertySystem.ReadDouble(store, PropertySystem.Keys.GpsAltitude) is not { } metres)
+            return null;
+
+        // 1 means below sea level. Absent means above, which is the overwhelming majority.
+        return PropertySystem.ReadUInt32(store, PropertySystem.Keys.GpsAltitudeRef) == 1
+            ? -metres
+            : metres;
     }
 
     /// <summary>Reads a compression tag in whichever of its three shapes it arrives in.</summary>

@@ -102,6 +102,12 @@ public static class PropertySystem
     [DllImport("propsys.dll", ExactSpelling = true)]
     private static extern int PropVariantToUInt32(in PropVariant value, out uint result);
 
+    [DllImport("propsys.dll", ExactSpelling = true)]
+    private static extern int PropVariantToDouble(in PropVariant value, out double result);
+
+    [DllImport("propsys.dll", ExactSpelling = true)]
+    private static extern int PropVariantToDoubleVectorAlloc(in PropVariant value, out nint values, out uint count);
+
     [DllImport("propsys.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int PropVariantToStringAlloc(in PropVariant value, out nint result);
 
@@ -161,6 +167,51 @@ public static class PropertySystem
         }
         catch (COMException) { return null; }
         finally { PropVariantClear(ref value); }
+    }
+
+    /// <summary>Reads one property as a floating-point number, or null when it is absent.</summary>
+    public static double? ReadDouble(IPropertyStore store, PropertyKey key)
+    {
+        PropVariant value = default;
+
+        try
+        {
+            if (store.GetValue(ref key, out value) != 0 || value.IsEmpty) return null;
+            return PropVariantToDouble(value, out double result) == 0 ? result : null;
+        }
+        catch (COMException) { return null; }
+        finally { PropVariantClear(ref value); }
+    }
+
+    /// <summary>
+    /// Reads one property as a list of numbers, or null when it is absent.
+    /// <para>
+    /// EXIF stores a coordinate as three of them — degrees, minutes, seconds — rather than as
+    /// one decimal, so a scalar read of the same key returns nothing at all.
+    /// </para>
+    /// </summary>
+    public static double[]? ReadDoubleVector(IPropertyStore store, PropertyKey key)
+    {
+        PropVariant value = default;
+        nint buffer = nint.Zero;
+
+        try
+        {
+            if (store.GetValue(ref key, out value) != 0 || value.IsEmpty) return null;
+            if (PropVariantToDoubleVectorAlloc(value, out buffer, out uint count) != 0) return null;
+            if (buffer == nint.Zero || count == 0) return null;
+
+            var numbers = new double[count];
+            Marshal.Copy(buffer, numbers, 0, (int)count);
+
+            return numbers;
+        }
+        catch (COMException) { return null; }
+        finally
+        {
+            if (buffer != nint.Zero) Marshal.FreeCoTaskMem(buffer);
+            PropVariantClear(ref value);
+        }
     }
 
     /// <summary>Reads one property as text, or null when it is absent.</summary>
@@ -231,5 +282,29 @@ public static class PropertySystem
 
         public static PropertyKey CameraModel => new(Photo, 272);
         public static PropertyKey DateTaken => new(Photo, 36867);
+
+        // Every GUID below came from PSGetPropertyKeyFromName on this machine, not from
+        // memory. Two of them were written from memory first and both were wrong — the
+        // decimal pair in particular — and a wrong key does not fail: it returns nothing,
+        // which is indistinguishable from a photograph that was never geotagged.
+        private static readonly Guid GpsLatitudeId = new("8727cfff-4868-4ec6-ad5b-81b98521d1ab");
+        private static readonly Guid GpsLatitudeRefId = new("029c0252-5b86-46c7-aca0-2769ffc8e3d4");
+        private static readonly Guid GpsLongitudeId = new("c4c4dbb2-b593-466b-bbda-d03d27d5e43a");
+        private static readonly Guid GpsLongitudeRefId = new("33dcf22b-28d5-464c-8035-1ee9efd25278");
+        private static readonly Guid GpsLatitudeDecimalId = new("0f55cde2-4f49-450d-92c1-dcd16301b1b7");
+        private static readonly Guid GpsLongitudeDecimalId = new("4679c1b5-844d-4590-baf5-f322231f1b81");
+        private static readonly Guid GpsAltitudeId = new("827edb4f-5b73-44a7-891d-fdffabea35ca");
+        private static readonly Guid GpsAltitudeRefId = new("46ac629d-75ea-4515-867f-6dc4321c5844");
+
+        public static PropertyKey GpsLatitude => new(GpsLatitudeId, 100);
+        public static PropertyKey GpsLatitudeRef => new(GpsLatitudeRefId, 100);
+        public static PropertyKey GpsLongitude => new(GpsLongitudeId, 100);
+        public static PropertyKey GpsLongitudeRef => new(GpsLongitudeRefId, 100);
+        public static PropertyKey GpsLatitudeDecimal => new(GpsLatitudeDecimalId, 100);
+        public static PropertyKey GpsLongitudeDecimal => new(GpsLongitudeDecimalId, 100);
+        public static PropertyKey GpsAltitude => new(GpsAltitudeId, 100);
+
+        /// <summary>0 means above sea level, 1 means below it. EXIF keeps the sign here.</summary>
+        public static PropertyKey GpsAltitudeRef => new(GpsAltitudeRefId, 100);
     }
 }
