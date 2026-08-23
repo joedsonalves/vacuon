@@ -120,6 +120,12 @@ Description: |-
   box is sized by what it occupies, and can set files aside in a quarantine it can restore
   them from, instead of deleting them.
 
+  It cleans by rule as well, and where the work belongs inside Windows it calls Microsoft's
+  own tools rather than deleting files by hand. A live monitor reads the NTFS change journal
+  and shows which folders are growing right now. Pictures that look alike are grouped by a
+  perceptual fingerprint, and a preview panel shows media details, text and images without
+  leaving the app.
+
   Every scan cross-checks the space it attributed to files against what the volume reports
   as used, and says so when the two disagree.
 
@@ -129,11 +135,13 @@ Moniker: vacuon
 Tags:
 - disk
 - disk-analyzer
+- disk-cleanup
 - disk-space
 - disk-usage
 - duplicate-finder
 - mft
 - ntfs
+- similar-images
 - storage
 - treemap
 ReleaseNotesUrl: $repo/releases/tag/v$Version
@@ -168,6 +176,12 @@ Description: |-
   Ele tambem acha arquivos com conteudo identico, desenha o volume como um treemap onde
   cada caixa tem o tamanho do que ocupa, e guarda arquivos numa quarentena de onde da para
   restaurar, em vez de apagar de uma vez.
+
+  Limpa por regra tambem, e onde o trabalho fica dentro do Windows chama as ferramentas da
+  propria Microsoft em vez de apagar arquivo na mao. Um monitor ao vivo le o diario de
+  mudancas do NTFS e mostra quais pastas estao crescendo agora. Imagens parecidas sao
+  agrupadas por uma impressao perceptual, e um painel de previa mostra ficha tecnica de
+  midia, texto e imagem sem sair do app.
 
   Toda varredura confere o espaco atribuido a arquivos contra o que o volume declara em uso,
   e avisa quando os dois nao batem.
