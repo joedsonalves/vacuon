@@ -142,7 +142,7 @@
   "settings.contentThumbsHint": "Turned off, everything uses the file type icon: instant, and it never touches the file contents.",
   "settings.showHidden": "Show hidden and system files",
   "settings.thisVersion": "THIS VERSION",
-  "settings.versionTitle": "Vacuon {0} — map, treemap, duplicates and a quarantine",
+  "settings.versionTitle": "Vacuon {0} — rules, look-alikes, a live monitor and preview",
   "settings.privacyNote": "Not a single byte leaves this machine: there is no server, no account and no telemetry. Preferences live in {0}.",
   "status.pathCopied": "Path copied.",
   "status.cannotOpen": "Could not open: {0}",
