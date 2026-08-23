@@ -526,13 +526,13 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | M1c | Miniaturas do Shell em seis tamanhos | ✅ |
 | **M2** | **GUI: painel, explorer virtualizado, busca, temas claro/escuro, elevação, i18n** | ✅ |
 | **M1d** | **Snapshot binário + atualização incremental por USN** | ✅ |
-| M3 | Painel de prévia, ficha técnica, hex viewer · **player adiado** | 🟨 |
+| M3 | Prévia com zoom, cores de sintaxe, galeria, lado a lado, menu do shell · **player adiado** | 🟨 |
 | M2b | Exclusão com multi-seleção: Lixeira, permanente, lista de proteção | ✅ |
 | **M4** | **Quarentena reversível, restaurar, expurgar** | ✅ |
 | **M5** | **Motor de regras, catálogo JSON, ferramentas do Windows** | ✅ |
 | **M6** | **Duplicados exatos, em quatro estágios** | ✅ |
 | **M7** | **Treemap squarified com drill-down** | ✅ |
-| M8 | Imagens parecidas por hash perceptual · **vídeo e áudio adiados** | 🟨 |
+| M8 | Imagens e vídeos parecidos, cache de impressões, resíduos, compressão, diff de varreduras · **áudio adiado** | 🟨 |
 | **M9** | **Monitor com tela, limpeza agendada, guarda de espaço, ícone na bandeja e aviso de disco cheio** | ✅ |
 | M10 | Portátil, i18n, docs, controles acessíveis · **assinatura adiada** | 🟨 |
 

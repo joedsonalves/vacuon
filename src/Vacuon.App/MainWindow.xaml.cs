@@ -2,6 +2,7 @@
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Localization;
+using Vacuon.Native.Interop;
 
 namespace Vacuon.App;
 
@@ -29,6 +30,13 @@ public partial class MainWindow : Window
             _tray.Attach();
 
             _model.Tray = _tray;
+
+            // Shell menu messages have to reach the extension that owns the entry. Without
+            // this, an owner-drawn entry is measured by nobody and the menu misbehaves — and
+            // it misbehaves inside a window procedure, where a fault is a fail-fast that no
+            // exception handler in this process will ever see.
+            System.Windows.Interop.HwndSource.FromHwnd(
+                new System.Windows.Interop.WindowInteropHelper(this).Handle)?.AddHook(OnShellMenuMessage);
         };
 
         ThemeManager.Changed += ApplyTitleBar;
@@ -44,6 +52,14 @@ public partial class MainWindow : Window
             _tray?.Dispose();
             _model.Dispose();
         };
+    }
+
+    private nint OnShellMenuMessage(nint hwnd, int msg, nint wParam, nint lParam, ref bool handled)
+    {
+        if (!ShellContextMenu.HandleMenuMessage(msg, wParam, lParam, out nint result)) return 0;
+
+        handled = true;
+        return result;
     }
 
     private void RefreshHeader() => HeaderTitle.Text = L.T(_headerKey);

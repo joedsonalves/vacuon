@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Actions;
+using Vacuon.Native.Interop;
 
 namespace Vacuon.App.Views;
 
@@ -23,6 +24,10 @@ public partial class ExplorerView : UserControl
         // é construída: pedir 5000 de uma vez travaria a rolagem esperando o Shell.
         if (Files.ItemContainerGenerator is not null)
             Files.ItemContainerGenerator.StatusChanged += OnContainersChanged;
+
+        // The zoom readout beside the title. The control owns the number; the view model
+        // only carries it to the screen.
+        PreviewZoom.ZoomChanged += zoom => Model?.ReportZoom(zoom);
     }
 
     private void OnContainersChanged(object? sender, EventArgs e)
@@ -51,6 +56,142 @@ public partial class ExplorerView : UserControl
 
     // ==================== selection ====================
 
+    /// <summary>Back to fitted. The same thing a double-click on the picture does.</summary>
+    private void OnPreviewFit(object sender, RoutedEventArgs e) => PreviewZoom.Reset();
+
+    // ---------------- shell context menu (M3, F6.10) ----------------
+
+    /// <summary>
+    /// The real Explorer menu for the selected file, opened from inside Vacuon's own menu.
+    /// <para>
+    /// Inside it, not instead of it. Vacuon's menu carries quarantine and a delete that
+    /// honours the protected-path list; replacing it with the shell's would take exactly the
+    /// actions this application exists to offer out of somebody's hands. The shell menu is
+    /// one entry down, where Open With and Properties are reachable without displacing
+    /// anything.
+    /// </para>
+    /// <para>
+    /// What Windows then does is Windows' business — that menu can delete, and the app's own
+    /// guard does not reach into it, because nothing there is the app acting.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Hides the Windows entry when the shell has nothing to offer for this file.
+    /// <para>
+    /// An entry that does nothing when clicked is the quiet kind of lie this project treats
+    /// as a bug. Asking the shell how many items it would build costs a few milliseconds and
+    /// never shows a popup.
+    /// </para>
+    /// </summary>
+    private void OnContextMenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (Model is null) return;
+
+        IReadOnlyList<string> paths = Model.SelectedPaths();
+
+        bool offered = paths.Count > 0 && ShellContextMenu.CountItems(paths[0]) > 0;
+
+        ShellMenuItem.Visibility = offered ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnShowShellMenu(object sender, RoutedEventArgs e)
+    {
+        if (Model is null) return;
+
+        IReadOnlyList<string> paths = Model.SelectedPaths();
+        if (paths.Count == 0) return;
+
+        // One file: the shell menu addresses a single item, and a multi-selection menu needs
+        // every pidl bound to one parent folder — which a search result is not.
+        string path = paths[0];
+
+        // The WPF menu is still up and still holding the mouse capture at this point, and a
+        // native TrackPopupMenuEx raised underneath it never becomes interactive — it opened
+        // and vanished, leaving nothing on screen and no error anywhere. Close ours first and
+        // raise the shell's once the message queue has drained.
+        if (Files.ContextMenu is not null) Files.ContextMenu.IsOpen = false;
+
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, () =>
+        {
+            if (!GetCursorPos(out POINT cursor)) return;
+
+            nint owner = new System.Windows.Interop.WindowInteropHelper(Window.GetWindow(this)!).Handle;
+
+            ShellContextMenu.Show(owner, path, cursor.X, cursor.Y);
+        });
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int X; public int Y; }
+
+    /// <summary>
+    /// The cursor in screen coordinates.
+    /// <para>
+    /// Not <c>Mouse.GetPosition</c>: by the time this runs the pointer is over a menu that is
+    /// closing, and asking the list where the mouse is relative to itself answers about a
+    /// position it no longer has.
+    /// </para>
+    /// </summary>
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT point);
+
+    // ---------------- drag out (M3, F6.11) ----------------
+
+    private Point _dragOrigin;
+
+    private void OnListMouseDown(object sender, MouseButtonEventArgs e) =>
+        _dragOrigin = e.GetPosition(null);
+
+    /// <summary>
+    /// Drags the ticked files out to anywhere that takes a file drop.
+    /// <para>
+    /// A copy, never a move: this application does not quietly relocate somebody's files
+    /// because a mouse travelled a few pixels. Moving them is what the Move button is for,
+    /// which asks first and says where they are going.
+    /// </para>
+    /// </summary>
+    private void OnListMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || Model is null) return;
+
+        Point now = e.GetPosition(null);
+
+        // The system's own threshold. Below it, a click that wobbles would start a drag.
+        if (Math.Abs(now.X - _dragOrigin.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(now.Y - _dragOrigin.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        if (((DependencyObject?)e.OriginalSource) is not { } source) return;
+        if (RowUnder(source) is not { } row) return;
+
+        var paths = new System.Collections.Specialized.StringCollection();
+
+        // The same selection the buttons act on, so a drag cannot quietly disagree with
+        // them about what is selected.
+        foreach (string path in Model.SelectedPaths()) paths.Add(path);
+
+        if (paths.Count == 0 && row.FullPath.Length > 0) paths.Add(row.FullPath);
+        if (paths.Count == 0) return;
+
+        var data = new DataObject();
+        data.SetFileDropList(paths);
+
+        DragDrop.DoDragDrop(Files, data, DragDropEffects.Copy);
+    }
+
+    /// <summary>The row a mouse event landed on, walking up from whatever was hit.</summary>
+    private static FileRowViewModel? RowUnder(DependencyObject source)
+    {
+        for (int depth = 0; depth < 32 && source is not null; depth++)
+        {
+            if (source is FrameworkElement { DataContext: FileRowViewModel row }) return row;
+
+            source = System.Windows.Media.VisualTreeHelper.GetParent(source)!;
+        }
+
+        return null;
+    }
+
     private void OnListSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         // SelectedItems is not a bindable dependency property on ListView, so the
@@ -68,6 +209,26 @@ public partial class ExplorerView : UserControl
     /// position — the GridView allows reordering, so the position means nothing.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// The gallery's selection feeds the same place the list's does.
+    /// <para>
+    /// Two controls, one notion of "selected". Letting them disagree would mean the Delete
+    /// button acting on something other than what is highlighted, which is the worst kind of
+    /// disagreement this application could have.
+    /// </para>
+    /// </summary>
+    private void OnGallerySelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (Model is null) return;
+
+        var rows = new List<FileRowViewModel>(Gallery.SelectedItems.Count);
+
+        foreach (object item in Gallery.SelectedItems)
+            if (item is FileRowViewModel row) rows.Add(row);
+
+        Model.SetListSelection(rows);
+    }
+
     private void OnColumnHeaderClick(object sender, RoutedEventArgs e)
     {
         if (e.OriginalSource is not GridViewColumnHeader header) return;

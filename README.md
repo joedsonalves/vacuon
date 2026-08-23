@@ -526,13 +526,13 @@ Details in [SECURITY.md](SECURITY.md).
 | M1c | Shell thumbnails in six sizes | ✅ |
 | **M2** | **GUI: dashboard, virtualized explorer, search, light/dark themes, elevation, i18n** | ✅ |
 | **M1d** | **Binary snapshot + incremental USN update** | ✅ |
-| M3 | Preview pane, media facts, hex viewer · **player deferred** | 🟨 |
+| M3 | Preview with zoom, syntax colouring, gallery, side-by-side, shell menu · **player deferred** | 🟨 |
 | M2b | Multi-select delete: Recycle Bin, permanent, protected-path list | ✅ |
 | **M4** | **Reversible quarantine, restore, purge** | ✅ |
 | **M5** | **Rule engine, JSON catalog, Windows tools** | ✅ |
 | **M6** | **Exact duplicates, four-stage** | ✅ |
 | **M7** | **Squarified treemap with drill-down** | ✅ |
-| M8 | Similar pictures by perceptual hash · **video and audio deferred** | 🟨 |
+| M8 | Similar pictures and video, fingerprint cache, leftovers, compression, scan diff · **audio deferred** | 🟨 |
 | **M9** | **Live monitor with a screen, scheduled cleanups, space guard, tray icon and low-space warning** | ✅ |
 | M10 | Portable, i18n, docs, accessible controls · **signing deferred** | 🟨 |
 

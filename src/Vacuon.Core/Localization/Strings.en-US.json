@@ -814,5 +814,16 @@
   "diff.noBaseline": "There is no earlier scan of this volume to compare against. This run did not create one either — scan the volume once and the next run will have something to measure from.",
   "diff.window": "{0} between the two scans, and the volume went {1} overall.",
   "diff.nothing": "No folder moved by more than {0}.",
-  "diff.folders": "Folders, not files: matching files across two scans means tracking them through renames and MFT record reuse, and getting that wrong reports one file as both created and deleted."
+  "diff.folders": "Folders, not files: matching files across two scans means tracking them through renames and MFT record reuse, and getting that wrong reports one file as both created and deleted.",
+  "preview.imageA11y": "Preview image. Scroll to zoom, drag to move, double-click to fit.",
+  "preview.zoom": "{0}%",
+  "preview.fit": "Fit",
+  "preview.compare": "Compare",
+  "preview.gallery": "Gallery",
+  "preview.list": "List",
+  "preview.dragHint": "Drag a file out of the list to copy it somewhere else.",
+  "preview.compareHint": "Two files side by side. Pick a second one in the list to fill the other half.",
+  "preview.comparePickSecond": "Pick a second file to compare against.",
+  "preview.compareCaption": "{0}  ·  against  ·  {1}",
+  "menu.windows": "More Windows options…"
 }

@@ -1,13 +1,18 @@
 ﻿<UserControl x:Class="Vacuon.App.Views.ExplorerView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:infra="clr-namespace:Vacuon.App.Infra">
+             xmlns:infra="clr-namespace:Vacuon.App.Infra"
+             xmlns:views="clr-namespace:Vacuon.App.Views">
 
+    <!-- Todo conversor usado aqui é declarado AQUI. Recurso da MainWindow não está no
+         escopo de um UserControl, e usar um sem declarar derruba o app inteiro na
+         abertura — o build passa, os testes passam, e o programa não abre. -->
     <UserControl.Resources>
         <infra:BytesConverter x:Key="Bytes"/>
         <infra:ShareToPercentConverter x:Key="SharePercent"/>
         <infra:CategoryBrushConverter x:Key="CategoryBrush"/>
         <infra:EmptyStringToVisibilityConverter x:Key="NotEmpty"/>
+        <infra:InverseBoolToVisibilityConverter x:Key="InverseVisible"/>
         <BooleanToVisibilityConverter x:Key="Visible"/>
     </UserControl.Resources>
 
@@ -202,6 +207,15 @@
                          buscar, entao "selecionar tudo" aqui e o inicio de um lote, nao
                          uma selecao que morre no proximo clique. -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,14,0">
+                        <!-- Galeria (M3, F6.13). As linhas respondem "quanto ocupa"; a grade
+                             responde "qual delas". Escolher entre quatro copias de uma foto
+                             lendo quatro nomes de arquivo e o caso que isto existe para
+                             resolver. -->
+                        <ToggleButton FontSize="11" Padding="8,4" Margin="0,0,10,0"
+                                      Content="{DynamicResource S.preview.gallery}"
+                                      AutomationProperties.Name="{DynamicResource S.preview.gallery}"
+                                      IsChecked="{Binding IsGallery, Mode=TwoWay}"/>
+
                         <Button Style="{StaticResource Button.Ghost}" FontSize="11" Padding="8,4"
                                 Content="{DynamicResource S.select.all}"
                                 ToolTip="{DynamicResource S.select.allHint}"
@@ -224,6 +238,7 @@
                 <!-- Extended: Ctrl-click e Shift-click selecionam varios. SelectedItems nao
                      e bindavel no WPF, por isso a selecao vai ao VM pelo code-behind. -->
                 <ListView x:Name="Files" Grid.Row="1" Style="{StaticResource FileList}"
+                          Visibility="{Binding IsListMode, Converter={StaticResource Visible}}"
                           ItemsSource="{Binding Rows}"
                           ItemContainerStyle="{StaticResource FileRow}"
                           SelectionMode="Extended"
@@ -231,6 +246,8 @@
                           Margin="10,0,10,0"
                           MouseDoubleClick="OnRowDoubleClick"
                           PreviewKeyDown="OnListKeyDown"
+                          PreviewMouseLeftButtonDown="OnListMouseDown"
+                          MouseMove="OnListMouseMove"
                           GridViewColumnHeader.Click="OnColumnHeaderClick">
                     <ListView.View>
                         <GridView AllowsColumnReorder="True">
@@ -348,7 +365,7 @@
                     </ListView.View>
 
                     <ListView.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu Opened="OnContextMenuOpened">
                             <MenuItem Header="{DynamicResource S.action.open}" Command="{Binding OpenCommand}"/>
                             <MenuItem Header="{DynamicResource S.action.reveal}" InputGestureText="Ctrl+Enter"
                                       Command="{Binding RevealCommand}"/>
@@ -367,9 +384,64 @@
                                       Click="OnDeleteToRecycleBin"/>
                             <MenuItem Header="{DynamicResource S.delete.permanentHeader}" InputGestureText="Shift+Del"
                                       Click="OnDeletePermanently"/>
+
+                            <Separator/>
+
+                            <!-- O menu do Windows entra DENTRO deste, não no lugar dele
+                                 (M3, F6.10). O menu do Vacuon carrega a quarentena e o
+                                 apagar que respeita a lista protegida; trocá-lo pelo do
+                                 shell tiraria da mão da pessoa exatamente as ações que este
+                                 programa existe para oferecer. -->
+                            <MenuItem x:Name="ShellMenuItem"
+                                      Header="{DynamicResource S.menu.windows}"
+                                      Click="OnShowShellMenu"/>
                         </ContextMenu>
                     </ListView.ContextMenu>
                 </ListView>
+
+                <!--
+                    Modo galeria (M3, F6.13). Um ListBox separado em vez de trocar a View do
+                    ListView em tempo de execução: cada controle virtualiza o seu, e só o
+                    visível materializa linhas, então isto não custa memória enquanto está
+                    escondido.
+                -->
+                <ListBox x:Name="Gallery" Grid.Row="1"
+                         ItemsSource="{Binding Rows}"
+                         SelectionMode="Extended"
+                         SelectionChanged="OnGallerySelectionChanged"
+                         MouseDoubleClick="OnRowDoubleClick"
+                         Margin="10,0,10,0"
+                         Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         Visibility="{Binding IsGallery, Converter={StaticResource Visible}}">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" IsItemsHost="True"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="132" Margin="4" AutomationProperties.Name="{Binding Name}">
+                                <Border Height="120" CornerRadius="4"
+                                        Background="{DynamicResource Gauge.Track}">
+                                    <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                                           StretchDirection="DownOnly"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border>
+                                <TextBlock Style="{StaticResource Text.Sub}" FontSize="10" Margin="0,5,0,0"
+                                           TextTrimming="CharacterEllipsis" TextAlignment="Center"
+                                           Text="{Binding Name}" ToolTip="{Binding FullPath}"/>
+                                <TextBlock Style="{StaticResource Text.Sub}" FontSize="9"
+                                           TextAlignment="Center"
+                                           Foreground="{DynamicResource Text.Muted}"
+                                           Text="{Binding LogicalSize, Converter={StaticResource Bytes}}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
 
                 <!-- ações da seleção -->
                 <StackPanel Grid.Row="2">
@@ -459,9 +531,32 @@
                     <TextBlock Grid.Row="0" Style="{StaticResource Text.Section}" Margin="0,0,0,8"
                                Text="{DynamicResource S.preview.title}"/>
 
-                    <TextBlock Grid.Row="1" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
-                               TextTrimming="CharacterEllipsis" Margin="0,0,0,8"
-                               Text="{Binding PreviewTitle}" ToolTip="{Binding PreviewTitle}"/>
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                   Text="{Binding PreviewTitle}" ToolTip="{Binding PreviewTitle}"/>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                    Visibility="{Binding HasPreviewImage, Converter={StaticResource Visible}}">
+                            <TextBlock Style="{StaticResource Text.Sub}" FontSize="10" Margin="6,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{Binding PreviewZoomText}"/>
+
+                            <Button Style="{StaticResource Button.Ghost}" FontSize="10" Padding="7,3"
+                                    Content="{DynamicResource S.preview.fit}"
+                                    Click="OnPreviewFit"/>
+
+                            <ToggleButton Margin="5,0,0,0" FontSize="10" Padding="7,3"
+                                          Content="{DynamicResource S.preview.compare}"
+                                          IsChecked="{Binding IsComparing, Mode=TwoWay}"/>
+                        </StackPanel>
+                    </Grid>
 
                     <!-- Media facts. For a video this IS the preview: no frame is decoded,
                          and 2160p against 720p is what decides which copy stays. -->
@@ -472,30 +567,57 @@
                     </Border>
 
                     <Grid Grid.Row="3">
-                        <Image Source="{Binding PreviewImagePath}" Stretch="Uniform"
-                               StretchDirection="DownOnly"
-                               RenderOptions.BitmapScalingMode="HighQuality"
-                               VerticalAlignment="Top"
-                               Visibility="{Binding HasPreviewImage, Converter={StaticResource Visible}}"/>
+                        <!-- Uma prévia, ou duas lado a lado (F6.14). A comparação existe
+                             para a pergunta que a lista não responde: destas duas cópias,
+                             qual é a melhor? -->
+                        <Grid Visibility="{Binding IsComparing, Converter={StaticResource InverseVisible}}">
+                            <views:ZoomableImage x:Name="PreviewZoom"
+                                                 Source="{Binding PreviewImageSource}"
+                                                 Visibility="{Binding HasPreviewImage, Converter={StaticResource Visible}}"/>
 
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      Visibility="{Binding PreviewText, Converter={StaticResource NotEmpty}}">
-                            <TextBox Text="{Binding PreviewText, Mode=OneWay}"
-                                     IsReadOnly="True" BorderThickness="0"
-                                     Background="Transparent"
-                                     Foreground="{DynamicResource Text.Secondary}"
-                                     FontFamily="{StaticResource Font.Mono}" FontSize="11"
-                                     TextWrapping="NoWrap"/>
-                        </ScrollViewer>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          Visibility="{Binding PreviewText, Converter={StaticResource NotEmpty}}">
+                                <views:SyntaxTextBlock SourceText="{Binding PreviewText, Mode=OneWay}"
+                                                       FileName="{Binding PreviewTitle, Mode=OneWay}"
+                                                       Foreground="{DynamicResource Text.Secondary}"
+                                                       FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                                       TextWrapping="NoWrap"/>
+                            </ScrollViewer>
 
-                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
-                                   TextWrapping="Wrap" VerticalAlignment="Center"
-                                   HorizontalAlignment="Center" TextAlignment="Center"
-                                   Foreground="{DynamicResource Text.Muted}"
-                                   Text="{DynamicResource S.preview.pickOne}"
-                                   Visibility="{Binding HasNoPreviewTarget,
-                                                Converter={StaticResource Visible}}"/>
+                            <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{DynamicResource S.preview.pickOne}"
+                                       Visibility="{Binding HasNoPreviewTarget,
+                                                    Converter={StaticResource Visible}}"/>
+                        </Grid>
+
+                        <Grid Visibility="{Binding IsComparing, Converter={StaticResource Visible}}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <views:ZoomableImage Grid.Row="0" Source="{Binding PreviewImageSource}"/>
+
+                            <TextBlock Grid.Row="1" Style="{StaticResource Text.Sub}" FontSize="10"
+                                       Margin="0,6" TextTrimming="CharacterEllipsis"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{Binding CompareCaption}"/>
+
+                            <views:ZoomableImage Grid.Row="2" Source="{Binding CompareImageSource}"
+                                                 Visibility="{Binding HasCompareTarget, Converter={StaticResource Visible}}"/>
+
+                            <TextBlock Grid.Row="2" Style="{StaticResource Text.Sub}" FontSize="11"
+                                       TextWrapping="Wrap" VerticalAlignment="Center"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       Foreground="{DynamicResource Text.Muted}"
+                                       Text="{DynamicResource S.preview.comparePickSecond}"
+                                       Visibility="{Binding HasCompareTarget, Converter={StaticResource InverseVisible}}"/>
+                        </Grid>
                     </Grid>
 
                     <TextBlock Grid.Row="4" Style="{StaticResource Text.Sub}" FontSize="10"

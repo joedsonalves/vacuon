@@ -54,6 +54,13 @@
     <SolidColorBrush x:Key="Cat.Disk"      Color="#FF7B72"/>
     <SolidColorBrush x:Key="Cat.Binary"    Color="#D2A8FF"/>
     <SolidColorBrush x:Key="Cat.Log"       Color="#9CA3AF"/>
+
+    <!-- Realce de sintaxe da prévia (M3, F6.6). Um tom por tipo, escolhido do mesmo
+         espaço das cores de categoria para a prévia não parecer de outro programa. -->
+    <SolidColorBrush x:Key="Syntax.Comment" Color="#8B949E"/>
+    <SolidColorBrush x:Key="Syntax.String"  Color="#A5D6FF"/>
+    <SolidColorBrush x:Key="Syntax.Number"  Color="#79C0FF"/>
+    <SolidColorBrush x:Key="Syntax.Keyword" Color="#FF7B72"/>
     <SolidColorBrush x:Key="Cat.Other"     Color="#7C8497"/>
 
 </ResourceDictionary>

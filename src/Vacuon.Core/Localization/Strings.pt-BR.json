@@ -814,5 +814,16 @@
   "diff.noBaseline": "Não há varredura anterior deste volume para comparar. Esta execução também não criou uma — varra o volume uma vez e a próxima terá de onde medir.",
   "diff.window": "{0} entre as duas varreduras, e o volume foi {1} no total.",
   "diff.nothing": "Nenhuma pasta se moveu mais que {0}.",
-  "diff.folders": "Pastas, não arquivos: casar arquivos entre duas varreduras exige segui-los por renomeações e reuso de registro na MFT, e errar isso reporta o mesmo arquivo como criado e apagado."
+  "diff.folders": "Pastas, não arquivos: casar arquivos entre duas varreduras exige segui-los por renomeações e reuso de registro na MFT, e errar isso reporta o mesmo arquivo como criado e apagado.",
+  "preview.imageA11y": "Imagem da prévia. Role para ampliar, arraste para mover, clique duplo para ajustar.",
+  "preview.zoom": "{0}%",
+  "preview.fit": "Ajustar",
+  "preview.compare": "Comparar",
+  "preview.gallery": "Galeria",
+  "preview.list": "Lista",
+  "preview.dragHint": "Arraste um arquivo da lista para copiá-lo para outro lugar.",
+  "preview.compareHint": "Dois arquivos lado a lado. Escolha um segundo na lista para preencher a outra metade.",
+  "preview.comparePickSecond": "Escolha um segundo arquivo para comparar.",
+  "preview.compareCaption": "{0}  ·  contra  ·  {1}",
+  "menu.windows": "Mais opções do Windows…"
 }

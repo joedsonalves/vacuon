@@ -10,6 +10,7 @@ using Vacuon.Core.Actions;
 using Vacuon.App.Views;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Monitoring;
+using System.Windows.Media.Imaging;
 using Vacuon.Core.Cleanup;
 using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
@@ -667,7 +668,21 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         private set
         {
             if (!Set(ref _previewImagePath, value)) return;
+
             Raise(nameof(HasPreviewImage));
+            Raise(nameof(PreviewImageSource));
+
+            // While comparing, a newly highlighted picture fills the second half rather
+            // than replacing the one being compared against.
+            if (_isComparing && value.Length > 0)
+            {
+                _compareImagePath = value;
+                _compareTitle = _previewTitle;
+
+                Raise(nameof(CompareImageSource));
+                Raise(nameof(HasCompareTarget));
+                Raise(nameof(CompareCaption));
+            }
         }
     }
 
@@ -697,6 +712,102 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     private string _previewNote = string.Empty;
     public string PreviewNote { get => _previewNote; private set => Set(ref _previewNote, value); }
+
+    // ---------------- zoom and side-by-side (M3, F6.4 and F6.14) ----------------
+
+    /// <summary>
+    /// The decoded picture, rather than a path for the Image to resolve.
+    /// <para>
+    /// Decoded here and cached because the compare view shows two at once and the zoom
+    /// control re-renders on every wheel notch; handing a path to two Image elements would
+    /// decode the same file twice and again on every layout pass.
+    /// </para>
+    /// </summary>
+    public BitmapSource? PreviewImageSource => Decode(_previewImagePath);
+
+    private double _previewZoom = 1;
+
+    /// <summary>Whole percent: a tenth of a percent of zoom is not information.</summary>
+    public string PreviewZoomText =>
+        string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:N0}%", _previewZoom * 100);
+
+    public void ReportZoom(double zoom)
+    {
+        _previewZoom = zoom;
+        Raise(nameof(PreviewZoomText));
+    }
+
+    private bool _isComparing;
+
+    /// <summary>
+    /// Whether the pane is showing two files at once.
+    /// <para>
+    /// The question it exists for is the one the list cannot answer: of these two copies,
+    /// which is the better one? Two thumbnails in a column look identical, and the difference
+    /// is exactly what someone is trying to see before deleting one.
+    /// </para>
+    /// </summary>
+    public bool IsComparing
+    {
+        get => _isComparing;
+        set
+        {
+            if (!Set(ref _isComparing, value)) return;
+
+            // Entering compare pins whatever is on screen as the left-hand side, so picking
+            // the next file fills the other half instead of replacing the first.
+            _compareImagePath = value ? _previewImagePath : string.Empty;
+            _compareTitle = value ? _previewTitle : string.Empty;
+
+            Raise(nameof(CompareImageSource));
+            Raise(nameof(HasCompareTarget));
+            Raise(nameof(CompareCaption));
+        }
+    }
+
+    private string _compareImagePath = string.Empty;
+    private string _compareTitle = string.Empty;
+
+    public BitmapSource? CompareImageSource => Decode(_compareImagePath);
+
+    public bool HasCompareTarget => _compareImagePath.Length > 0;
+
+    public string CompareCaption => _compareImagePath.Length == 0
+        ? string.Empty
+        : L.T("preview.compareCaption", _previewTitle, _compareTitle);
+
+    /// <summary>
+    /// Decodes a picture once and keeps it, so panning and zooming do not re-read the disk.
+    /// <para>
+    /// One slot, not a cache: the pane shows at most two files and the second is pinned
+    /// separately. A dictionary here would hold every picture ever previewed in memory for
+    /// the life of the window.
+    /// </para>
+    /// </summary>
+    private static BitmapSource? Decode(string path)
+    {
+        if (path.Length == 0) return null;
+
+        try
+        {
+            var image = new BitmapImage();
+
+            image.BeginInit();
+            image.UriSource = new Uri(path);
+            image.CacheOption = BitmapCacheOption.OnLoad;   // so the file is not left open
+            image.EndInit();
+            image.Freeze();
+
+            return image;
+        }
+        catch (Exception ex) when (ex is IOException or UriFormatException or NotSupportedException
+                                      or ArgumentException or UnauthorizedAccessException)
+        {
+            // A picture Windows cannot decode shows as nothing rather than taking the pane
+            // down. The facts panel above still says what the file is.
+            return null;
+        }
+    }
 
     /// <summary>
     /// Fills the preview pane for whatever is highlighted.
@@ -1203,6 +1314,30 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         set { if (_settings.ShowSizeOnDisk == value) return; _settings.ShowSizeOnDisk = value; _settings.Save(); Raise(); }
     }
 
+    // ---------------- gallery (M3, F6.13) ----------------
+
+    private bool _isGallery;
+
+    /// <summary>
+    /// Whether the file list is a grid of pictures instead of rows.
+    /// <para>
+    /// The rows answer "how big" and the grid answers "which one". Choosing between four
+    /// copies of a photograph by reading four file names is the case this exists for, and it
+    /// is exactly the case where a column of names tells you nothing.
+    /// </para>
+    /// </summary>
+    public bool IsGallery
+    {
+        get => _isGallery;
+        set
+        {
+            if (!Set(ref _isGallery, value)) return;
+            Raise(nameof(IsListMode));
+        }
+    }
+
+    public bool IsListMode => !_isGallery;
+
     // ---------------- notification area (F8.3, F8.4) ----------------
 
     public bool ShowTrayIcon
@@ -1444,6 +1579,28 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         var entries = new List<int>(_listSelection.Count);
         foreach (FileRowViewModel row in _listSelection) entries.Add(row.EntryIndex);
         return entries;
+    }
+
+    /// <summary>
+    /// The paths a drag would carry: the same selection Delete and Move act on.
+    /// <para>
+    /// Deliberately the effective selection rather than the highlighted row, so dragging does
+    /// not quietly disagree with the buttons about what "the selection" means.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> SelectedPaths()
+    {
+        var paths = new List<string>();
+
+        if (Index is null) return paths;
+
+        foreach (int entry in EffectiveEntries())
+        {
+            string path = Index.GetFullPath(entry);
+            if (path.Length > 0) paths.Add(path);
+        }
+
+        return paths;
     }
 
     public int SelectedCount => _basket.Count > 0 ? _basket.Count : _listSelection.Count;
