@@ -1,4 +1,5 @@
-﻿using Vacuon.Core.Cleanup;
+﻿using Vacuon.Core.Actions;
+using Vacuon.Core.Cleanup;
 using Vacuon.Core.Safety;
 using Xunit;
 
@@ -379,6 +380,18 @@ public class RuleEngineTests : IDisposable
 
         Assert.False(report.BytesWereFreed);
         Assert.NotNull(report.QuarantineBatchId);
+
+        // Purge what this test set aside. The quarantine store is the REAL one for the volume
+        // the temp folder lives on, so without this every run leaves a batch sitting in
+        // C:\$Vacuon.Quarantine forever — 80 KiB of them had piled up before anyone looked,
+        // and they showed up on the Quarantine screen as if a person had put them there.
+        // A test that litters the disk of whoever runs it is a test with a side effect it
+        // never declared.
+        var store = new QuarantineService();
+        foreach (QuarantineBatch batch in store.ListBatches(Path.GetPathRoot(_root)!))
+        {
+            if (batch.BatchId == report.QuarantineBatchId) store.Purge(batch);
+        }
     }
 
     [Fact]
