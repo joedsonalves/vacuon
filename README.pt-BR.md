@@ -34,13 +34,20 @@ e nunca afirma um número que não mediu.
    depois em **Executar assim mesmo**.
 3. Escolha uma unidade e clique em **Scan**.
 
-É isso. Sem instalador, sem .NET para instalar, sem entrada no registro. Roda de um pendrive,
-e apagar o `.exe` desinstala. A única coisa que ele grava fora de si mesmo é
-`%AppData%\Vacuon\settings.json`, que guarda o tema e o idioma.
+É isso. Sem instalador, sem .NET para instalar, sem entrada própria no registro. Roda de um
+pendrive, e apagar o `.exe` desinstala.
+
+**Olhar não custa nada — uma varredura não grava em lugar nenhum.** Tudo o que o Vacuon grava,
+grava porque você pediu: `%AppData%\Vacuon\settings.json` para tema e idioma, e
+`%LocalAppData%\Vacuon\` para o snapshot da varredura, as impressões das imagens, o histórico
+de espaço livre e o diário de desfazer. Pôr em quarentena cria `$Vacuon.Quarantine` no volume
+de onde você tirou. Só o **Otimizar** escreve no registro e só o `schedule` cria tarefa do
+Windows — os dois são reversíveis pelo app, e são os únicos lugares em que o Vacuon muda a
+máquina em vez de lê-la.
 
 > Não quer confiar num binário sem assinatura vindo de um estranho? Instinto correto —
 > [compile você mesmo](#compilar-do-código), são três comandos. O SHA256 de cada arquivo
-> publicado está nas [notas da versão](https://github.com/joedsonalves/vacuon/releases/tag/v0.3.0).
+> publicado está nas [notas da versão](https://github.com/joedsonalves/vacuon/releases/latest).
 
 ### Execute como administrador para o caminho rápido
 
@@ -130,7 +137,7 @@ Três perguntas, respondidas em segundos:
 
 E uma quarta, que quase nenhum utilitário de disco responde: **tem alguma coisa estranha se alojando na minha máquina?**
 
-> **v0.3.2 — marcos M1, M2, M4 e a seção Otimizar.** O Vacuon mede, explica, mostra — e tira coisa do lugar de três jeitos, sendo que só um deles é definitivo. A **Quarentena** põe os itens de lado no mesmo volume e devolve quando você pedir; a Lixeira e a exclusão permanente são cada uma uma escolha explícita à parte. Expurgar um lote da quarentena é o único passo sem volta, e o app diz isso onde importa.
+> **Os marcos M1 a M9 estão na `main`; a última versão publicada é a v0.4.0.** O Vacuon mede, explica, mostra — e tira coisa do lugar de três jeitos, sendo que só um deles é definitivo. A **Quarentena** põe os itens de lado no mesmo volume e devolve quando você pedir; a Lixeira e a exclusão permanente são cada uma uma escolha explícita à parte. Expurgar um lote da quarentena é o único passo sem volta, e o app diz isso onde importa.
 
 ---
 

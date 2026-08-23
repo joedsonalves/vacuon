@@ -33,13 +33,20 @@ to delete, and never claims a number it did not measure.
    not code-signed, so that warning is expected. Click **More info**, then **Run anyway**.
 3. Pick a drive and click **Scan**.
 
-That is it. No installer, no .NET to install, no registry entries. It runs from a USB stick,
-and deleting the `.exe` uninstalls it. The only thing it writes outside itself is
-`%AppData%\Vacuon\settings.json`, which remembers your theme and language.
+That is it. No installer, no .NET to install, no registry entries of its own. It runs from a
+USB stick, and deleting the `.exe` uninstalls it.
+
+**Looking costs nothing — a scan writes nowhere.** Everything Vacuon does write, it writes
+because you asked for it: `%AppData%\Vacuon\settings.json` for theme and language, and
+`%LocalAppData%\Vacuon\` for the scan snapshot, the picture fingerprints, the free-space
+history and the undo journal. Quarantining creates `$Vacuon.Quarantine` on the volume you
+quarantined from. Only **Optimize** writes to the registry and only `schedule` creates a
+Windows task — both are reversible from the app, and they are the sole places where Vacuon
+changes the machine rather than reading it.
 
 > Prefer not to trust an unsigned binary from a stranger? Correct instinct — [build it
 > yourself](#build-it-yourself), it is three commands. The SHA256 of every published file is
-> in the [release notes](https://github.com/joedsonalves/vacuon/releases/tag/v0.3.0).
+> in the [release notes](https://github.com/joedsonalves/vacuon/releases/latest).
 
 ### Run it as Administrator for the fast path
 
@@ -129,7 +136,7 @@ Three questions, answered in seconds:
 
 And a fourth one that almost no disk utility answers: **is something odd taking root on my machine?**
 
-> **v0.3.2 — milestones M1, M2, M4 and the Optimize section.** Vacuon measures, explains, shows — and removes things three different ways, only one of which is final. **Quarantine** sets items aside on the same volume and puts them back on demand; the Recycle Bin and permanent deletion are each a separate, explicit choice. Purging a quarantine batch is the one step with no undo, and the app says so where it matters.
+> **Milestones M1 through M9 are in `main`; the last published release is v0.4.0.** Vacuon measures, explains, shows — and removes things three different ways, only one of which is final. **Quarantine** sets items aside on the same volume and puts them back on demand; the Recycle Bin and permanent deletion are each a separate, explicit choice. Purging a quarantine batch is the one step with no undo, and the app says so where it matters.
 
 ---
 

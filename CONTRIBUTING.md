@@ -5,19 +5,23 @@ Obrigado pelo interesse. Este documento é curto de propósito: são poucas regr
 ## Como rodar
 
 ```bash
-git clone https://github.com/joedson/vacuon.git
+git clone https://github.com/joedsonalves/vacuon.git
 cd vacuon
-dotnet build -c Release
-dotnet test
+dotnet build Vacuon.sln -c Debug
+dotnet test tests/Vacuon.Core.Tests
 ```
 
-Requer o SDK do .NET 10 e Windows 10 21H2+. A suíte de testes **não** exige elevação nem toca em disco real — o parser de MFT é exercitado contra registros sintéticos (`tests/Vacuon.Core.Tests/Fixtures/MftRecordBuilder.cs`), o que a torna determinística e executável em CI.
+Requer o SDK do .NET 10 e Windows 10 21H2+. São **587 testes em cerca de 30 s**, e a suíte **não** exige elevação nem toca em disco real — o parser de MFT é exercitado contra registros sintéticos (`tests/Vacuon.Core.Tests/Fixtures/MftRecordBuilder.cs`), o que a torna determinística e executável em CI.
+
+Alguns testes precisam de ferramenta externa (ffmpeg para vídeo, Python com Pillow e piexif para EXIF). Sem ela eles **se declaram pulados**, o que aparece na saída — nunca passam sem conferir nada. Um teste que passa vazio é um teste que parou de guardar.
+
+**Mate o `Vacuon.exe` antes de compilar.** Ele trava as DLLs, e o build às vezes falha em silêncio — aí você roda código velho sem saber.
 
 ## As regras que importam
 
 ### 1. `Vacuon.Core` não referencia UI
 
-Nunca. Nem `System.Windows`, nem `System.Drawing`, nem `PresentationCore`. A CLI, os testes e a futura GUI consomem exatamente a mesma superfície. Se você precisa de um bitmap, devolva pixels crus (`ThumbnailBitmap`), não um `BitmapSource`.
+Nunca. Nem `System.Windows`, nem `System.Drawing`, nem `PresentationCore`. A CLI, os testes e a GUI consomem exatamente a mesma superfície. Se você precisa de um bitmap, devolva pixels crus (`ThumbnailBitmap`), não um `BitmapSource`.
 
 ### 2. O app não afirma o que não mediu
 
@@ -62,7 +66,9 @@ Este não:
 count++;
 ```
 
-O código e os comentários são em português. Nomes de tipos, métodos e variáveis, em inglês.
+Nomes de tipos, métodos e variáveis: **em inglês**, sempre.
+
+**Comentários novos também em inglês.** Os antigos estão em português e ficam onde estão — reescrevê-los em massa só produziria ruído no diff. A interface segue a mesma divisão: inglês é o padrão, português é opcional, e as chaves vivem em `src/Vacuon.Core/Localization/Strings.*.json`, com teste de paridade entre os dois arquivos.
 
 ## Abrindo uma issue
 
