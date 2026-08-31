@@ -258,4 +258,45 @@ public sealed class FolderNodeViewModel : Observable
         IsExpanded = true;
         foreach (FolderNodeViewModel child in Children) child.ExpandTo(depth - 1);
     }
+
+    /// <summary>
+    /// Opens the tree along <paramref name="chain"/> and selects the node at its end.
+    /// <para>
+    /// Setting <see cref="IsExpanded"/> is what materialises a node's children, so walking
+    /// down and expanding as it goes is also what makes the next step's children exist. That
+    /// is the whole reason this cannot be a search over nodes already built: below the first
+    /// closed folder there are none.
+    /// </para>
+    /// </summary>
+    /// <param name="chain">
+    /// Entry indices from just below this node down to the target, this node's own child
+    /// first.
+    /// </param>
+    /// <returns>
+    /// The node that ended up selected, or null when the walk could not start. A chain that
+    /// runs out early — a step the tree does not list, such as a file — selects the deepest
+    /// folder it did reach, which is still the right place to be looking.
+    /// </returns>
+    public FolderNodeViewModel? Reveal(IReadOnlyList<int> chain, int from = 0)
+    {
+        if (_index is null) return null;
+
+        if (from >= chain.Count)
+        {
+            IsExpanded = true;
+            IsSelected = true;
+            return this;
+        }
+
+        IsExpanded = true;
+
+        foreach (FolderNodeViewModel child in Children)
+        {
+            if (child.EntryIndex != chain[from]) continue;
+            return child.Reveal(chain, from + 1);
+        }
+
+        IsSelected = true;
+        return this;
+    }
 }

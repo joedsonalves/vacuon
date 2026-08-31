@@ -45,7 +45,7 @@
 
                     <TextBox Grid.Column="1" Style="{StaticResource Input}" Margin="14,0"
                              Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=180}"
-                             ToolTip="{DynamicResource S.filter.searchHint}"/>
+                             ToolTip="{DynamicResource S.filter.searchPathHint}"/>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
                         <TextBlock Style="{StaticResource Text.Sub}" VerticalAlignment="Center"
@@ -137,18 +137,31 @@
                                 <Grid Margin="0,2,4,2" HorizontalAlignment="Stretch">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" MinWidth="60"/>
-                                        <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="70"/>
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                         <!-- TreeView nao tem selecao multipla. Um checkbox por no
-                                             deixa marcar varias pastas e apagar de uma vez. -->
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox Style="{StaticResource Check}" Margin="0,0,6,0"
+                                             deixa marcar varias pastas e apagar de uma vez.
+
+                                             Grid, not a horizontal StackPanel. A StackPanel hands
+                                             its children infinite width, so TextTrimming never
+                                             fires: the name simply overflowed and the Grid column
+                                             sliced it mid-glyph, with no ellipsis to say so. A
+                                             starred column gives the TextBlock a real width, and
+                                             "System Volume Info…" then admits it was shortened. -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Grid.Column="0" Style="{StaticResource Check}" Margin="0,0,6,0"
                                                       AutomationProperties.Name="{Binding Name}"
                                                       IsChecked="{Binding IsChecked, Mode=TwoWay}"/>
-                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding Name}"/>
-                                        </StackPanel>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center"
+                                                       ToolTip="{Binding FullPath}"/>
+                                        </Grid>
                                         <!-- Barra de proporção: qual fatia do disco esta subárvore ocupa.
                                              Foreground explícito porque a cor herdada do TreeViewItem
                                              deixaria a barra cinza em vez de âmbar. -->
@@ -211,7 +224,8 @@
                              responde "qual delas". Escolher entre quatro copias de uma foto
                              lendo quatro nomes de arquivo e o caso que isto existe para
                              resolver. -->
-                        <ToggleButton FontSize="11" Padding="8,4" Margin="0,0,10,0"
+                        <ToggleButton Style="{StaticResource Toggle.Chip}"
+                                      FontSize="11" Padding="8,4" Margin="0,0,10,0"
                                       Content="{DynamicResource S.preview.gallery}"
                                       AutomationProperties.Name="{DynamicResource S.preview.gallery}"
                                       IsChecked="{Binding IsGallery, Mode=TwoWay}"/>
@@ -244,6 +258,8 @@
                           SelectionMode="Extended"
                           SelectionChanged="OnListSelectionChanged"
                           Margin="10,0,10,0"
+                          SizeChanged="OnFileListSizeChanged"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           MouseDoubleClick="OnRowDoubleClick"
                           PreviewKeyDown="OnListKeyDown"
                           PreviewMouseLeftButtonDown="OnListMouseDown"
@@ -253,7 +269,7 @@
                         <GridView AllowsColumnReorder="True">
                             <!-- Marcacao em lote. Fica antes de tudo porque e o que a pessoa
                                  clica em sequencia descendo a lista. -->
-                            <GridViewColumn Width="34">
+                            <GridViewColumn x:Name="CheckColumn" Width="34">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <!-- Named after the file, not "select": walking
@@ -267,8 +283,17 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <!-- Ícone / miniatura: a largura acompanha o tamanho escolhido -->
-                            <GridViewColumn Width="{Binding IconPixels, Mode=OneWay}">
+                            <!--
+                                Ícone / miniatura: a largura acompanha o tamanho escolhido, mas
+                                vem do code-behind (FitColumns), não de um Binding.
+
+                                ⚠️ GridViewColumn é um Freezable e não está na árvore visual: o
+                                Binding para IconPixels que ficava aqui não resolvia, a coluna
+                                caía para largura automática e parava em ~52 px enquanto a célula
+                                media 64. O ícone e a moldura de espera eram fatiados na vertical,
+                                em toda linha, em todo tamanho de ícone.
+                            -->
+                            <GridViewColumn x:Name="IconColumn">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
                                         <Grid Width="{Binding DataContext.IconPixels,
@@ -288,7 +313,7 @@
                             <!-- Cabecalhos vem do VM, com a seta de ordenacao ja embutida: o
                                  rotulo traduzido e a direcao sao uma string so, e mudam juntos.
                                  A Tag diz ao clique qual coluna foi pedida. -->
-                            <GridViewColumn Width="380">
+                            <GridViewColumn x:Name="NameColumn" Width="380">
                                 <GridViewColumn.Header>
                                     <TextBlock Tag="Name"
                                                Text="{Binding DataContext.HeaderName,
@@ -318,7 +343,18 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Width="96">
+                            <!--
+                                ⚠️ Never give this cell a fixed Width again. Text.Number aligns
+                                right, and a TextBlock that is 86 px wide by decree inside a cell
+                                the presenter measured smaller keeps its 86 px and hangs its LEFT
+                                edge outside the cell, where the clip lands. The leading digit went
+                                with it: 63.8 GiB rendered as "53.8 GiB", 61.0 as "51.0", 6.5 as
+                                "5.5" — a wrong number on screen, not a cosmetic trim.
+
+                                Stretch plus TextAlignment gets the same right-hand alignment out
+                                of a box that is whatever the cell actually is.
+                            -->
+                            <GridViewColumn x:Name="SizeColumn" Width="104">
                                 <GridViewColumn.Header>
                                     <TextBlock Tag="Size"
                                                Text="{Binding DataContext.HeaderSize,
@@ -326,13 +362,15 @@
                                 </GridViewColumn.Header>
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock Style="{StaticResource Text.Number}" Width="86"
+                                        <TextBlock Style="{StaticResource Text.Number}"
+                                                   HorizontalAlignment="Stretch" TextAlignment="Right"
+                                                   Margin="0,0,12,0"
                                                    VerticalAlignment="Center" Text="{Binding SizeText}"/>
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Width="130">
+                            <GridViewColumn x:Name="ModifiedColumn" Width="130">
                                 <GridViewColumn.Header>
                                     <TextBlock Tag="Modified"
                                                Text="{Binding DataContext.HeaderModified,
@@ -346,7 +384,7 @@
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
 
-                            <GridViewColumn Width="420">
+                            <GridViewColumn x:Name="PathColumn" Width="420">
                                 <GridViewColumn.Header>
                                     <TextBlock Tag="Path"
                                                Text="{Binding DataContext.HeaderPath,
@@ -373,6 +411,7 @@
                             <MenuItem Header="{DynamicResource S.action.copyPath}" InputGestureText="Ctrl+C"
                                       Command="{Binding CopyPathCommand}"/>
                             <Separator/>
+                            <MenuItem Header="{DynamicResource S.transfer.copyButton}" Click="OnCopyTo"/>
                             <MenuItem Header="{DynamicResource S.move.button}" Click="OnMoveTo"/>
                             <MenuItem Header="{DynamicResource S.quarantine.button}" Click="OnQuarantine"/>
                             <Separator/>
@@ -464,7 +503,10 @@
                 <Border Padding="16,10" BorderBrush="{DynamicResource Stroke.Subtle}"
                         BorderThickness="0,1,0,0"
                         Visibility="{Binding HasSelection, Converter={StaticResource Visible}}">
-                    <StackPanel Orientation="Horizontal">
+                    <!-- WrapPanel, not a StackPanel: horizontally these buttons ran past the
+                         pane and the last one read "Quarant". A destructive action half off
+                         the screen is worse than one on a second line. -->
+                    <WrapPanel Orientation="Horizontal" ItemHeight="34">
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
                                 Content="{DynamicResource S.action.open}" Command="{Binding OpenCommand}"/>
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
@@ -474,9 +516,16 @@
 
                         <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
 
-                        <!-- Mover fica entre a divisoria e a de apagar: e a unica acao em
-                             lote que nao destroi nada, e nao deve encostar no botao vermelho. -->
+                        <!-- Copiar e mover ficam entre a divisoria e a de apagar: sao as
+                             unicas acoes em lote que nao destroem nada, e nao devem encostar
+                             no botao vermelho. Copiar vem primeiro por ser a mais inofensiva
+                             das duas — nao tira nada de onde estava. -->
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="{DynamicResource S.transfer.copyButton}"
+                                ToolTip="{DynamicResource S.transfer.copyButtonHint}"
+                                Click="OnCopyTo"/>
+
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.move.button}"
                                 ToolTip="{DynamicResource S.move.buttonHint}"
                                 Click="OnMoveTo"/>
@@ -506,7 +555,7 @@
                                    FontSize="11" Foreground="{DynamicResource Text.Muted}"
                                    Text="{DynamicResource S.select.keepsAcrossFolders}"
                                    Visibility="{Binding HasBasket, Converter={StaticResource Visible}}"/>
-                    </StackPanel>
+                    </WrapPanel>
                 </Border>
                 </StackPanel>
             </Grid>
@@ -552,7 +601,8 @@
                                     Content="{DynamicResource S.preview.fit}"
                                     Click="OnPreviewFit"/>
 
-                            <ToggleButton Margin="5,0,0,0" FontSize="10" Padding="7,3"
+                            <ToggleButton Style="{StaticResource Toggle.Chip}"
+                                          Margin="5,0,0,0" FontSize="10" Padding="7,3"
                                           Content="{DynamicResource S.preview.compare}"
                                           IsChecked="{Binding IsComparing, Mode=TwoWay}"/>
                         </StackPanel>

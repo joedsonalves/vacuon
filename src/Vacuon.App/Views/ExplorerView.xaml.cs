@@ -28,6 +28,33 @@ public partial class ExplorerView : UserControl
         // The zoom readout beside the title. The control owns the number; the view model
         // only carries it to the screen.
         PreviewZoom.ZoomChanged += zoom => Model?.ReportZoom(zoom);
+
+        // Pasting a full file path into the search box lands on the file, not merely in the
+        // folder holding it — which means scrolling to the row, and only the ListView can.
+        if (Model is not null)
+        {
+            Model.RowRevealRequested += row =>
+            {
+                ItemsControl list = Model.IsGallery ? Gallery : (ItemsControl)Files;
+                list.Dispatcher.BeginInvoke(() =>
+                {
+                    if (list is ListBox box) box.ScrollIntoView(row);
+                    else if (list is ListView view) view.ScrollIntoView(row);
+                });
+            };
+        }
+
+        // The icon column follows the chosen thumbnail size, and that changes without the
+        // list ever resizing — so the elastic columns have to be told separately.
+        if (Model is not null)
+        {
+            Model.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(MainViewModel.IconPixels)) FitColumns();
+            };
+        }
+
+        FitColumns();
     }
 
     private void OnContainersChanged(object? sender, EventArgs e)
@@ -52,6 +79,65 @@ public partial class ExplorerView : UserControl
 
             _ = model.RequestThumbnailAsync(row);
         }
+    }
+
+    // ==================== column widths ====================
+
+    /// <summary>Narrowest the two elastic columns may get before the list starts scrolling.</summary>
+    private const double MinNameWidth = 220;
+    private const double MinPathWidth = 140;
+
+    /// <summary>
+    /// Shares whatever width is left between Name and Path.
+    /// <para>
+    /// The six columns used to add up to a fixed 1124 px while the pane they sit in is
+    /// whatever the window and the two splitters leave — usually far less. With horizontal
+    /// scrolling switched off, everything past the pane's edge was simply not drawn: Size,
+    /// Modified and Path were gone from a list that gave no sign it was hiding three
+    /// columns. Sizing them to the pane is the fix; the scrollbar below is the floor, so
+    /// that a pane too narrow even for the minimums scrolls instead of swallowing them.
+    /// </para>
+    /// </summary>
+    private void OnFileListSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.WidthChanged) FitColumns();
+    }
+
+    /// <summary>
+    /// Breathing room a cell needs beyond its content, on top of the column width.
+    /// <para>
+    /// Measured, not guessed: with the icon column asked for 64 px the thumbnail was drawn
+    /// clipped to about 52, so a cell keeps roughly twelve pixels for itself. Anything sized
+    /// to exactly its content is therefore sized to less than its content.
+    /// </para>
+    /// </summary>
+    private const double CellPadding = 12;
+
+    private void FitColumns()
+    {
+        // The icon column is set here rather than bound in XAML — see the comment on the
+        // column. It has to be right before the elastic share below is worked out.
+        if (Model is not null) IconColumn.Width = Model.IconPixels + CellPadding;
+
+        // Vertical scrollbar plus the row border. Guessed high rather than low: leaving a
+        // few pixels spare costs nothing, overshooting brings back the clipping.
+        double available = Files.ActualWidth - 24;
+
+        double fixedColumns = CheckColumn.ActualWidth
+                            + IconColumn.ActualWidth
+                            + SizeColumn.ActualWidth
+                            + ModifiedColumn.ActualWidth;
+
+        double elastic = available - fixedColumns;
+        if (double.IsNaN(elastic) || elastic <= 0) return;
+
+        // Name gets the larger share: it is what the eye reads first, and the path below it
+        // is already repeated in every row's tooltip.
+        double name = Math.Max(MinNameWidth, elastic * 0.58);
+        double path = Math.Max(MinPathWidth, elastic - name);
+
+        NameColumn.Width = name;
+        PathColumn.Width = path;
     }
 
     // ==================== selection ====================
@@ -310,6 +396,19 @@ public partial class ExplorerView : UserControl
     }
 
     // ==================== moving ====================
+
+    /// <summary>
+    /// Copies the ticked items somewhere else. The one batch action that takes nothing away
+    /// from where it started.
+    /// </summary>
+    private void OnCopyTo(object sender, RoutedEventArgs e)
+    {
+        MainViewModel? model = Model;
+        if (model is null) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        model.CopySelection(owner);
+    }
 
     private void OnMoveTo(object sender, RoutedEventArgs e)
     {

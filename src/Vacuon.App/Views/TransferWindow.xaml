@@ -1,0 +1,123 @@
+﻿<Window x:Class="Vacuon.App.Views.TransferWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="640" SizeToContent="Height"
+        MinHeight="330" MaxHeight="720"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{DynamicResource Surface.Window}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- what is happening, and where it is going -->
+        <TextBlock x:Name="TitleText" Grid.Row="0" Style="{StaticResource Text.Title}"
+                   FontSize="17" TextTrimming="CharacterEllipsis"/>
+
+        <TextBlock x:Name="DestinationText" Grid.Row="1" Style="{StaticResource Text.Sub}"
+                   Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource Text.Muted}"/>
+
+        <!-- The bar goes indeterminate rather than sitting at zero when the plan carried no
+             total to divide by. A bar frozen at the left edge reads as "stuck". -->
+        <ProgressBar x:Name="Bar" Grid.Row="2" Height="8" Margin="0,16,0,0"
+                     Minimum="0" Maximum="100"
+                     Foreground="{DynamicResource Gauge.Fill}"
+                     Background="{DynamicResource Gauge.Track}"/>
+
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock x:Name="CurrentText" Grid.Column="0" Style="{StaticResource Text.Sub}"
+                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Text.Secondary}"/>
+
+            <TextBlock x:Name="PercentText" Grid.Column="1" Style="{StaticResource Text.Number}"
+                       Margin="12,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+
+        <!--
+            Every figure below is measured: bytes counted off the lines robocopy printed as
+            each file landed, over a stopwatch this window owns. Nothing here is a target or
+            a nominal rate, and the estimate says so out loud when it does not have one yet.
+        -->
+        <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock x:Name="SpeedLabel" Grid.Row="0" Grid.Column="0" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="SpeedValue" Grid.Row="1" Grid.Column="0" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="14" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="FileRateLabel" Grid.Row="0" Grid.Column="1" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="FileRateValue" Grid.Row="1" Grid.Column="1" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="14" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="RemainingLabel" Grid.Row="0" Grid.Column="2" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="RemainingValue" Grid.Row="1" Grid.Column="2" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="14" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="BytesLabel" Grid.Row="2" Grid.Column="0" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Margin="0,12,0,0" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="BytesValue" Grid.Row="3" Grid.Column="0" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="12" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="ItemsLabel" Grid.Row="2" Grid.Column="1" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Margin="0,12,0,0" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="ItemsValue" Grid.Row="3" Grid.Column="1" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="12" Margin="0,2,0,0"/>
+
+                <TextBlock x:Name="ElapsedLabel" Grid.Row="2" Grid.Column="2" Style="{StaticResource Text.Sub}"
+                           FontSize="10" Margin="0,12,0,0" Foreground="{DynamicResource Text.Muted}"/>
+                <TextBlock x:Name="ElapsedValue" Grid.Row="3" Grid.Column="2" Style="{StaticResource Text.Number}"
+                           HorizontalAlignment="Left" FontSize="12" Margin="0,2,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- The closing account: what actually arrived, and anything that did not. -->
+        <Border x:Name="OutcomeCard" Grid.Row="5" Style="{StaticResource Card}" Margin="0,14,0,0"
+                Padding="14,12" Visibility="Collapsed" MaxHeight="220">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock x:Name="OutcomeText" Style="{StaticResource Text.Body}" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="FailureText" Style="{StaticResource Text.Sub}" Margin="0,8,0,0"
+                               TextWrapping="Wrap" Visibility="Collapsed"
+                               Foreground="{DynamicResource Risk.Danger}"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="CancelButton" Style="{StaticResource Button.Base}"
+                    Padding="16,8" Click="OnCancel"/>
+            <Button x:Name="CloseButton" Style="{StaticResource Button.Primary}"
+                    Padding="16,8" Margin="8,0,0,0" Visibility="Collapsed" Click="OnClose"/>
+        </StackPanel>
+    </Grid>
+</Window>

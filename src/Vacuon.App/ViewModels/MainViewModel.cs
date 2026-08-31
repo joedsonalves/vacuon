@@ -18,6 +18,7 @@ using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
+using Vacuon.Core.Transfer;
 using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
@@ -909,6 +910,52 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// <summary>Entry behind <see cref="CurrentFolderPath"/>, or -1 outside folder mode.</summary>
     private int _currentFolderIndex = -1;
 
+    /// <summary>
+    /// Lists <paramref name="entryIndex"/> and opens the tree down to it, so the two halves
+    /// of the screen agree about where you are.
+    /// </summary>
+    /// <param name="highlight">
+    /// An entry inside that folder to select, or -1. This is what makes pasting a full file
+    /// path land on the file rather than merely in the right folder.
+    /// </param>
+    public void NavigateToFolder(int entryIndex, int highlight = -1)
+    {
+        VolumeIndex? index = Index;
+        if (index is null || entryIndex < 0 || entryIndex >= index.Entries.Length) return;
+
+        // Selecting the node is what calls ShowFolder — going through the tree keeps the
+        // selection, the breadcrumb and the list in one state instead of three.
+        if (Root is not null && Root.Reveal(Ancestry(index, entryIndex)) is null) ShowFolder(entryIndex);
+        else if (Root is null) ShowFolder(entryIndex);
+
+        if (highlight >= 0) SelectRowByEntry(highlight);
+    }
+
+    /// <summary>
+    /// The chain from just below the root down to <paramref name="entryIndex"/>, root first.
+    /// </summary>
+    private static List<int> Ancestry(VolumeIndex index, int entryIndex)
+    {
+        var chain = new List<int>();
+        int root = index.RootIndex;
+        int current = entryIndex;
+
+        // Same 512 ceiling GetFullPath uses: real depth never approaches it, and a corrupt
+        // MFT with a parent cycle must not spin here.
+        for (int guard = 0; guard < 512 && current != root; guard++)
+        {
+            chain.Add(current);
+
+            uint parent = index.Entries[current].ParentIndex;
+            if (parent >= (uint)index.Entries.Length || parent == (uint)current) break;
+
+            current = (int)parent;
+        }
+
+        chain.Reverse();
+        return chain;
+    }
+
     public void ShowFolder(int entryIndex)
     {
         if (Index is null) return;
@@ -1160,10 +1207,57 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             return;
         }
 
+        // A path in the box is a request to go there, not to look for files whose name
+        // contains a backslash. Answered from the scan already in memory, so pasting a
+        // folder from Explorer lists it without touching the disk.
+        int pathScope = -1;
+
+        if (SearchText.Length > 0)
+        {
+            PathQueryResult path = PathQuery.Resolve(SearchText, Index);
+
+            switch (path.Outcome)
+            {
+                case PathQueryOutcome.Folder:
+                case PathQueryOutcome.File:
+                    // A file resolves to the folder holding it, with the file highlighted:
+                    // people paste a full file path far more often than they mean to.
+                    int folder = path.Outcome == PathQueryOutcome.Folder
+                        ? path.EntryIndex
+                        : (int)Index.Entries[path.EntryIndex].ParentIndex;
+
+                    bool otherFilters = MinSizeBytes > 0 || MinAgeDays > 0 || ExtensionFilter.Length > 0;
+
+                    if (!otherFilters)
+                    {
+                        NavigateToFolder(folder,
+                            path.Outcome == PathQueryOutcome.File ? path.EntryIndex : -1);
+                        return;
+                    }
+
+                    // With a size or age filter also set, the path is a place to search
+                    // rather than a place to list — which is the useful reading of
+                    // "everything over 1 GB under this folder".
+                    pathScope = folder;
+                    break;
+
+                case PathQueryOutcome.OtherVolume:
+                    StatusText = L.T("search.otherVolume", path.Path, Index.Volume.Root);
+                    break;
+
+                case PathQueryOutcome.NotFound:
+                    StatusText = L.T("search.pathNotFound", path.Path);
+                    break;
+            }
+        }
+
         Mode = ListMode.Search;
 
         VolumeIndex index = Index;
-        string query = SearchText;
+
+        // A resolved path narrows the search to itself; the text is then a place, not a
+        // name, and matching file names against it would find nothing.
+        string query = pathScope >= 0 ? string.Empty : SearchText;
         string[] extensions = ExtensionFilter
             .Split([',', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(e => e.StartsWith('.') ? e : "." + e)
@@ -1172,10 +1266,13 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         // A folder has no extension, so an extension filter is an implicit "files only".
         bool includeFolders = SearchFolders && extensions.Length == 0;
 
-        // -1 means the whole volume.
-        int scope = SearchInSelectedFolder && SelectedFolder is not null
-            ? SelectedFolder.EntryIndex
-            : -1;
+        // -1 means the whole volume. A path typed into the box beats the tree selection:
+        // it is the more specific thing the person just asked for.
+        int scope = pathScope >= 0
+            ? pathScope
+            : SearchInSelectedFolder && SelectedFolder is not null
+                ? SelectedFolder.EntryIndex
+                : -1;
 
         DateTime cutoff = MinAgeDays > 0 ? DateTime.UtcNow.AddDays(-MinAgeDays) : DateTime.MaxValue;
 
@@ -1512,6 +1609,32 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>
+    /// Raised when the list should scroll to a row and highlight it. Only the view can do
+    /// that — the highlight lives in the ListView, not in the model.
+    /// </summary>
+    public event Action<FileRowViewModel>? RowRevealRequested;
+
+    /// <summary>
+    /// Highlights the row standing for <paramref name="entryIndex"/>, if it is on screen.
+    /// <para>
+    /// Silent when it is not. Pasting a path whose folder holds ten thousand files lists the
+    /// folder truncated, and the file asked for may genuinely not be among the rows built —
+    /// saying nothing beats selecting the wrong one.
+    /// </para>
+    /// </summary>
+    private void SelectRowByEntry(int entryIndex)
+    {
+        foreach (FileRowViewModel row in _rows)
+        {
+            if (row.EntryIndex != entryIndex) continue;
+
+            SelectedRow = row;
+            RowRevealRequested?.Invoke(row);
+            return;
+        }
+    }
+
+    /// <summary>
     /// Shows one entry's tick on the other pane.
     /// <para>
     /// In folder mode a subfolder is a row in the list and a node in the tree at once. They
@@ -1743,7 +1866,16 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (!DeleteDialog.Confirm(owner, plan, mode)) return;
 
-        DeleteReport report = service.Execute(paths, mode);
+        // The Recycle Bin stays with the shell: robocopy cannot recycle, and a faster delete
+        // that quietly erased instead of recycling would be the app doing something other
+        // than what the button says. Permanent removal of a folder is the case the mirror
+        // trick actually wins — one threaded walk instead of a recursion per directory.
+        bool worthTheEngine = mode == DeleteMode.Permanent
+                           && plan.Results.Any(r => r.Succeeded && r.IsDirectory);
+
+        DeleteReport report = worthTheEngine
+            ? RunDeleteThroughTransfer(owner, paths)
+            : service.Execute(paths, mode);
 
         // Take out of the index exactly what the disk reported as gone, and measure the
         // result from the entries themselves — the whole subtree included.
@@ -1972,9 +2104,205 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (!MoveDialog.Confirm(owner, plan)) return;
 
-        MoveReport report = service.Execute(paths, plan.Destination);
+        // A move that stays on the volume is a rename: instant, undoable from Explorer, and
+        // nothing a copy engine could make faster. One that crosses volumes is a full copy
+        // followed by a delete, which is the case worth thirty-two threads and a window that
+        // says how long is left — so only that one is handed to the transfer engine.
+        MoveReport report = plan.CrossVolume
+            ? RunMoveThroughTransfer(owner, paths, plan)
+            : service.Execute(paths, plan.Destination);
 
         ApplyMove(report, byPath);
+    }
+
+    // ================= copiar =================
+
+    /// <summary>
+    /// Copies the ticked items into another folder, through robocopy, with a window that
+    /// shows the transfer as it happens.
+    /// <para>
+    /// The list had no copy at all before this: the only ways out of a selection were to
+    /// move it, quarantine it or delete it. Sorting a drive usually starts by copying the
+    /// keepers somewhere safe, and having to leave the app to do that is how a session ends.
+    /// </para>
+    /// <para>
+    /// No confirmation dialog, unlike a move or a delete. A copy destroys nothing and takes
+    /// nothing away, and the folder picker is already an explicit choice; the transfer window
+    /// names the destination, the count and the bytes before the first file lands, and stops
+    /// on one click. What it does have to say is the renames — nothing is ever overwritten,
+    /// so a name the destination already uses goes in as "name (2)".
+    /// </para>
+    /// </summary>
+    public void CopySelection(Window owner)
+    {
+        VolumeIndex? index = Index;
+        List<string> paths = BasketPaths(out _);
+
+        if (paths.Count == 0)
+        {
+            StatusText = L.T("move.nothingSelected");
+            return;
+        }
+
+        string? destination = AskForFolder("transfer.pickCopyFolder");
+        if (destination is null) return;
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan(paths, destination, TransferKind.Copy, MeasureFromIndex(index));
+
+        if (plan.IsEmpty)
+        {
+            StatusText = L.T("transfer.nothingToCopy");
+            return;
+        }
+
+        TransferReport? report = TransferWindow.Run(owner, plan);
+        if (report is null) return;
+
+        // A copy adds bytes to the destination volume and takes none from this one, so the
+        // index is left exactly as it was — and nothing here is allowed to say "freed".
+        StatusText = report.FailedCount > 0
+            ? L.T("transfer.copiedPartial", Format.Count(report.DoneCount),
+                  Format.Bytes(report.BytesTransferred), Format.Count(report.FailedCount))
+            : L.T("transfer.copied", Format.Count(report.DoneCount),
+                  Format.Bytes(report.BytesTransferred), plan.Destination);
+
+        if (report.FailedCount > 0)
+        {
+            LastFailures = [.. report.Failures.Select(
+                f => $"{f.Item.Source} — {f.Message ?? L.T("delete.outcomeFailed")}")];
+        }
+
+        // Free space on the destination volume moved, and the Dashboard cards still quote
+        // the figure the scan took.
+        LoadVolumes();
+    }
+
+    /// <summary>Full paths of the ticked basket, with the index positions they came from. Not the same as SelectedPaths(), which answers for the rows merely highlighted.</summary>
+    private List<string> BasketPaths(out Dictionary<string, int> byPath)
+    {
+        VolumeIndex? index = Index;
+        List<int> selected = EffectiveEntries();
+
+        byPath = new Dictionary<string, int>(selected.Count, StringComparer.OrdinalIgnoreCase);
+
+        if (index is not null)
+        {
+            foreach (int i in selected)
+            {
+                if (i < 0 || i >= index.Entries.Length || !index.Entries[i].IsInUse) continue;
+
+                string path = index.GetFullPath(i);
+                if (path.Length > 0) byPath[path.TrimEnd('\\')] = i;
+            }
+        }
+
+        return [.. byPath.Keys];
+    }
+
+    /// <summary>
+    /// Folder sizes and file counts straight out of the index instead of a fresh walk.
+    /// <para>
+    /// The transfer plan needs a byte total to divide a percentage into, and measuring a
+    /// folder of two million files by enumerating it would take longer than the copy. The
+    /// scan already has that number.
+    /// </para>
+    /// </summary>
+    private static Func<string, TransferMeasurement>? MeasureFromIndex(VolumeIndex? index)
+    {
+        if (index is null) return null;
+
+        return path =>
+        {
+            int entry = index.FindEntry(path);
+            if (entry < 0) return new TransferMeasurement(0, 1);
+
+            if (!index.Entries[entry].IsDirectory)
+                return new TransferMeasurement(index.Entries[entry].LogicalSize, 1);
+
+            // A folder is worth every file under it, on both counts. The subtree totals are
+            // already built, so this is two array reads rather than a walk of the tree.
+            return new TransferMeasurement(
+                index.GetSubtreeSize(entry),
+                Math.Max(1, index.GetSubtreeFileCount(entry)));
+        };
+    }
+
+    /// <summary>
+    /// Runs a cross-volume move through the transfer engine and hands back the same
+    /// <see cref="MoveReport"/> the shell path produces, so nothing downstream has to know
+    /// which engine did the work.
+    /// </summary>
+    private MoveReport RunMoveThroughTransfer(Window owner, List<string> paths, MoveReport plan)
+    {
+        var service = new FileTransferService();
+
+        // Both planners walk DeleteService.Collapse in the same order and call the same
+        // MoveService.FreeName, so the destination names in this plan are the ones the
+        // confirmation dialog just showed.
+        TransferPlan transfer = service.Plan(paths, plan.Destination, TransferKind.Move, MeasureFromIndex(Index));
+
+        TransferReport? report = TransferWindow.Run(owner, transfer);
+
+        if (report is null)
+            return new MoveReport([], plan.Destination, DestinationVerdict.Ok, plan.CrossVolume, WasDryRun: false);
+
+        var results = new List<MoveResult>(report.Results.Count);
+
+        foreach (TransferItemResult result in report.Results)
+        {
+            results.Add(new MoveResult(
+                result.Item.Source,
+                result.Succeeded ? result.Item.Destination : result.Item.Source,
+                result.Outcome switch
+                {
+                    TransferOutcome.Done => MoveOutcome.Moved,
+                    TransferOutcome.Blocked => MoveOutcome.Blocked,
+                    TransferOutcome.NotFound => MoveOutcome.NotFound,
+                    TransferOutcome.IntoItself => MoveOutcome.IntoItself,
+                    TransferOutcome.AlreadyThere => MoveOutcome.AlreadyThere,
+                    _ => MoveOutcome.Failed,
+                },
+                result.Succeeded ? result.Item.Bytes : 0,
+                result.Item.IsDirectory,
+                result.Message));
+        }
+
+        return new MoveReport(results, plan.Destination, DestinationVerdict.Ok, plan.CrossVolume, WasDryRun: false);
+    }
+
+    /// <summary>
+    /// Runs a permanent deletion through the transfer engine, reporting it as the
+    /// <see cref="DeleteReport"/> the rest of the app already knows how to apply.
+    /// </summary>
+    private DeleteReport RunDeleteThroughTransfer(Window owner, List<string> paths)
+    {
+        var service = new FileTransferService();
+        TransferPlan transfer = service.Plan(paths, string.Empty, TransferKind.Delete, MeasureFromIndex(Index));
+
+        TransferReport? report = TransferWindow.Run(owner, transfer);
+
+        if (report is null) return new DeleteReport([], DeleteMode.Permanent, WasDryRun: false);
+
+        var results = new List<DeleteResult>(report.Results.Count);
+
+        foreach (TransferItemResult result in report.Results)
+        {
+            results.Add(new DeleteResult(
+                result.Item.Source,
+                result.Outcome switch
+                {
+                    TransferOutcome.Done => DeleteOutcome.Deleted,
+                    TransferOutcome.Blocked => DeleteOutcome.Blocked,
+                    TransferOutcome.NotFound => DeleteOutcome.NotFound,
+                    _ => DeleteOutcome.Failed,
+                },
+                result.Item.Bytes,
+                result.Item.IsDirectory,
+                result.Message));
+        }
+
+        return new DeleteReport(results, DeleteMode.Permanent, WasDryRun: false);
     }
 
     /// <summary>
@@ -2236,11 +2564,16 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// why <see cref="MoveTarget"/> has to be able to adopt a folder younger than the scan.
     /// </para>
     /// </summary>
-    private string? AskForFolder()
+    /// <param name="titleKey">
+    /// Which verb the dialog's own title uses. The picker was hard-coded to say "move the
+    /// selection into" and then got reused by the copy, so copying a thousand files opened a
+    /// window announcing a move — the app describing an action it was not about to take.
+    /// </param>
+    private string? AskForFolder(string titleKey = "move.pickFolder")
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = L.T("move.pickFolder"),
+            Title = L.T(titleKey),
             Multiselect = false,
         };
 

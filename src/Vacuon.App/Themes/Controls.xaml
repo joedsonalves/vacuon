@@ -124,6 +124,54 @@
         <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}"/>
     </Style>
 
+    <!--
+        A toggle that reads as on or off from across the room.
+
+        Without it a ToggleButton falls back to the system template, whose *resting* state is
+        already a filled, bordered button — so the Gallery toggle looked switched on while the
+        list was plainly showing rows, and clicking it changed the mode without visibly
+        changing the button. A control whose picture disagrees with what it controls is the
+        same defect as a number the app did not measure: it states something untrue.
+
+        Off is flat and muted, like the ghost buttons beside it. On is the accent fill, which
+        no other resting control in the toolbar uses.
+    -->
+    <Style x:Key="Toggle.Chip" TargetType="ToggleButton">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Ui}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="10,5"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Foreground" Value="{DynamicResource Text.Secondary}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="root" CornerRadius="6" Padding="{TemplateBinding Padding}"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="root" Property="Background" Value="{DynamicResource Surface.CardHover}"/>
+                            <Setter TargetName="root" Property="BorderBrush" Value="{DynamicResource Stroke.Strong}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="root" Property="Background" Value="{DynamicResource Accent}"/>
+                            <Setter TargetName="root" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Text.OnAccent}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="root" Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ==================== navegação ==================== -->
 
     <Style x:Key="NavItem" TargetType="RadioButton">
@@ -406,8 +454,16 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListViewItem">
+                    <!--
+                        No horizontal padding, deliberately. The column headers are laid out by
+                        the ScrollViewer at the full content width, while this presenter would
+                        start wherever the padding put it — so 6 px of padding shifted every
+                        cell right of its own header and left the last column 12 px short of
+                        the width it was promised. Vertical breathing room only; the inset for
+                        the whole list lives on the ListView's Margin, which the headers share.
+                    -->
                     <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="5"
-                            Padding="6,3" Margin="0,1">
+                            Padding="0,3" Margin="0,1">
                         <GridViewRowPresenter Content="{TemplateBinding Content}"
                                               Columns="{TemplateBinding GridView.ColumnCollection}"/>
                     </Border>
