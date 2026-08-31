@@ -3387,6 +3387,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         DuplicateStatusText = L.T("dup.searching");
         DuplicateScopeText = string.Empty;
         DuplicateGroups.Clear();
+        RaiseDuplicateGroups();
         ResetDuplicateSelection();
 
         _duplicateCts?.Dispose();
@@ -3407,6 +3408,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
             foreach (DuplicateGroup group in report.Groups.Take(MaxGroupsShown))
                 DuplicateGroups.Add(new DuplicateGroupViewModel(group, UpdateDuplicateSelection));
+
+            RaiseDuplicateGroups();
 
             string headline = report.GroupCount == 0
                 ? L.T("dup.none")
@@ -3482,6 +3485,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// Ticks every redundant copy. It cannot reach a keeper: keepers are not in
     /// <see cref="DuplicateGroupViewModel.Copies"/> and have no tick to set.
     /// </summary>
+    /// <summary>Tells the bulk buttons the list they act on has changed.</summary>
+    private void RaiseDuplicateGroups() => Raise(nameof(HasDuplicateGroups));
+
     private void SelectAllDuplicates()
     {
         foreach (DuplicateGroupViewModel group in DuplicateGroups)
@@ -3501,6 +3507,103 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>Sets the ticked copies aside, through the same quarantine as everything else.</summary>
+    /// <summary>True once a search has produced something, so the bulk buttons can appear.</summary>
+    public bool HasDuplicateGroups => DuplicateGroups.Count > 0;
+
+    /// <summary>
+    /// Replaces every ticked copy with a second name for the copy its group keeps (PRD F4.4).
+    /// <para>
+    /// The space comes back and the path keeps working, which is the difference between this
+    /// and deleting: nothing that opens the old path has to know anything changed. What it
+    /// is not is a shortcut — a <c>.lnk</c> is a little file something has to follow, and a
+    /// program handed one instead of the file it asked for simply fails.
+    /// </para>
+    /// <para>
+    /// ⚠️ Runs off the UI thread: each link reads both files through to the end before it
+    /// touches anything, so a group of large copies is seconds of disk, not microseconds of
+    /// bookkeeping.
+    /// </para>
+    /// </summary>
+    public async void LinkDuplicates(Window owner)
+    {
+        var pairs = new List<(string Keeper, string Copy)>();
+        long bytes = 0;
+
+        foreach (DuplicateGroupViewModel group in DuplicateGroups)
+        {
+            foreach (DuplicateCopyViewModel copy in group.Copies)
+            {
+                if (!copy.IsChecked) continue;
+
+                pairs.Add((group.KeeperPath, copy.Path));
+                bytes += copy.RecoverableBytes;
+            }
+        }
+
+        if (pairs.Count == 0) return;
+
+        if (!LinkDialog.Confirm(owner, [.. pairs.Select(p => p.Copy)], bytes)) return;
+
+        List<LinkResult> results = await Task.Run(() =>
+        {
+            var done = new List<LinkResult>(pairs.Count);
+            foreach ((string keeper, string copy) in pairs) done.Add(HardLinkService.Replace(keeper, copy));
+            return done;
+        });
+
+        ReportLinks(results);
+
+        // The groups on screen describe a disk that has changed, so the listing is rebuilt
+        // from it rather than patched to look right.
+        _ = FindDuplicatesAsync();
+    }
+
+    /// <summary>
+    /// What the links did — and, separately, what they refused to do.
+    /// </summary>
+    private void ReportLinks(List<LinkResult> results)
+    {
+        int linked = 0;
+        long freed = 0;
+        var refused = new List<string>();
+
+        foreach (LinkResult result in results)
+        {
+            if (result.Succeeded)
+            {
+                linked++;
+                freed += result.BytesFreed;
+                continue;
+            }
+
+            refused.Add($"{result.Path} — {result.Message ?? Describe(result.Outcome)}");
+        }
+
+        DuplicateStatusText = linked == 0
+            ? L.T("dup.linkNothing")
+            : refused.Count > 0
+                ? L.T("dup.linkPartial", Format.Count(linked), Format.Bytes(freed), Format.Count(refused.Count))
+                : linked == 1
+                    ? L.T("dup.linkDoneOne", Format.Count(linked), Format.Bytes(freed))
+                    : L.T("dup.linkDone", Format.Count(linked), Format.Bytes(freed));
+
+        LastFailures = [.. refused];
+
+        // Space really did come back on that volume, and the cards still quote the figure
+        // the scan took.
+        if (freed > 0) LoadVolumes();
+    }
+
+    private static string Describe(LinkOutcome outcome) => L.T(outcome switch
+    {
+        LinkOutcome.Blocked => "dup.outcomeBlocked",
+        LinkOutcome.ContentChanged => "dup.outcomeChanged",
+        LinkOutcome.DifferentVolumes => "dup.outcomeVolumes",
+        LinkOutcome.AlreadyLinked => "dup.outcomeAlready",
+        LinkOutcome.NotFound => "delete.outcomeNotFound",
+        _ => "delete.outcomeFailed",
+    });
+
     private void QuarantineDuplicates(object? parameter)
     {
         if (parameter is not Window owner) return;

@@ -114,6 +114,15 @@ public static partial class Kernel32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool EmptyWorkingSet(IntPtr process);
 
+    /// <summary>
+    /// Adds a second name to a file that already exists — the same bytes, another directory
+    /// entry. Fails when the new name is taken, when the two are on different volumes, or on
+    /// a file system that has no such thing.
+    /// </summary>
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateHardLinkW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CreateHardLink(string lpFileName, string lpExistingFileName, nint lpSecurityAttributes);
+
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetFileInformationByHandle(

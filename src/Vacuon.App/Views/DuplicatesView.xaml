@@ -35,6 +35,18 @@
                         Click="OnStop"
                         Visibility="{Binding IsFindingDuplicates, Converter={StaticResource Visible}}"/>
 
+                <!-- The command existed and nothing was bound to it, so there was no way to
+                     tick more than one copy at a time on a list thousands of groups long. -->
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.selectAll}"
+                        Command="{Binding SelectAllDuplicatesCommand}"
+                        Visibility="{Binding HasDuplicateGroups, Converter={StaticResource Visible}}"/>
+
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.clearAll}"
+                        Command="{Binding ClearDuplicateSelectionCommand}"
+                        Visibility="{Binding HasDuplicateGroups, Converter={StaticResource Visible}}"/>
+
                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="760"
                                Text="{Binding DuplicateStatusText}"/>
@@ -63,6 +75,13 @@
                                            Text="{Binding NothingRecoverableNote}"
                                            Visibility="{Binding NothingRecoverableNote,
                                                         Converter={StaticResource NotEmpty}}"/>
+
+                                <!-- Per group, because a group is the unit somebody decides
+                                     about: everything here is one file under several names. -->
+                                <Button Style="{StaticResource Button.Base}" FontSize="10"
+                                        Padding="8,3" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                        Content="{Binding SelectGroupLabel}"
+                                        Click="OnSelectGroup"/>
 
                                 <!-- The keeper. No checkbox exists for it, so no amount of
                                      clicking or "select all" can put it up for removal. -->
@@ -120,6 +139,10 @@
                 <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
                         Content="{DynamicResource S.dup.quarantineSelected}"
                         Click="OnQuarantineSelected"/>
+
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.linkSelected}"
+                        Click="OnLinkSelected"/>
                 <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
                         Content="{DynamicResource S.dup.clearSelection}"
                         Command="{Binding ClearDuplicateSelectionCommand}"/>

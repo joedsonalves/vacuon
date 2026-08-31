@@ -67,4 +67,20 @@ public sealed class DuplicateGroupViewModel
     /// <summary>Shown when every copy in the group is a hardlink and nothing would be freed.</summary>
     public string NothingRecoverableNote =>
         Group.RecoverableBytes == 0 ? L.T("dup.nothingRecoverable") : string.Empty;
+
+    public string SelectGroupLabel => L.T("dup.selectGroup");
+
+    /// <summary>
+    /// Ticks every redundant copy in this group — and only this group.
+    /// <para>
+    /// A search over a real disk comes back with thousands of groups. Ticking them one at a
+    /// time is not a thing anybody finishes, and the scroll bar gets too small to grab long
+    /// before the patience runs out. The keeper has no checkbox at all, so this cannot reach
+    /// it however many times it is pressed.
+    /// </para>
+    /// </summary>
+    public void SelectAll()
+    {
+        foreach (DuplicateCopyViewModel copy in Copies) copy.IsChecked = true;
+    }
 }

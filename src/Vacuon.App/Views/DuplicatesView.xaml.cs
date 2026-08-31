@@ -31,6 +31,20 @@ public partial class DuplicatesView : UserControl
 
     private void OnStop(object sender, RoutedEventArgs e) => Model?.CancelDuplicateSearch();
 
+    private void OnSelectGroup(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is DuplicateGroupViewModel group)
+            group.SelectAll();
+    }
+
+    private void OnLinkSelected(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+
+        Window? owner = Window.GetWindow(this);
+        if (owner is not null) model.LinkDuplicates(owner);
+    }
+
     private void OnQuarantineSelected(object sender, RoutedEventArgs e)
     {
         MainViewModel? model = Model;
