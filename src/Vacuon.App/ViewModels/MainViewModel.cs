@@ -2280,6 +2280,88 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         StatusText += "  ·  " + string.Join("  ·  ", parts);
     }
 
+    // ================= sobrescrever (F7.6) =================
+
+    /// <summary>
+    /// Overwrites the ticked files and removes them (F7.6).
+    /// <para>
+    /// ⚠️ The doubts are worked out first and shown before anybody agrees to anything, and
+    /// they are <b>detected</b> rather than boilerplate: the volume already told the scan
+    /// whether it has a seek penalty, and each file's attributes say whether writing over it
+    /// would land somewhere else. On solid state this does not erase anything, and saying
+    /// that afterwards would be saying it too late.
+    /// </para>
+    /// </summary>
+    public async void ShredSelection(Window owner)
+    {
+        VolumeIndex? index = Index;
+        List<string> paths = [.. BasketPaths(out _).Where(File.Exists)];
+
+        if (paths.Count == 0)
+        {
+            StatusText = L.T("move.nothingSelected");
+            return;
+        }
+
+        bool solidState = index is not null && !index.Volume.IncursSeekPenalty;
+        bool shadows = _shadowCopiesPresent;
+
+        ShredDoubt doubt = ShredDoubt.None;
+        long bytes = 0;
+
+        foreach (string path in paths)
+        {
+            var info = new FileInfo(path);
+            bytes += info.Length;
+            doubt |= ShredService.DoubtsAbout(info, solidState, shadows);
+        }
+
+        if (!ShredDialog.Confirm(owner, paths, bytes, doubt)) return;
+
+        List<ShredResult> results = await Task.Run(() =>
+        {
+            var done = new List<ShredResult>(paths.Count);
+            foreach (string path in paths) done.Add(ShredService.Shred(path, solidState, shadows));
+            return done;
+        });
+
+        int gone = 0;
+        long shredded = 0;
+        var failed = new List<string>();
+
+        foreach (ShredResult result in results)
+        {
+            if (result.Succeeded)
+            {
+                gone++;
+                shredded += result.Bytes;
+                continue;
+            }
+
+            failed.Add($"{result.Path} — {result.Message ?? result.Outcome.ToString()}");
+        }
+
+        StatusText = gone == 0
+            ? L.T("shred.nothing")
+            : doubt != ShredDoubt.None
+                ? L.T("shred.doneUncertain", Format.Count(gone), Format.Bytes(shredded))
+                : gone == 1
+                    ? L.T("shred.doneOne", Format.Count(gone), Format.Bytes(shredded))
+                    : L.T("shred.done", Format.Count(gone), Format.Bytes(shredded));
+
+        if (failed.Count > 0) LastFailures = [.. failed];
+
+        if (gone > 0)
+        {
+            DropDeletedRows();
+            RefreshAggregates();
+            LoadVolumes();
+        }
+    }
+
+    /// <summary>Whether this volume holds shadow copies, from the last time it was asked.</summary>
+    private bool _shadowCopiesPresent;
+
     // ================= compactar (F7.11) =================
 
     /// <summary>
@@ -3722,6 +3804,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         foreach (SystemSpaceItem item in files) SystemSpaceRows.Add(new SystemSpaceRow(item));
         SystemSpaceRows.Add(new SystemSpaceRow(shadow));
+
+        // Remembered because the shred warning needs it, and asking again there would mean
+        // another second of somebody else's process in the middle of a confirmation.
+        _shadowCopiesPresent = shadow.IsKnown && shadow.Bytes > 0;
 
         Raise(nameof(HasSystemSpace));
     }

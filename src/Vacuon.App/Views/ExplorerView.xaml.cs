@@ -426,6 +426,15 @@ public partial class ExplorerView : UserControl
 
     private void OnCompress(object sender, RoutedEventArgs e) => Model?.CompressSelection();
 
+    private void OnShred(object sender, RoutedEventArgs e)
+    {
+        MainViewModel? model = Model;
+        if (model is null) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        model.ShredSelection(owner);
+    }
+
     private void OnQuarantine(object sender, RoutedEventArgs e)
     {
         MainViewModel? model = Model;

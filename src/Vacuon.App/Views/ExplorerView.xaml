@@ -415,6 +415,7 @@
                             <MenuItem Header="{DynamicResource S.transfer.copyButton}" Click="OnCopyTo"/>
                             <MenuItem Header="{DynamicResource S.move.button}" Click="OnMoveTo"/>
                             <MenuItem Header="{DynamicResource S.compress.button}" Click="OnCompress"/>
+                            <MenuItem Header="{DynamicResource S.shred.button}" Click="OnShred"/>
                             <MenuItem Header="{DynamicResource S.quarantine.button}" Click="OnQuarantine"/>
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.select.all}" Command="{Binding SelectAllCommand}"/>
