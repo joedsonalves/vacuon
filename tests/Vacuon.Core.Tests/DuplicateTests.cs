@@ -99,6 +99,80 @@ public class DuplicateFinderTests : IDisposable
 
     // ---- the promise ---------------------------------------------------------
 
+
+    [Fact]
+    public void TheSameFilesGiveTheSameGroups_HoweverTheThreadsFinish()
+    {
+        // The files are hashed several at a time now. A result that depended on which
+        // thread got there first would be a result nobody could check twice, so the hashes
+        // land at the position their file had and the grouping is built by walking that
+        // array in order — which is what this asks for, twenty times over.
+        for (int i = 0; i < 12; i++)
+        {
+            byte[] shared = Pattern(60_000, (byte)(i + 1));
+            Write($"pasta-a/copia-{i}.bin", shared);
+            Write($"pasta-b/outro-nome-{i}.bin", shared);
+            Write($"pasta-c/terceira-{i}.bin", shared);
+
+            // And one file per size that only looks like the others.
+            Write($"pasta-d/sozinho-{i}.bin", Pattern(60_000, (byte)(i + 100)));
+        }
+
+        VolumeIndex index = Index();
+        string first = Signature(new DuplicateFinder().Find(index, Small()));
+
+        for (int run = 0; run < 20; run++)
+            Assert.Equal(first, Signature(new DuplicateFinder().Find(index, Small())));
+
+        // Twelve groups of three, and the lookalikes grouped with nobody.
+        Assert.Equal(12, first.Split('|').Length - 1);
+    }
+
+    [Fact]
+    public void DifferentNamesWithIdenticalContentAreTheSameFile()
+    {
+        // ⚠️ Reported as a suspicion: "different names, same size — that is a coincidence,
+        // not a duplicate". The size never decides anything here; the full hash does. Two
+        // names over one set of bytes is exactly what a duplicate is, and refusing to say so
+        // would hide the real ones — an installer kept twice under generated names is the
+        // most common large duplicate on a Windows disk.
+        byte[] content = Pattern(120_000, 5);
+        Write("instalador-antigo.exe", content);
+        Write("setup_12.5.7_full.exe", content);
+
+        DuplicateReport report = new DuplicateFinder().Find(Index(), Small());
+
+        DuplicateGroup group = Assert.Single(report.Groups);
+        Assert.Equal(2, group.CopyCount);
+    }
+
+    [Fact]
+    public void TheSameNameWithDifferentContentIsNotTheSameFile()
+    {
+        // The other half of the same misunderstanding: grouping by name and size would put
+        // these two together, and they share nothing but a name and a length.
+        Write("um/config.json", Pattern(50_000, 11));
+        Write("dois/config.json", Pattern(50_000, 22));
+
+        DuplicateReport report = new DuplicateFinder().Find(Index(), Small());
+
+        Assert.Empty(report.Groups);
+    }
+
+    /// <summary>Groups and their members, in order, as one comparable string.</summary>
+    private static string Signature(DuplicateReport report)
+    {
+        var text = new System.Text.StringBuilder();
+
+        foreach (DuplicateGroup group in report.Groups)
+        {
+            text.Append('|').Append(group.Bytes).Append(':');
+            foreach (DuplicateFile file in group.Files) text.Append(Path.GetFileName(file.Path)).Append(',');
+        }
+
+        return text.ToString();
+    }
+
     [Fact]
     public void TwoIdenticalFilesAreOneGroup()
     {
