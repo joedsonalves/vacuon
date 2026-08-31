@@ -46,6 +46,18 @@ project.fragment.lock.json
 /CLAUDE.md
 /CLAUDE.local.md
 
+# Atalhos de sessão desta máquina. O CLAUDE-ELEVADO.bat carrega o caminho absoluto
+# da pasta do autor dentro dele — é configuração de quem roda, não do projeto.
+/CLAUDE-*.bat
+/CLAUDE-*.cmd
+
+# Rascunhos de sessão (scripts de manifesto, saídas coladas, testes de uma vez só).
+scratchpad/
+
+# Snapshots binários do próprio Vacuon. Guardam o array de FileEntry inteiro e o blob
+# de nomes — ou seja, a árvore de arquivos de quem varreu. Nunca entram no repositório.
+*.vsnap
+
 # A suíte NÃO entra aqui, e é deliberado. Ela é a evidência de tudo que o README
 # afirma sobre o parser de MFT, e "compile e teste você mesmo" é a alternativa
 # que o projeto oferece a quem não quer confiar num binário sem assinatura.
