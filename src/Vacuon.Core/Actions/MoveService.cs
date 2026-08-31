@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
 using Vacuon.Native.Interop;
@@ -328,7 +328,7 @@ public sealed class MoveService
         return rootA.Length > 0 && string.Equals(rootA, rootB, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string Normalize(string path)
+    internal static string Normalize(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return string.Empty;
 
@@ -347,7 +347,7 @@ public sealed class MoveService
         }
     }
 
-    private static (long Bytes, bool Exists) Measure(string path, bool isDirectory)
+    internal static (long Bytes, bool Exists) Measure(string path, bool isDirectory)
     {
         try
         {
@@ -388,7 +388,7 @@ public sealed class MoveService
         return total;
     }
 
-    private static string Describe(ProtectionReason reason) => L.T(reason switch
+    internal static string Describe(ProtectionReason reason) => L.T(reason switch
     {
         ProtectionReason.VolumeRoot => "protect.volumeRoot",
         ProtectionReason.OperatingSystem => "protect.operatingSystem",
