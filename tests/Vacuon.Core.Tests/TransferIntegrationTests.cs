@@ -282,4 +282,65 @@ public class TransferIntegrationTests : IDisposable
         TransferReport report = await service.ExecuteAsync(plan, null, CancellationToken.None);
         Assert.Equal(TransferPhase.Finished, report.Phase);
     }
+
+    [Fact]
+    public async Task AFileSomebodyElseHasOpen_IsNamedInTheReport()
+    {
+        // The whole point of this one: a folder is a single item, so before this the report
+        // could only say that something inside had failed. It runs the real robocopy against
+        // a real lock, because "robocopy prints an ERROR line naming the file" is exactly the
+        // kind of claim that is worth nothing written from memory.
+        string source = Dir("locked-source");
+        string destination = Dir("locked-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string locked = WriteFile(source, "locked.bin", 4096);
+
+        using (var hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = new FileTransferService();
+            TransferPlan plan = service.Plan([source], destination, TransferKind.Copy);
+            TransferReport report = await service.ExecuteAsync(plan);
+
+            Assert.Equal(TransferPhase.Failed, report.Phase);
+
+            // Named, once, despite the retry naming it a second time.
+            Assert.Equal(1, report.FailedFilePaths.Count(p => string.Equals(p, locked, StringComparison.OrdinalIgnoreCase)));
+
+            // And the tool's own count agrees with the list, so the window has nothing to
+            // apologise for.
+            Assert.Equal(1, report.FailedFileCount);
+
+            // The one that was not locked still travelled.
+            Assert.True(File.Exists(Path.Combine(destination, "locked-source", "fine.bin"))
+                        || File.Exists(Path.Combine(destination, "fine.bin")));
+        }
+    }
+
+    [Fact]
+    public async Task BytesOfAFileThatFailed_AreNotCountedAsTransferred()
+    {
+        // Robocopy announces a file before it knows whether it will land, and then announces
+        // it again on the retry. Counting those lines and stopping there had the window
+        // reporting more bytes transferred than the plan weighed in the first place.
+        string source = Dir("accounting-source");
+        string destination = Dir("accounting-destination");
+
+        WriteFile(source, "arrives.bin", 4096);
+        string locked = WriteFile(source, "never-arrives.bin", 4096);
+
+        using (var hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = new FileTransferService();
+            TransferPlan plan = service.Plan([source], destination, TransferKind.Copy);
+            TransferReport report = await service.ExecuteAsync(plan);
+
+            // Exactly the one file that made it, once.
+            Assert.Equal(4096, report.BytesTransferred);
+
+            // And with the phantom bytes gone, the two readings agree, so nothing has to be
+            // reported as uncertain.
+            Assert.False(report.TotalIsUncertain);
+        }
+    }
 }

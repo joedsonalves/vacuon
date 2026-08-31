@@ -217,6 +217,10 @@ public sealed class FileTransferService
         return new TransferReport(plan.Kind, plan.Destination, results, phase,
                                   state.BytesDone, uncertain, clock.Elapsed)
         {
+            // The tool's own count, kept beside the list of names so the window can say when
+            // the two disagree instead of showing the shorter one as the whole story.
+            FailedFileCount = state.SummaryFilesFailed,
+
             // A copy frees nothing anywhere. A move frees the source volume only by leaving
             // it, and only the caller knows which volumes are in play. A permanent delete
             // always does.
@@ -248,6 +252,7 @@ public sealed class FileTransferService
                                                            RunState state, CancellationToken cancellationToken)
     {
         long before = state.BytesDone;
+        int failedBefore = state.FailedCount;
 
         if (item.IsDirectory)
         {
@@ -258,7 +263,8 @@ public sealed class FileTransferService
                 : RobocopyArguments.Copy(item.Source, item.Destination, null, _threads);
 
             int code = await RunRobocopyAsync(args, item, state, cancellationToken).ConfigureAwait(false);
-            return Verdict(item, code, state.BytesDone - before, Directory.Exists(item.Destination));
+            return Verdict(item, code, state.BytesDone - before, Directory.Exists(item.Destination),
+                           state.FailedSince(failedBefore));
         }
 
         string sourceFolder = Path.GetDirectoryName(item.Source) ?? string.Empty;
@@ -272,7 +278,8 @@ public sealed class FileTransferService
                 : RobocopyArguments.Copy(sourceFolder, destinationFolder, name, _threads);
 
             int code = await RunRobocopyAsync(direct, item, state, cancellationToken).ConfigureAwait(false);
-            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination));
+            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
+                           state.FailedSince(failedBefore));
         }
 
         // Robocopy writes files under the name they already have, so a file whose name is
@@ -293,7 +300,8 @@ public sealed class FileTransferService
             string landed = Path.Combine(staging, name);
             if (File.Exists(landed)) File.Move(landed, item.Destination, overwrite: false);
 
-            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination));
+            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
+                           state.FailedSince(failedBefore));
         }
         finally
         {
@@ -332,6 +340,7 @@ public sealed class FileTransferService
 
         string empty = Path.Combine(Path.GetTempPath(), $".vacuon-empty-{Guid.NewGuid():N}");
         long before = state.BytesDone;
+        int failedBefore = state.FailedCount;
 
         try
         {
@@ -344,7 +353,8 @@ public sealed class FileTransferService
             if (code != RunState.CancelledExitCode && Directory.Exists(full))
                 Directory.Delete(full, recursive: true);
 
-            return Verdict(item, code, state.BytesDone - before, !Directory.Exists(full));
+            return Verdict(item, code, state.BytesDone - before, !Directory.Exists(full),
+                           state.FailedSince(failedBefore));
         }
         finally
         {
@@ -357,17 +367,26 @@ public sealed class FileTransferService
     /// "Robocopy returned a friendly number" and "the item is over there" are different
     /// statements, and only the second one is worth reporting. Both get checked.
     /// </summary>
-    private static TransferItemResult Verdict(TransferItem item, int code, long bytes, bool arrived)
+    private static TransferItemResult Verdict(TransferItem item, int code, long bytes, bool arrived,
+                                              IReadOnlyList<string> failed)
     {
         if (code == RunState.CancelledExitCode)
-            return new TransferItemResult(item, TransferOutcome.Cancelled, bytes);
+            return new TransferItemResult(item, TransferOutcome.Cancelled, bytes) { FailedPaths = failed };
 
         if (!RobocopyOutput.Succeeded(code))
-            return new TransferItemResult(item, TransferOutcome.Failed, bytes, RobocopyOutput.Describe(code));
+        {
+            return new TransferItemResult(item, TransferOutcome.Failed, bytes, RobocopyOutput.Describe(code))
+            {
+                FailedPaths = failed,
+            };
+        }
 
         return arrived
-            ? new TransferItemResult(item, TransferOutcome.Done, bytes)
-            : new TransferItemResult(item, TransferOutcome.Failed, bytes, L.T("transfer.notThere"));
+            ? new TransferItemResult(item, TransferOutcome.Done, bytes) { FailedPaths = failed }
+            : new TransferItemResult(item, TransferOutcome.Failed, bytes, L.T("transfer.notThere"))
+            {
+                FailedPaths = failed,
+            };
     }
 
     private async Task<int> RunRobocopyAsync(List<string> arguments, TransferItem item,
@@ -399,8 +418,15 @@ public sealed class FileTransferService
 
         process.OutputDataReceived += (_, e) => state.Consume(e.Data, item);
 
+        // Standard error is redirected, so it has to be drained: a pipe nobody reads fills up
+        // and the child blocks writing to it, which would hang a copy rather than fail it.
+        // Robocopy put its error lines on stdout in every run measured here, so this is a
+        // safeguard and not the path the failure list depends on.
+        process.ErrorDataReceived += (_, e) => state.Consume(e.Data, item);
+
         process.Start();
         process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         try
         {
@@ -449,6 +475,35 @@ public sealed class FileTransferService
         /// <summary>Summary rows seen so far. Every third one is Bytes; the others are Dirs and Files.</summary>
         private int _summaryRows;
         private long _summaryBytes = -1;
+        private int _summaryFilesFailed;
+
+        // Order matters, because this is the list the window shows, so a list beside a set
+        // rather than a set alone. The retry names the same file a second time.
+        private readonly List<string> _failed = [];
+        private readonly HashSet<string> _failedSeen = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// What each file in flight was counted as, so a failure can take it back out.
+        /// <para>
+        /// ⚠️ Robocopy announces a file <b>before</b> it knows whether it will land: a locked
+        /// file gets a "New File" line with its full size, then an error, then both again for
+        /// the retry. Counting the lines and stopping there had the window reporting
+        /// <c>10.0 MiB / 6.5 MiB</c> transferred and <c>34 / 20</c> files on a batch where
+        /// fourteen of twenty files never moved a byte — a total larger than the plan it was
+        /// dividing into, which is the app claiming what it did not measure.
+        /// </para>
+        /// <para>
+        /// Bounded on purpose. An error arrives right behind its own file line, and with
+        /// /MT:32 at most a few dozen are in flight, so the last few hundred is plenty; a
+        /// dictionary that remembered every file would grow with the copy. When a name has
+        /// fallen out, the byte total simply stays high and the closing cross-check against
+        /// robocopy's own summary reports the total as uncertain — which is the honest
+        /// outcome, and the one that was already there.
+        /// </para>
+        /// </summary>
+        private const int InFlightMemory = 512;
+        private readonly Dictionary<string, long> _inFlight = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Queue<string> _inFlightOrder = new();
 
         public RunState(TransferPlan plan, Stopwatch clock, TransferRateMeter meter,
                         IProgress<TransferProgress>? progress)
@@ -464,6 +519,21 @@ public sealed class FileTransferService
         /// <summary>Robocopy's own total, or -1 when no run printed a readable summary.</summary>
         public long SummaryBytes { get { lock (_gate) return _summaryBytes; } }
 
+        /// <summary>Files the closing tables counted as FAILED, added up across the batch.</summary>
+        public int SummaryFilesFailed { get { lock (_gate) return _summaryFilesFailed; } }
+
+        /// <summary>How many distinct files have been named as failed so far.</summary>
+        public int FailedCount { get { lock (_gate) return _failed.Count; } }
+
+        /// <summary>
+        /// The files named as failed since a mark. Items run one after another, so a mark
+        /// taken before an item and read after it belongs to that item alone.
+        /// </summary>
+        public IReadOnlyList<string> FailedSince(int mark)
+        {
+            lock (_gate) return _failed.GetRange(mark, _failed.Count - mark);
+        }
+
         public void CountFile(string path, long bytes)
         {
             lock (_gate)
@@ -472,6 +542,8 @@ public sealed class FileTransferService
                 _files++;
                 _current = path;
                 _percent = null;
+
+                Remember(path, bytes);
             }
 
             Report(TransferPhase.Running, path);
@@ -502,6 +574,20 @@ public sealed class FileTransferService
                     Report(TransferPhase.Running, null);
                     break;
 
+                case RobocopyLineKind.Error:
+                    lock (_gate)
+                    {
+                        // One retry means every failure is announced twice. Listing it twice
+                        // would read as two files lost where one was.
+                        if (_failedSeen.Add(parsed.Path)) _failed.Add(parsed.Path);
+
+                        // And the bytes this file was optimistically credited with go back.
+                        Forget(parsed.Path);
+                    }
+
+                    Report(TransferPhase.Running, null);
+                    break;
+
                 case RobocopyLineKind.SummaryRow:
                     lock (_gate)
                     {
@@ -511,9 +597,38 @@ public sealed class FileTransferService
                         // the labels are translated on some installs and the order is not.
                         if (_summaryRows % 3 == 0)
                             _summaryBytes = (_summaryBytes < 0 ? 0 : _summaryBytes) + parsed.Bytes;
+
+                        // The Files row carries the tool's own count of what failed, which is
+                        // the figure the named list gets checked against.
+                        if (_summaryRows % 3 == 2) _summaryFilesFailed += (int)parsed.Failed;
                     }
                     break;
             }
+        }
+
+        /// <summary>Credits a file, and forgets the oldest one once the window is full.</summary>
+        private void Remember(string path, long bytes)
+        {
+            if (path.Length == 0) return;
+
+            if (!_inFlight.ContainsKey(path)) _inFlightOrder.Enqueue(path);
+            _inFlight[path] = bytes;
+
+            while (_inFlightOrder.Count > InFlightMemory)
+            {
+                string oldest = _inFlightOrder.Dequeue();
+                if (!_inFlight.ContainsKey(oldest)) continue;
+                if (!_inFlightOrder.Contains(oldest)) _inFlight.Remove(oldest);
+            }
+        }
+
+        /// <summary>Takes a file back out of the count, bytes and all, once it has failed.</summary>
+        private void Forget(string path)
+        {
+            if (!_inFlight.Remove(path, out long bytes)) return;
+
+            _bytes -= bytes;
+            _files--;
         }
 
         public void Report(TransferPhase phase, string? current)

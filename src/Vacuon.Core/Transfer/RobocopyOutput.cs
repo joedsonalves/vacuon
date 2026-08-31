@@ -1,4 +1,5 @@
 using System.Globalization;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Transfer;
 
@@ -14,6 +15,8 @@ public enum RobocopyLineKind
     Percent,
     /// <summary>One numeric row of the closing table: Dirs, then Files, then Bytes.</summary>
     SummaryRow,
+    /// <summary>A file the tool could not copy. Named here, and named again by the retry.</summary>
+    Error,
 }
 
 public readonly record struct RobocopyLine(
@@ -27,6 +30,9 @@ public readonly record struct RobocopyLine(
 
     /// <summary>Summary rows only: the Extras column, which is what a purge removed.</summary>
     public long Extras { get; init; }
+
+    /// <summary>Error lines only: the Win32 code, 32 for a file somebody else has open.</summary>
+    public int ErrorCode { get; init; }
 }
 
 /// <summary>
@@ -68,6 +74,11 @@ public static class RobocopyOutput
         // A summary row is recognised here but not interpreted: which quantity it counts
         // depends on how many rows came before it, and a single line cannot know that. The
         // runner keeps that count — see FileTransferService.
+        // Before the summary check, because an error line carries a clock and a clock
+        // carries colons, and the summary test keys on a colon.
+        if (TryParseError(line, out string failedPath, out int errorCode))
+            return new RobocopyLine(RobocopyLineKind.Error, 0, failedPath, 0) { ErrorCode = errorCode };
+
         if (TryParseSummaryRow(line, out long copied, out long failed, out long extras))
             return new RobocopyLine(RobocopyLineKind.SummaryRow, copied, string.Empty, 0)
             {
@@ -181,22 +192,79 @@ public static class RobocopyOutput
     }
 
     /// <summary>
-    /// A plain-language reading of the exit bitmask, for a report that has to say what
-    /// happened rather than print a number.
+    /// The path robocopy named in an error line, so the window can say <em>which</em> files
+    /// did not make it instead of only how many.
+    /// <para>
+    /// Measured against the real tool, on a machine whose Windows is Portuguese. The line is
+    /// <c>2026/08/31 03:34:56 ERROR 32 (0x00000020) Copying File C:\folder\locked.bin</c>,
+    /// and the sentence underneath it — the one that explains the code — arrived translated
+    /// while this line did not.
+    /// </para>
+    /// <para>
+    /// ⚠️ Nothing here reads the word <c>ERROR</c> or the verb after the code. Both are words,
+    /// and words are what this file has already been burned by: the same run printed
+    /// <c>Bytes :</c> in English and <c>Ended : segunda-feira</c> in Portuguese. The anchor is
+    /// <c>(0x</c> followed by a closing bracket, which is punctuation, plus a rooted path
+    /// after it. A retry names the same file again, so the caller has to fold duplicates.
+    /// </para>
+    /// </summary>
+    public static bool TryParseError(string line, out string path, out int code)
+    {
+        path = string.Empty;
+        code = 0;
+
+        int hex = line.IndexOf("(0x", StringComparison.Ordinal);
+        if (hex < 0) return false;
+
+        int close = line.IndexOf(')', hex);
+        if (close < 0) return false;
+
+        // The decimal code sits immediately in front of the bracket: "ERROR 32 (0x...)".
+        ReadOnlySpan<char> head = line.AsSpan(0, hex).TrimEnd();
+        int space = head.LastIndexOf(' ');
+        if (space >= 0)
+        {
+            int.TryParse(head[(space + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out code);
+        }
+
+        path = RootedTail(line.AsSpan(close + 1));
+        return path.Length > 0;
+    }
+
+    /// <summary>
+    /// The first rooted path in what is left of the line, drive letter or UNC. The words in
+    /// front of it are translated; a path never is.
+    /// </summary>
+    private static string RootedTail(ReadOnlySpan<char> tail)
+    {
+        for (int i = 0; i + 2 < tail.Length; i++)
+        {
+            bool drive = char.IsLetter(tail[i]) && tail[i + 1] == ':' && tail[i + 2] == '\\';
+            bool unc = tail[i] == '\\' && tail[i + 1] == '\\' && char.IsLetterOrDigit(tail[i + 2]);
+
+            if (drive || unc) return tail[i..].Trim().ToString();
+        }
+
+        return string.Empty;
+    }
+
+    /// <summary>
+    /// What the exit bitmask means, in a sentence somebody can read.
+    /// <para>
+    /// ⚠️ The number itself does not appear, and that is the point. This used to return
+    /// <c>robocopy: files copied, some items could not be copied (9)</c>, and the 9 is a
+    /// bitmask — 1 for "files copied" plus 8 for "some failed". On screen, at the end of a
+    /// copy, it reads as a count of nine failed files. It was read that way. A figure the
+    /// app never measured as a quantity has no business being printed like one, and the name
+    /// of the tool doing the work is not the person's business either.
+    /// </para>
     /// </summary>
     public static string Describe(int exitCode)
     {
-        if (exitCode < 0) return $"robocopy exited abnormally ({exitCode})";
-        if (exitCode == 16) return "robocopy reported a fatal error (16)";
+        if (exitCode < 0 || exitCode == 16) return L.T("transfer.itemFatal");
 
-        var flags = new List<string>(4);
-        if ((exitCode & 1) != 0) flags.Add("files copied");
-        if ((exitCode & 2) != 0) flags.Add("extra items at the destination");
-        if ((exitCode & 4) != 0) flags.Add("mismatched items");
-        if ((exitCode & 8) != 0) flags.Add("some items could not be copied");
-
-        return flags.Count == 0
-            ? "robocopy found nothing to do (0)"
-            : $"robocopy: {string.Join(", ", flags)} ({exitCode})";
+        return (exitCode & 8) != 0
+            ? L.T("transfer.itemSomeFailed")
+            : L.T("transfer.itemFailed");
     }
 }

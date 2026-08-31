@@ -110,6 +110,78 @@ public class RobocopyOutputTests
         // successful copy as a failure, because a copy that copied something returns 1.
         Assert.Equal(ok, RobocopyOutput.Succeeded(code));
     }
+
+    // Copied out of a real run: a file held open by another process, robocopy invoked exactly
+    // the way RobocopyArguments invokes it, on a Windows whose display language is Portuguese.
+    private const string ErrorLine =
+        @"2026/08/31 03:34:56 ERROR 32 (0x00000020) Copying File C:\folder\travado.bin";
+
+    // The sentence robocopy prints underneath the line above. It arrived translated in the
+    // same run whose error line was English, which is why nothing matches on words.
+    private const string ErrorDescriptionLine =
+        "O processo nao pode aceder ao ficheiro porque este esta a ser utilizado por outro processo.";
+
+    [Fact]
+    public void ErrorLine_NamesTheFileThatCouldNotBeCopied()
+    {
+        RobocopyLine line = RobocopyOutput.Parse(ErrorLine);
+
+        Assert.Equal(RobocopyLineKind.Error, line.Kind);
+        Assert.Equal(@"C:\folder\travado.bin", line.Path);
+        Assert.Equal(32, line.ErrorCode);
+    }
+
+    [Fact]
+    public void ErrorLine_IsFoundWithoutReadingASingleWord()
+    {
+        // Same shape, every word replaced. What is matched is the bracketed hex code and the
+        // rooted path after it, because those are the two things no install translates.
+        RobocopyLine line = RobocopyOutput.Parse(
+            @"2026/08/31 03:34:56 XYZZY 5 (0x00000005) Palavra Qualquer D:\pasta\arquivo.bin");
+
+        Assert.Equal(RobocopyLineKind.Error, line.Kind);
+        Assert.Equal(@"D:\pasta\arquivo.bin", line.Path);
+        Assert.Equal(5, line.ErrorCode);
+    }
+
+    [Fact]
+    public void TheTranslatedSentenceUnderAnError_IsNotMistakenForAnything()
+    {
+        Assert.Equal(RobocopyLineKind.Ignored, RobocopyOutput.Parse(ErrorDescriptionLine).Kind);
+    }
+
+    [Fact]
+    public void RetryLimitLine_CarriesNoPathAndIsIgnored()
+    {
+        // It follows every exhausted retry and names nothing. Counted as an error it would
+        // add a nameless entry to the list for each file that failed.
+        Assert.Equal(RobocopyLineKind.Ignored, RobocopyOutput.Parse("ERROR: RETRY LIMIT EXCEEDED.").Kind);
+    }
+
+    [Fact]
+    public void TheFilesRowOfARealRun_CarriesTwoFailures()
+    {
+        // The closing table of the run the error line above came from. Six files, four
+        // copied, two failed - the second reading the named list gets checked against.
+        RobocopyLine files = RobocopyOutput.Parse("   Files :         6         4         0         0         2         0");
+
+        Assert.Equal(RobocopyLineKind.SummaryRow, files.Kind);
+        Assert.Equal(4, files.Bytes);
+        Assert.Equal(2, files.Failed);
+    }
+
+    [Fact]
+    public void TheExitCodeIsNeverPrintedAsIfItWereACount()
+    {
+        // 9 is 1 (files copied) | 8 (some failed). It used to be shown at the end of a copy
+        // as "robocopy: files copied, some items could not be copied (9)", and it was read as
+        // nine lost files. A bitmask is not a quantity, and the tool's name is not the
+        // person's business.
+        string text = RobocopyOutput.Describe(9);
+
+        Assert.DoesNotContain("9", text);
+        Assert.DoesNotContain("robocopy", text, StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public class RobocopyArgumentTests

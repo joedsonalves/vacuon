@@ -85,6 +85,16 @@ public sealed record TransferItemResult(
     string? Message = null)
 {
     public bool Succeeded => Outcome == TransferOutcome.Done;
+
+    /// <summary>
+    /// The files inside this item that could not be copied, named one by one.
+    /// <para>
+    /// A folder is one item, so a folder whose contents partly failed reported a single line
+    /// saying something had gone wrong, with no way to find out what. These are the paths the
+    /// tool itself named while it worked, with the retries folded together.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> FailedPaths { get; init; } = [];
 }
 
 /// <summary>
@@ -184,6 +194,21 @@ public sealed record TransferReport(
         Results.Where(r => r.Outcome == TransferOutcome.Blocked);
 
     public bool WasCancelled => Phase == TransferPhase.Cancelled;
+
+    /// <summary>Every file named as failed, across all the items in the batch.</summary>
+    public IReadOnlyList<string> FailedFilePaths => [.. Results.SelectMany(r => r.FailedPaths)];
+
+    /// <summary>
+    /// How many files the tool's own closing table counted as FAILED.
+    /// <para>
+    /// A second reading of the same reality as <see cref="FailedFilePaths"/>, and the window
+    /// compares the two rather than leaving it to the person: an error line names one file,
+    /// but a single error can sink a whole directory, so the named list can be shorter than
+    /// this count. When it is, the window says the list is partial instead of implying it is
+    /// everything.
+    /// </para>
+    /// </summary>
+    public int FailedFileCount { get; init; }
 
     /// <summary>
     /// Whether these bytes are space the source volume got back.

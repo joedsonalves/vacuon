@@ -26,6 +26,11 @@ public partial class TransferWindow : Window
 {
     private readonly TransferPlan _plan;
     private readonly CancellationTokenSource _cancellation = new();
+    private readonly System.Windows.Threading.DispatcherTimer _copyHintTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(3),
+    };
+
     private bool _finished;
 
     /// <summary>What the run did, available once the window has closed.</summary>
@@ -53,6 +58,12 @@ public partial class TransferWindow : Window
         DestinationText.Text = plan.Kind == TransferKind.Delete
             ? L.T("transfer.deleteSubtitle", Format.Count(plan.Count), Format.Bytes(plan.Bytes))
             : L.T("transfer.into", plan.Destination);
+
+        _copyHintTimer.Tick += (_, _) =>
+        {
+            _copyHintTimer.Stop();
+            CopyHint.Text = L.T("transfer.clickToCopy");
+        };
 
         Reset();
 
@@ -167,6 +178,11 @@ public partial class TransferWindow : Window
     {
         _finished = true;
 
+        // Nothing is moving any more, so there is no rate to show. Leaving the last reading
+        // on screen would be a live figure that stopped being live — and the average over the
+        // whole run is right there in the line below, which is the honest version of it.
+        SpeedValue.Text = "—";
+
         Bar.IsIndeterminate = false;
         CancelButton.Visibility = Visibility.Collapsed;
         CloseButton.Visibility = Visibility.Visible;
@@ -192,17 +208,104 @@ public partial class TransferWindow : Window
                 failures.Take(20).Select(f => $"{f.Item.Source} — {Reason(f)}"));
         }
 
+        ShowFailedFiles(report);
+
         CurrentText.Text = string.Empty;
         PercentText.Text = string.Empty;
     }
 
+    /// <summary>
+    /// The files that did not make it, by name.
+    /// <para>
+    /// The card above reports items, and an item is often a folder: a copy of one folder
+    /// whose contents partly failed said so in a single line and left no way to find out
+    /// which files were lost. These are the paths the tool named as it worked.
+    /// </para>
+    /// </summary>
+    private void ShowFailedFiles(TransferReport report)
+    {
+        IReadOnlyList<string> named = report.FailedFilePaths;
+        if (named.Count == 0) return;
+
+        FailedFilesSection.Visibility = Visibility.Visible;
+        FailedFilesList.ItemsSource = named;
+        CopyHint.Text = L.T("transfer.clickToCopy");
+        SetToggleText();
+
+        // Two readings of the same reality, compared here rather than by the person: the
+        // paths named one by one, and the count from the tool's own closing table. One error
+        // can sink a whole directory without naming what was inside it, so the list can be
+        // the shorter of the two — and when it is, it says so instead of passing for the lot.
+        if (report.FailedFileCount > named.Count)
+        {
+            FailedFilesNote.Visibility = Visibility.Visible;
+            FailedFilesNote.Text = L.T("transfer.failedListPartial",
+                                       Format.Count(named.Count), Format.Count(report.FailedFileCount));
+        }
+    }
+
+    private void SetToggleText()
+    {
+        int count = FailedFilesList.Items.Count;
+        bool open = FailedFilesPanel.Visibility == Visibility.Visible;
+
+        FailedFilesToggle.Content = open
+            ? L.T("transfer.hideFailedFiles")
+            : count == 1
+                ? L.T("transfer.showFailedFilesOne")
+                : L.T("transfer.showFailedFiles", Format.Count(count));
+    }
+
+    /// <summary>
+    /// Puts a failed path on the clipboard, and says so.
+    /// <para>
+    /// The clipboard is a shared thing another process can be holding, and it throws when it
+    /// is. That is worth a sentence rather than a silent nothing: the person clicked, and has
+    /// to know whether to paste or to select by hand.
+    /// </para>
+    /// </summary>
+    private void OnCopyPath(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not TextBlock block || block.Text.Length == 0) return;
+
+        try
+        {
+            Clipboard.SetDataObject(block.Text, copy: true);
+            CopyHint.Text = L.T("transfer.pathCopied");
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException
+                                        or InvalidOperationException)
+        {
+            CopyHint.Text = L.T("transfer.pathNotCopied");
+        }
+
+        // Back to the instruction after a moment, so the next click has something to change.
+        _copyHintTimer.Stop();
+        _copyHintTimer.Start();
+    }
+
+    private void OnToggleFailedFiles(object sender, RoutedEventArgs e)
+    {
+        FailedFilesPanel.Visibility = FailedFilesPanel.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        SetToggleText();
+    }
+
     private static string Describe(TransferReport report)
     {
+        // "1 items did not make it" is the kind of line this project has already gone back
+        // and fixed once, in the delete summary. Same treatment here.
         string headline = report.Phase switch
         {
             TransferPhase.Cancelled => L.T("transfer.cancelled", Format.Count(report.DoneCount)),
-            TransferPhase.Failed => L.T("transfer.someFailed", Format.Count(report.FailedCount)),
-            _ => L.T("transfer.done", Format.Count(report.DoneCount)),
+            TransferPhase.Failed => report.FailedCount == 1
+                ? L.T("transfer.someFailedOne")
+                : L.T("transfer.someFailed", Format.Count(report.FailedCount)),
+            _ => report.DoneCount == 1
+                ? L.T("transfer.doneOne")
+                : L.T("transfer.done", Format.Count(report.DoneCount)),
         };
 
         // "Transferred" and "freed" are different claims, and only a permanent delete or a
