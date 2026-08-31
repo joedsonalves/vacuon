@@ -1,4 +1,4 @@
-﻿using Vacuon.Core.Cleanup;
+using Vacuon.Core.Cleanup;
 using Vacuon.Core.Scheduling;
 using Xunit;
 

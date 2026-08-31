@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Vacuon.Native.Interop;
@@ -48,7 +48,8 @@ internal interface IContextMenu3
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 internal interface IShellFolder
 {
-    [PreserveSig] int ParseDisplayName(nint hwnd, nint bc, [MarshalAs(UnmanagedType.LPWStr)] string displayName,
+    [PreserveSig]
+    int ParseDisplayName(nint hwnd, nint bc, [MarshalAs(UnmanagedType.LPWStr)] string displayName,
                                        out uint eaten, out nint pidl, ref uint attributes);
     [PreserveSig] int EnumObjects(nint hwnd, int flags, out nint enumIdList);
     [PreserveSig] int BindToObject(nint pidl, nint bc, [In] ref Guid riid, out nint obj);
@@ -72,7 +73,8 @@ internal interface IShellFolder
                       nint reserved, out nint obj);
 
     [PreserveSig] int GetDisplayNameOf(nint pidl, uint flags, nint name);
-    [PreserveSig] int SetNameOf(nint hwnd, nint pidl, [MarshalAs(UnmanagedType.LPWStr)] string name,
+    [PreserveSig]
+    int SetNameOf(nint hwnd, nint pidl, [MarshalAs(UnmanagedType.LPWStr)] string name,
                                 uint flags, out nint outPidl);
 }
 

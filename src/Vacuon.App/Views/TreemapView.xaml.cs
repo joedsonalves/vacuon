@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;

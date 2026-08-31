@@ -1,4 +1,4 @@
-﻿namespace Vacuon.Core;
+namespace Vacuon.Core;
 
 /// <summary>
 /// The version, in one place.

@@ -67,13 +67,25 @@ public class PolicyJournalTests
 
             journal.Append(new PolicyChange
             {
-                ComponentId = "a", Hive = "CurrentUser", SubKey = @"Software\X", ValueName = "V",
-                PreviousValue = null, KeyCreated = true, WrittenValue = 1, AtUtc = DateTime.UtcNow,
+                ComponentId = "a",
+                Hive = "CurrentUser",
+                SubKey = @"Software\X",
+                ValueName = "V",
+                PreviousValue = null,
+                KeyCreated = true,
+                WrittenValue = 1,
+                AtUtc = DateTime.UtcNow,
             });
             journal.Append(new PolicyChange
             {
-                ComponentId = "b", Hive = "CurrentUser", SubKey = @"Software\Y", ValueName = "W",
-                PreviousValue = 0, KeyCreated = false, WrittenValue = 1, AtUtc = DateTime.UtcNow,
+                ComponentId = "b",
+                Hive = "CurrentUser",
+                SubKey = @"Software\Y",
+                ValueName = "W",
+                PreviousValue = 0,
+                KeyCreated = false,
+                WrittenValue = 1,
+                AtUtc = DateTime.UtcNow,
             });
 
             // "was absent" and "was zero" have to survive the round trip as different things.

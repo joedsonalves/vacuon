@@ -3,9 +3,9 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Monitoring;
-using Vacuon.Core.Index;
 using Vacuon.Core.Scan;
 using Vacuon.Native.Interop;
 

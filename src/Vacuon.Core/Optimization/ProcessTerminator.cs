@@ -113,7 +113,9 @@ public sealed class ProcessTerminator
         {
             return new TerminateResult
             {
-                Name = displayName, Outcome = TerminateOutcome.Failed, Message = ex.Message,
+                Name = displayName,
+                Outcome = TerminateOutcome.Failed,
+                Message = ex.Message,
             };
         }
 

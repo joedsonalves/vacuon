@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Vacuon.Core.Analyzers;
 using Xunit;
 

@@ -1,4 +1,4 @@
-﻿using System.Runtime.Versioning;
+using System.Runtime.Versioning;
 using Vacuon.Core.Localization;
 using Vacuon.Native.Interop;
 

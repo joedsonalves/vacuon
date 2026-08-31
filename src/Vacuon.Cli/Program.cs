@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 using Vacuon.Cli;
 using Vacuon.Core;
@@ -1062,111 +1062,111 @@ static class Commands
         switch (action)
         {
             case "list":
-            {
-                ScheduleListing listing = scheduler.List();
-
-                Console.WriteLine();
-
-                if (!listing.Succeeded)
                 {
-                    // Not the same sentence as "nothing scheduled": the app did not find out.
-                    Formatting.WriteError("  " + L.T("schedule.unreadable", listing.Error ?? string.Empty));
-                    return 1;
-                }
+                    ScheduleListing listing = scheduler.List();
 
-                if (listing.Tasks.Count == 0)
-                {
-                    Console.WriteLine("  " + L.T("schedule.none"));
+                    Console.WriteLine();
+
+                    if (!listing.Succeeded)
+                    {
+                        // Not the same sentence as "nothing scheduled": the app did not find out.
+                        Formatting.WriteError("  " + L.T("schedule.unreadable", listing.Error ?? string.Empty));
+                        return 1;
+                    }
+
+                    if (listing.Tasks.Count == 0)
+                    {
+                        Console.WriteLine("  " + L.T("schedule.none"));
+                        Console.WriteLine();
+                        return 0;
+                    }
+
+                    foreach (ScheduledTask task in listing.Tasks)
+                    {
+                        Console.WriteLine($"  {task.Name}");
+                        Formatting.WriteMuted($"    {task.Schedule}  ·  {L.T("schedule.nextRun", task.NextRun)}  ·  {task.Status}");
+                        Formatting.WriteMuted($"    {task.Command}");
+                    }
+
                     Console.WriteLine();
                     return 0;
                 }
 
-                foreach (ScheduledTask task in listing.Tasks)
-                {
-                    Console.WriteLine($"  {task.Name}");
-                    Formatting.WriteMuted($"    {task.Schedule}  ·  {L.T("schedule.nextRun", task.NextRun)}  ·  {task.Status}");
-                    Formatting.WriteMuted($"    {task.Command}");
-                }
-
-                Console.WriteLine();
-                return 0;
-            }
-
             case "create":
-            {
-                if (!VolumeProbe.IsElevated())
                 {
-                    Formatting.WriteError(L.T("schedule.needsElevation"));
-                    return 3;
+                    if (!VolumeProbe.IsElevated())
+                    {
+                        Formatting.WriteError(L.T("schedule.needsElevation"));
+                        return 3;
+                    }
+
+                    CleanupProfile profile = ArgString(args, "--profile", "quick").ToLowerInvariant() switch
+                    {
+                        "deep" => CleanupProfile.Deep,
+                        "custom" => CleanupProfile.Custom,
+                        _ => CleanupProfile.Quick,
+                    };
+
+                    ScheduleFrequency frequency = ArgString(args, "--frequency", "daily").ToLowerInvariant() switch
+                    {
+                        "weekly" => ScheduleFrequency.Weekly,
+                        "monthly" => ScheduleFrequency.Monthly,
+                        _ => ScheduleFrequency.Daily,
+                    };
+
+                    TimeOnly at = TimeOnly.TryParse(ArgString(args, "--at", "03:00"), out TimeOnly parsed)
+                        ? parsed
+                        : new TimeOnly(3, 0);
+
+                    string exe = Environment.ProcessPath ?? "vacuon.exe";
+
+                    ScheduleResult result = scheduler.Create(exe, frequency, at, profile);
+
+                    Console.WriteLine();
+
+                    if (!result.Succeeded)
+                    {
+                        // Before the preview, not after: Build falls back to the quick profile
+                        // for anything it will not schedule, so printing the command line first
+                        // would show a run that is never going to happen.
+                        Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
+                        return 1;
+                    }
+
+                    Formatting.WriteMuted("  " + L.T("schedule.alwaysQuarantine"));
+                    Console.WriteLine();
+                    Console.WriteLine("  " + L.T("schedule.willRun", ScheduledCleanup.Build(exe, profile)));
+                    Console.WriteLine();
+
+                    Console.WriteLine("  " + L.T("schedule.created", $"{frequency} {at:HH\\:mm}"));
+                    Console.WriteLine();
+                    return 0;
                 }
-
-                CleanupProfile profile = ArgString(args, "--profile", "quick").ToLowerInvariant() switch
-                {
-                    "deep" => CleanupProfile.Deep,
-                    "custom" => CleanupProfile.Custom,
-                    _ => CleanupProfile.Quick,
-                };
-
-                ScheduleFrequency frequency = ArgString(args, "--frequency", "daily").ToLowerInvariant() switch
-                {
-                    "weekly" => ScheduleFrequency.Weekly,
-                    "monthly" => ScheduleFrequency.Monthly,
-                    _ => ScheduleFrequency.Daily,
-                };
-
-                TimeOnly at = TimeOnly.TryParse(ArgString(args, "--at", "03:00"), out TimeOnly parsed)
-                    ? parsed
-                    : new TimeOnly(3, 0);
-
-                string exe = Environment.ProcessPath ?? "vacuon.exe";
-
-                ScheduleResult result = scheduler.Create(exe, frequency, at, profile);
-
-                Console.WriteLine();
-
-                if (!result.Succeeded)
-                {
-                    // Before the preview, not after: Build falls back to the quick profile
-                    // for anything it will not schedule, so printing the command line first
-                    // would show a run that is never going to happen.
-                    Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
-                    return 1;
-                }
-
-                Formatting.WriteMuted("  " + L.T("schedule.alwaysQuarantine"));
-                Console.WriteLine();
-                Console.WriteLine("  " + L.T("schedule.willRun", ScheduledCleanup.Build(exe, profile)));
-                Console.WriteLine();
-
-                Console.WriteLine("  " + L.T("schedule.created", $"{frequency} {at:HH\\:mm}"));
-                Console.WriteLine();
-                return 0;
-            }
 
             case "delete":
-            {
-                string? name = args.Skip(1).FirstOrDefault(a => !a.StartsWith('-'));
-
-                if (name is null)
                 {
-                    Formatting.WriteError(L.T("cli.scheduleUsage"));
-                    return 2;
+                    string? name = args.Skip(1).FirstOrDefault(a => !a.StartsWith('-'));
+
+                    if (name is null)
+                    {
+                        Formatting.WriteError(L.T("cli.scheduleUsage"));
+                        return 2;
+                    }
+
+                    ScheduleResult result = scheduler.Delete(name);
+
+                    Console.WriteLine();
+
+                    if (!result.Succeeded)
+                    {
+                        Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
+                        return 1;
+                    }
+
+                    Console.WriteLine("  " + L.T("schedule.deleted", name));
+                    Console.WriteLine();
+                    return 0;
                 }
-
-                ScheduleResult result = scheduler.Delete(name);
-
-                Console.WriteLine();
-
-                if (!result.Succeeded)
-                {
-                    Formatting.WriteError("  " + L.T("schedule.failed", result.Error ?? result.Output));
-                    return 1;
-                }
-
-                Console.WriteLine("  " + L.T("schedule.deleted", name));
-                Console.WriteLine();
-                return 0;
-            }
 
             default:
                 Formatting.WriteError(L.T("cli.scheduleUsage"));

@@ -14,27 +14,35 @@ public class SuspiciousFileAnalyzerTests
 
         entries[5] = new FileEntry
         {
-            RecordNumber = 5, ParentIndex = 5,
-            NameOffset = names.Append("."), NameLength = 1,
+            RecordNumber = 5,
+            ParentIndex = 5,
+            NameOffset = names.Append("."),
+            NameLength = 1,
             Flags = EntryFlags.Directory,
         };
 
         entries[6] = new FileEntry
         {
-            RecordNumber = 6, ParentIndex = 5,
-            NameOffset = names.Append("Users"), NameLength = 5,
+            RecordNumber = 6,
+            ParentIndex = 5,
+            NameOffset = names.Append("Users"),
+            NameLength = 5,
             Flags = EntryFlags.Directory,
         };
         entries[7] = new FileEntry
         {
-            RecordNumber = 7, ParentIndex = 6,
-            NameOffset = names.Append("joao"), NameLength = 4,
+            RecordNumber = 7,
+            ParentIndex = 6,
+            NameOffset = names.Append("joao"),
+            NameLength = 4,
             Flags = EntryFlags.Directory,
         };
         entries[8] = new FileEntry
         {
-            RecordNumber = 8, ParentIndex = 7,
-            NameOffset = names.Append("Downloads"), NameLength = 9,
+            RecordNumber = 8,
+            ParentIndex = 7,
+            NameOffset = names.Append("Downloads"),
+            NameLength = 9,
             Flags = EntryFlags.Directory,
         };
 

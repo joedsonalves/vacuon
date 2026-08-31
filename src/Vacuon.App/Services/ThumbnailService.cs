@@ -2,8 +2,8 @@ using System.Collections.Concurrent;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Vacuon.Core.Preview;
 using Vacuon.Core.Localization;
+using Vacuon.Core.Preview;
 
 namespace Vacuon.App.Services;
 

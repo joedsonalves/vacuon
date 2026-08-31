@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using Vacuon.Core.Preview;
 
 namespace Vacuon.Core.Analyzers;

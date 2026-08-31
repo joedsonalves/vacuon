@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using Vacuon.Core.Index;
 
 namespace Vacuon.Core.Analyzers;

@@ -1,4 +1,4 @@
-﻿using System.Runtime.Versioning;
+using System.Runtime.Versioning;
 using Microsoft.Win32;
 using Vacuon.Core.Index;
 using Vacuon.Core.Safety;

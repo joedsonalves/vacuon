@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Media;
 using Vacuon.App.Infra;
 using Vacuon.Core.Actions;

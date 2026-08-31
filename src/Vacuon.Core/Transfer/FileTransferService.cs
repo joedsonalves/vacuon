@@ -111,7 +111,8 @@ public sealed class FileTransferService
         if (target.Length == 0)
         {
             return new TransferItem(path, path, bytes, isDirectory,
-                                    TransferOutcome.Failed, L.T("move.outcomeNoFreeName")) { Files = files };
+                                    TransferOutcome.Failed, L.T("move.outcomeNoFreeName"))
+            { Files = files };
         }
 
         taken.Add(target);
@@ -409,7 +410,8 @@ public sealed class FileTransferService
         {
             try { process.Kill(entireProcessTree: true); }
             catch (Exception ex) when (ex is InvalidOperationException
-                                            or System.ComponentModel.Win32Exception) { }
+                                            or System.ComponentModel.Win32Exception)
+            { }
 
             return RunState.CancelledExitCode;
         }

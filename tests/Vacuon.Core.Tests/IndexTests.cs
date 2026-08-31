@@ -172,15 +172,21 @@ public class VolumeIndexTests
 
         entries[5] = new FileEntry
         {
-            RecordNumber = 5, ParentIndex = 5,
-            NameOffset = names.Append("."), NameLength = 1,
+            RecordNumber = 5,
+            ParentIndex = 5,
+            NameOffset = names.Append("."),
+            NameLength = 1,
             Flags = EntryFlags.Directory,
         };
         entries[6] = new FileEntry
         {
-            RecordNumber = 6, ParentIndex = 5,
-            NameOffset = names.Append("compartilhado.dll"), NameLength = 17,
-            LogicalSize = 1024, AllocatedSize = 4096, HardLinkCount = 3,
+            RecordNumber = 6,
+            ParentIndex = 5,
+            NameOffset = names.Append("compartilhado.dll"),
+            NameLength = 17,
+            LogicalSize = 1024,
+            AllocatedSize = 4096,
+            HardLinkCount = 3,
         };
 
         var volume = new VolumeInfo('C', "Teste", "NTFS", 1000, 500, 4096, false);
@@ -233,16 +239,22 @@ public class VolumeIndexTests
 
         entries[5] = new FileEntry
         {
-            RecordNumber = 5, ParentIndex = 5,
-            NameOffset = names.Append("."), NameLength = 1,
+            RecordNumber = 5,
+            ParentIndex = 5,
+            NameOffset = names.Append("."),
+            NameLength = 1,
             Flags = EntryFlags.Directory,
         };
         entries[6] = new FileEntry
         {
-            RecordNumber = 6, ParentIndex = 5,
-            NameOffset = names.Append("baixado.exe"), NameLength = 11,
-            LogicalSize = 1000, AllocatedSize = 4096,
-            Flags = EntryFlags.HasAds, HardLinkCount = 1,
+            RecordNumber = 6,
+            ParentIndex = 5,
+            NameOffset = names.Append("baixado.exe"),
+            NameLength = 11,
+            LogicalSize = 1000,
+            AllocatedSize = 4096,
+            Flags = EntryFlags.HasAds,
+            HardLinkCount = 1,
         };
 
         var volume = new VolumeInfo('C', "Teste", "NTFS", 1000, 500, 4096, false);
@@ -339,15 +351,21 @@ public class VolumeIndexTests
 
         entries[5] = new FileEntry
         {
-            RecordNumber = 5, ParentIndex = 5,
-            NameOffset = names.Append("."), NameLength = 1,
+            RecordNumber = 5,
+            ParentIndex = 5,
+            NameOffset = names.Append("."),
+            NameLength = 1,
             Flags = EntryFlags.Directory,
         };
         entries[6] = new FileEntry
         {
-            RecordNumber = 6, ParentIndex = 5,
-            NameOffset = names.Append("compartilhado.dll"), NameLength = 17,
-            LogicalSize = 1024, AllocatedSize = 4096, HardLinkCount = 3,
+            RecordNumber = 6,
+            ParentIndex = 5,
+            NameOffset = names.Append("compartilhado.dll"),
+            NameLength = 17,
+            LogicalSize = 1024,
+            AllocatedSize = 4096,
+            HardLinkCount = 3,
         };
 
         var volume = new VolumeInfo('C', "Teste", "NTFS", 1000, 500, 4096, false);

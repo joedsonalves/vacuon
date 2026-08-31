@@ -1,4 +1,4 @@
-﻿using Vacuon.App.Infra;
+using Vacuon.App.Infra;
 using Vacuon.Core.Actions;
 using Vacuon.Core.Localization;
 

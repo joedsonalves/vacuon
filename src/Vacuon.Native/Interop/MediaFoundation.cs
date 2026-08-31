@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
 namespace Vacuon.Native.Interop;
@@ -184,7 +184,8 @@ internal interface IMFSourceReader
     [PreserveSig] int GetCurrentMediaType(uint index, out IMFMediaType type);
     [PreserveSig] int SetCurrentMediaType(uint index, nint reserved, IMFMediaType type);
     [PreserveSig] int SetCurrentPosition([In] ref Guid timeFormat, [In] ref PropVariant position);
-    [PreserveSig] int ReadSample(uint index, uint flags, out uint actualIndex,
+    [PreserveSig]
+    int ReadSample(uint index, uint flags, out uint actualIndex,
                                  out uint streamFlags, out long timestamp, out IMFSample? sample);
     [PreserveSig] int Flush(uint index);
     [PreserveSig] int GetServiceForStream(uint index, [In] ref Guid service, [In] ref Guid riid, out nint obj);

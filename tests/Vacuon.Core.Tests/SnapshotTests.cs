@@ -1,8 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
 using Vacuon.Core.Index;
-using Vacuon.Core.Scan;
 using Vacuon.Core.Localization;
+using Vacuon.Core.Scan;
 using Vacuon.Native.Ntfs;
 using Xunit;
 

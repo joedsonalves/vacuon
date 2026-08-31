@@ -1,4 +1,4 @@
-﻿using Vacuon.Core.Analyzers;
+using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Scan;
 using Xunit;

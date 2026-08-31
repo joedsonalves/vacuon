@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Localization;
