@@ -482,6 +482,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     private void ApplyScanResult(ScanResult result, TimeSpan elapsed)
     {
+        // Where the person was looking, by path rather than by entry number: a fresh index
+        // renumbers everything, so the old number would point at a stranger. Restored at the
+        // end, because a scan is a refresh of what is on screen and not a trip back to the
+        // top of the volume.
+        string wasShowing = Mode == ListMode.Folder ? CurrentFolderPath : string.Empty;
+
         Index = result.Index;
         HasRealAllocation = result.StrategyUsed == ScanStrategy.Mft;
         HasScanned = true;
@@ -526,7 +532,13 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         RefreshAggregates();
 
         LoadVolumes();
-        ShowBiggestFiles();
+
+        int again = wasShowing.Length > 0 ? index.FindEntry(wasShowing) : -1;
+
+        // Gone since the last scan, or never here: the biggest files are the sane landing
+        // place, and it is what the first scan of a volume shows anyway.
+        if (again >= 0 && index.Entries[again].IsDirectory) NavigateToFolder(again);
+        else ShowBiggestFiles();
     }
 
     /// <summary>
@@ -927,6 +939,14 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         // selection, the breadcrumb and the list in one state instead of three.
         if (Root is not null && Root.Reveal(Ancestry(index, entryIndex)) is null) ShowFolder(entryIndex);
         else if (Root is null) ShowFolder(entryIndex);
+
+        // ⚠️ And again when the node was already the selected one. Selecting what is
+        // selected changes nothing, so the setter that lists the folder never runs — which
+        // is why typing a letter back into a folder path left the list empty: the path
+        // resolved, the tree was already there, and nobody rebuilt the rows. The guard is
+        // on what is actually on screen, not on the selection, so this costs nothing when
+        // the list is already showing that folder.
+        if (Mode != ListMode.Folder || _currentFolderIndex != entryIndex) ShowFolder(entryIndex);
 
         if (highlight >= 0) SelectRowByEntry(highlight);
     }

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 using Vacuon.App.Infra;
 using Vacuon.Core.Actions;
@@ -38,6 +39,18 @@ public partial class DeleteDialog : Window
         {
             if (Acknowledge.Visibility == Visibility.Visible) Acknowledge.Focus();
             else CancelButton.Focus();
+        };
+
+        // Space ticked the box and Enter did nothing, because Enter goes to the default
+        // button and the default button is disabled until the box is ticked. Enter now
+        // ticks it, and only a second Enter confirms — the deliberate second action the
+        // permanent path was designed around stays deliberate.
+        Acknowledge.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter || Acknowledge.IsChecked == true) return;
+
+            Acknowledge.IsChecked = true;
+            e.Handled = true;
         };
     }
 

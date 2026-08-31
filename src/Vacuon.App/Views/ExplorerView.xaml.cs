@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Actions;
 using Vacuon.Native.Interop;
@@ -458,6 +459,54 @@ public partial class ExplorerView : UserControl
     {
         if (e.NewValue is FolderNodeViewModel node && Model is not null)
             Model.SelectedFolder = node;
+    }
+
+    /// <summary>
+    /// Clicking the folder that is already selected lists it again.
+    /// <para>
+    /// A TreeView raises nothing when the selection does not change, so clicking the folder
+    /// you are already on did nothing — which is exactly what somebody does after a search
+    /// has replaced the list, to get back to where they were. The event is the click, not
+    /// the selection, so it fires either way.
+    /// </para>
+    /// </summary>
+    private void OnFolderClick(object sender, MouseButtonEventArgs e)
+    {
+        if (Model is null) return;
+
+        // The tick box and the expander chevron are their own controls with their own
+        // meaning. A click that lands on one of them is not a request to list the folder.
+        if (e.OriginalSource is DependencyObject source && IsInsideControl(source)) return;
+
+        var item = FindParent<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (item?.DataContext is not FolderNodeViewModel node) return;
+
+        if (!ReferenceEquals(node, Model.SelectedFolder)) return;
+
+        Model.ShowFolder(node.EntryIndex);
+    }
+
+    private static bool IsInsideControl(DependencyObject source)
+    {
+        for (DependencyObject? current = source; current is not null;
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is System.Windows.Controls.Primitives.ToggleButton) return true;
+            if (current is TreeViewItem) return false;
+        }
+
+        return false;
+    }
+
+    private static T? FindParent<T>(DependencyObject? source) where T : DependencyObject
+    {
+        for (DependencyObject? current = source; current is not null;
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is T match) return match;
+        }
+
+        return null;
     }
 
     private void OnRowDoubleClick(object sender, MouseButtonEventArgs e)

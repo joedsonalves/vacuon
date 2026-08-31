@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using Vacuon.App.Infra;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Transfer;
@@ -197,7 +198,7 @@ public partial class TransferWindow : Window
         Bar.Value = report.Phase == TransferPhase.Finished ? 100 : Bar.Value;
 
         OutcomeCard.Visibility = Visibility.Visible;
-        OutcomeText.Text = Describe(report);
+        Emphasise(OutcomeText, Describe(report));
 
         List<TransferItemResult> failures = [.. report.Failures];
 
@@ -293,33 +294,62 @@ public partial class TransferWindow : Window
         SetToggleText();
     }
 
+    /// <summary>
+    /// Marks a value so <see cref="Emphasise"/> can pick it out of the finished sentence.
+    /// <para>
+    /// The marker goes in at composition, around the substituted value, rather than being
+    /// hunted for afterwards with a pattern over digits. A translation moves its words and
+    /// its punctuation around, and "10.0 MiB" is two tokens with a space in one language and
+    /// something else in another — the one thing that is certain is which argument was a
+    /// measurement, and that is known right here.
+    /// </para>
+    /// </summary>
+    private const char Marker = '\u0001';
+
+    private static string Figure(string value) => Marker + value + Marker;
+
+    /// <summary>Renders a marked sentence, the figures in bold and the words plain.</summary>
+    private static void Emphasise(TextBlock target, string text)
+    {
+        target.Inlines.Clear();
+
+        bool bold = false;
+        foreach (string piece in text.Split(Marker))
+        {
+            if (piece.Length > 0) target.Inlines.Add(bold ? new Bold(new Run(piece)) : new Run(piece));
+            bold = !bold;
+        }
+    }
+
     private static string Describe(TransferReport report)
     {
         // "1 items did not make it" is the kind of line this project has already gone back
         // and fixed once, in the delete summary. Same treatment here.
         string headline = report.Phase switch
         {
-            TransferPhase.Cancelled => L.T("transfer.cancelled", Format.Count(report.DoneCount)),
+            TransferPhase.Cancelled => L.T("transfer.cancelled", Figure(Format.Count(report.DoneCount))),
             TransferPhase.Failed => report.FailedCount == 1
-                ? L.T("transfer.someFailedOne")
-                : L.T("transfer.someFailed", Format.Count(report.FailedCount)),
+                ? L.T("transfer.someFailedOne", Figure(Format.Count(1)))
+                : L.T("transfer.someFailed", Figure(Format.Count(report.FailedCount))),
             _ => report.DoneCount == 1
-                ? L.T("transfer.doneOne")
-                : L.T("transfer.done", Format.Count(report.DoneCount)),
+                ? L.T("transfer.doneOne", Figure(Format.Count(1)))
+                : L.T("transfer.done", Figure(Format.Count(report.DoneCount))),
         };
 
         // "Transferred" and "freed" are different claims, and only a permanent delete or a
         // move that left the volume can make the second one. Copying frees nothing, and the
         // sentence says so rather than leaving the byte count to be read as a saving.
         string bytes = report.BytesWereFreed
-            ? L.T("transfer.freed", Format.Bytes(report.BytesTransferred))
-            : L.T("transfer.movedBytes", Format.Bytes(report.BytesTransferred));
+            ? L.T("transfer.freed", Figure(Format.Bytes(report.BytesTransferred)))
+            : L.T("transfer.movedBytes", Figure(Format.Bytes(report.BytesTransferred)));
+
+        string rate = report.Elapsed.TotalSeconds > 0
+            ? L.T("transfer.perSecond",
+                  Format.Bytes((long)(report.BytesTransferred / report.Elapsed.TotalSeconds)))
+            : "—";
 
         string timing = L.T("transfer.tookAndAveraged",
-            Format.Duration(report.Elapsed),
-            report.Elapsed.TotalSeconds > 0
-                ? Format.Bytes((long)(report.BytesTransferred / report.Elapsed.TotalSeconds))
-                : "—");
+            Figure(Format.Duration(report.Elapsed)), Figure(rate));
 
         var parts = new List<string> { headline, bytes, timing };
 

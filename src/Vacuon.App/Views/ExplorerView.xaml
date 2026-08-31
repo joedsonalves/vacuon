@@ -127,6 +127,7 @@
                          itens crescem além da viewport e a coluna de tamanho sai de vista. -->
                     <TreeView x:Name="Folders" Grid.Row="1" ItemsSource="{Binding RootNodes}"
                               SelectedItemChanged="OnFolderSelected"
+                              PreviewMouseLeftButtonUp="OnFolderClick"
                               PreviewKeyDown="OnTreeKeyDown"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               BorderThickness="0">
