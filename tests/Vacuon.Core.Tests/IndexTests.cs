@@ -137,6 +137,54 @@ public class VolumeIndexTests
         return new VolumeIndex(entries, names, volume, ScanStrategy.Mft);
     }
 
+
+    [Fact]
+    public void AddFile_PutsACopiedFileWhereTheDiskSaysItIs()
+    {
+        // A copy writes files the scan never saw. Until they can be put into the live index,
+        // copying a folder into the folder on screen changes nothing on screen.
+        VolumeIndex index = BuildSample();
+        long before = index.TotalLogicalBytes;
+
+        int entry = index.AddFile(11, 6, "render_v3.mp4".AsSpan(), 3000, 4096,
+                                  new DateTime(2026, 8, 31, 4, 0, 0, DateTimeKind.Utc),
+                                  new DateTime(2026, 8, 31, 4, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(11, entry);
+        Assert.Equal(@"C:\Videos\render_v3.mp4", index.GetFullPath(entry));
+        Assert.Equal(3000, index.Entries[entry].LogicalSize);
+        Assert.Equal(4096, index.Entries[entry].AllocatedSize);
+        Assert.False(index.Entries[entry].IsDirectory);
+
+        // It counts, in the totals and in the folder it landed in.
+        Assert.Equal(before + 3000, index.TotalLogicalBytes);
+        bool listed = false;
+        foreach (int child in index.GetChildren(6)) listed |= child == entry;
+        Assert.True(listed);
+    }
+
+    [Fact]
+    public void AddFile_RefusesARecordThatIsAlreadySomebodyElse()
+    {
+        // An occupied slot means the index and the disk disagree about that record.
+        // Overwriting would hide the disagreement behind a plausible-looking entry.
+        VolumeIndex index = BuildSample();
+
+        Assert.Equal(-1, index.AddFile(7, 6, "outro.mp4".AsSpan(), 10, 10,
+                                       DateTime.UtcNow, DateTime.UtcNow));
+        Assert.Equal("render.mp4", index.GetName(7).ToString());
+    }
+
+    [Fact]
+    public void AddFile_RefusesAParentThatIsNotAFolder()
+    {
+        VolumeIndex index = BuildSample();
+
+        // Record 7 is a file. Hanging a file off a file would build a path nobody can walk.
+        Assert.Equal(-1, index.AddFile(11, 7, "dentro.txt".AsSpan(), 10, 10,
+                                       DateTime.UtcNow, DateTime.UtcNow));
+    }
+
     [Fact]
     public void GetFullPath_WalksUpToTheRoot()
     {

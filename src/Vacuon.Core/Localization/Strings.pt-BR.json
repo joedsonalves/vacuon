@@ -868,6 +868,7 @@
   "transfer.pathNotCopied": "A área de transferência não aceitou — o caminho continua na tela",
   "transfer.recovered": "{0} recuperados numa segunda tentativa",
   "transfer.recoveredOne": "{0} recuperado numa segunda tentativa",
+  "transfer.listBehind": "isto foi grande demais para entrar na lista na hora — varra de novo para ver tudo",
   "transfer.itemFatal": "a cópia parou num erro antes de terminar",
   "transfer.itemSomeFailed": "alguns dos arquivos lá dentro não puderam ser copiados",
   "transfer.itemFailed": "este não passou",

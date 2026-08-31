@@ -262,6 +262,52 @@ public sealed class VolumeIndex
         return recordNumber;
     }
 
+    /// <summary>
+    /// Puts a file that exists on disk but not in this index into it, at its real MFT record
+    /// number — the companion to <see cref="AddDirectory"/>, and it exists for the same
+    /// reason: a copy writes files younger than the scan, and a list that cannot show them
+    /// is a list that disagrees with the disk.
+    /// </summary>
+    /// <returns>The entry index, or -1 when the slot is out of range or already in use.</returns>
+    public int AddFile(int recordNumber, int parentIndex, ReadOnlySpan<char> name,
+                       long logicalSize, long allocatedSize,
+                       DateTime lastWriteUtc, DateTime createdUtc,
+                       bool hidden = false, bool system = false)
+    {
+        if (recordNumber <= 0 || recordNumber >= Entries.Length) return -1;
+        if (name.Length == 0 || name.Length > ushort.MaxValue) return -1;
+        if (parentIndex < 0 || parentIndex >= Entries.Length) return -1;
+        if (!Entries[parentIndex].IsInUse || !Entries[parentIndex].IsDirectory) return -1;
+
+        // Same rule as AddDirectory: an occupied slot means the index and the disk disagree
+        // about that record, and overwriting would hide the disagreement.
+        if (Entries[recordNumber].IsInUse) return -1;
+
+        int offset = Names.Append(name);
+
+        EntryFlags flags = EntryFlags.None;
+        if (hidden) flags |= EntryFlags.Hidden;
+        if (system) flags |= EntryFlags.System;
+
+        Entries[recordNumber] = new FileEntry
+        {
+            RecordNumber = (uint)recordNumber,
+            ParentIndex = (uint)parentIndex,
+            NameOffset = offset,
+            NameLength = (ushort)name.Length,
+            Flags = flags,
+            LogicalSize = logicalSize,
+            AllocatedSize = allocatedSize,
+            LastWriteUtc = lastWriteUtc.ToFileTimeUtc(),
+            LastAccessUtc = lastWriteUtc.ToFileTimeUtc(),
+            CreatedUtc = createdUtc.ToFileTimeUtc(),
+            HardLinkCount = 1,
+        };
+
+        InvalidateAggregates();
+        return recordNumber;
+    }
+
     /// <summary>Is <paramref name="candidate"/> somewhere below <paramref name="ancestor"/>?</summary>
     private bool IsDescendant(int candidate, int ancestor)
     {

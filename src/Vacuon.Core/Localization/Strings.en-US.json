@@ -868,6 +868,7 @@
   "transfer.pathNotCopied": "The clipboard would not take it — the path is still on screen",
   "transfer.recovered": "{0} picked up on a second try",
   "transfer.recoveredOne": "{0} picked up on a second try",
+  "transfer.listBehind": "this was too much to add to the list on the spot — scan again to see all of it",
   "transfer.itemFatal": "the copy stopped on an error before it could finish",
   "transfer.itemSomeFailed": "some of the files inside could not be copied",
   "transfer.itemFailed": "this one did not go through",

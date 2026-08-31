@@ -140,8 +140,24 @@ public static partial class Kernel32
 /// record number and the top 16 are the sequence number. It is the only way to learn
 /// the record number of a folder without reading the MFT — which needs elevation.
 /// </para>
+/// <para>
+/// ⚠️ <b><c>Pack = 4</c> is load-bearing, and it was missing.</b> A FILETIME is two DWORDs
+/// and sits on a four-byte boundary; a C# <c>long</c> wants eight. Without the packing the
+/// runtime slid four bytes of padding in after <c>dwFileAttributes</c>, every field from the
+/// first FILETIME on was read four bytes late, and <c>nFileIndexLow</c> was read from past
+/// the end of the 52 bytes the API actually filled.
+/// </para>
+/// <para>
+/// Measured, on a folder whose id <c>fsutil file queryfileid</c> reported as
+/// <c>0x0014000000073 4AA</c> — record 471,722, sequence 20. This struct handed back
+/// <c>57,904,749,084,672</c>, which is that record number shifted into the high half beside
+/// a zero. Nothing threw: every caller guards with "record number outside the index, give
+/// up", so a folder created after the scan was simply never adopted and the list quietly
+/// stayed behind the disk. There is a test on the size now, because 52 against 56 is the
+/// whole bug and it is one number.
+/// </para>
 /// </summary>
-[StructLayout(LayoutKind.Sequential)]
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 public struct ByHandleFileInformation
 {
     public uint dwFileAttributes;

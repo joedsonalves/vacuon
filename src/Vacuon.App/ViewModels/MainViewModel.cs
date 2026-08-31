@@ -2179,8 +2179,25 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         TransferReport? report = TransferWindow.Run(owner, plan);
         if (report is null) return;
 
-        // A copy adds bytes to the destination volume and takes none from this one, so the
-        // index is left exactly as it was — and nothing here is allowed to say "freed".
+        // A copy adds bytes to the destination volume and takes none from this one, so
+        // nothing here is allowed to say "freed". What it does add is files this scan has
+        // never seen, and until now they went in at the next full scan — which meant copying
+        // a folder into the folder you were looking at changed nothing on screen.
+        int planted = 0;
+        bool complete = true;
+
+        if (index is not null)
+        {
+            foreach (TransferItemResult result in report.Results)
+            {
+                if (!result.Succeeded || result.Item.Destination.Length == 0) continue;
+
+                GraftResult graft = IndexGraft.AddTree(index, result.Item.Destination);
+                planted += graft.Added;
+                if (!graft.Complete) complete = false;
+            }
+        }
+
         StatusText = report.FailedCount > 0
             ? L.T("transfer.copiedPartial", Format.Count(report.DoneCount),
                   Format.Bytes(report.BytesTransferred), Format.Count(report.FailedCount))
@@ -2192,6 +2209,20 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             LastFailures = [.. report.Failures.Select(
                 f => $"{f.Item.Source} — {f.Message ?? L.T("delete.outcomeFailed")}")];
         }
+
+        if (planted > 0)
+        {
+            // The tree grows its new folders, the totals count the new bytes, and the list
+            // relists itself when the copy landed in the folder being shown.
+            Root?.Resync();
+            RefreshAggregates();
+
+            if (Mode == ListMode.Folder && _currentFolderIndex >= 0) ShowFolder(_currentFolderIndex);
+        }
+
+        // Said out loud rather than left to be noticed: a tree too big to plant on the spot
+        // leaves the list behind the disk until the next scan.
+        if (!complete) StatusText += "  ·  " + L.T("transfer.listBehind");
 
         // Free space on the destination volume moved, and the Dashboard cards still quote
         // the figure the scan took.
