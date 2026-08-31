@@ -54,6 +54,34 @@ The URL points at the asset **with the version in its name**. The
 more than precision; here it would be a bug, since the hash is fixed and what `latest` serves
 is not.
 
+## The icon a catalogue shows, and why it is not a manifest field
+
+Package listing sites draw an icon beside each app, and Vacuon showed the empty placeholder.
+The obvious fix is wrong. There **is** an `Icons` field in the manifest schema — 1.5.0 and
+later, `IconUrl` and `IconFileType` required — and the community pipeline **refuses it**:
+
+```
+winget validate -> Manifest Warning: Field usage requires verified publishers. [Icons]
+```
+
+The validation service calls it `FieldRequireVerifiedPublisher`, and a metadata-only PR was
+closed over exactly that (microsoft/winget-pkgs#403792). So the field stays out of the
+generator. It is not an oversight, and it should not be added back without publisher
+verification existing first — putting it in costs a rejected PR and a restarted queue.
+
+What actually produces the icon is **`PackageUrl`**. winstall's author says so in
+SplashtopInc/winstall#129: the icon engine runs `get-website-favicon` against the app's
+website and caches the best-resolution favicon it finds. Measured both ways before believing
+it: gsudo declares `PackageUrl: https://gerardog.github.io/gsudo/`, a site with its own
+`<link rel="icon">`, and `api.winstall.app/icons/next/gerardog.gsudo.webp` answers 200 —
+while Vacuon declared the repository page, whose favicon is GitHub's own, and the same URL
+answered 404.
+
+Hence `PackageUrl: https://joedsonalves.github.io/vacuon/`, a one-page site served from
+`docs/` whose favicon is the application icon. The copy under `docs/` is written by
+`assets/generate-icon.ps1`, so it cannot drift from the icon the app ships. A catalogue
+re-scrapes on its own schedule, so the change does not show up immediately.
+
 ## Asset names
 
 Every release carries the same two binaries under two names each, and the reason is not
