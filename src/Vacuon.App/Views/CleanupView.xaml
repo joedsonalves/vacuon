@@ -143,7 +143,20 @@
         <Border Grid.Row="3" Padding="0,12,0,12" BorderThickness="0,1,0,0"
                 BorderBrush="{DynamicResource Stroke.Subtle}"
                 Visibility="{Binding HasCleanupSelection, Converter={StaticResource Visible}}">
-            <StackPanel Orientation="Horizontal">
+            <StackPanel>
+                <!-- Antes dos botoes: e uma decisao sobre a execucao inteira, nao sobre
+                     qual delas. -->
+                <StackPanel Margin="0,0,0,10">
+                    <CheckBox Style="{StaticResource Check}"
+                              IsChecked="{Binding RestorePointFirst}"
+                              Content="{Binding RestorePointLabel}"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" Margin="24,4,0,0"
+                               TextWrapping="Wrap" MaxWidth="820" HorizontalAlignment="Left"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding RestorePointHint}"/>
+                </StackPanel>
+
+              <StackPanel Orientation="Horizontal">
                 <!-- Reversible first and primary; permanent last and red. -->
                 <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
                         Content="{DynamicResource S.cleanup.toQuarantine}" Click="OnQuarantine"/>
@@ -156,6 +169,7 @@
                 <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0"
                            VerticalAlignment="Center" FontWeight="SemiBold"
                            Text="{Binding CleanupSelectionText}"/>
+            </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

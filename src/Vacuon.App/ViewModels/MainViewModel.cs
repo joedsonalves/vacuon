@@ -3476,7 +3476,26 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>Carries out only the ticked rules, through the disposal the caller chose.</summary>
-    private void RunCleanup(object? parameter)
+    private bool _restorePointFirst;
+
+    /// <summary>
+    /// Whether a system restore point is asked for before a cleanup runs (F7.8).
+    /// <para>
+    /// Off by default, and not out of timidity: it costs up to a minute, and on most
+    /// machines most of the time Windows declines it anyway. Somebody who wants one should
+    /// get one; somebody who does not should not wait a minute for nothing.
+    /// </para>
+    /// </summary>
+    public bool RestorePointFirst
+    {
+        get => _restorePointFirst;
+        set => Set(ref _restorePointFirst, value);
+    }
+
+    public string RestorePointLabel => L.T("cleanup.restorePoint");
+    public string RestorePointHint => L.T("cleanup.restorePointHint");
+
+    private async void RunCleanup(object? parameter)
     {
         if (_cleanupPlan is null) return;
 
@@ -3499,10 +3518,37 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             _ => CleanupDisposal.Quarantine,
         };
 
+        string? restoreNote = null;
+
+        if (RestorePointFirst)
+        {
+            StatusText = L.T("cleanup.restoreWorking");
+
+            RestorePointResult point = await Task.Run(
+                () => RestorePointService.Create("Vacuon — cleanup"));
+
+            // ⚠️ Anything but a point that really appeared stops the cleanup. The whole
+            // reason to ask for one is to have a way back; going ahead without it, after
+            // being told to get one, would be doing the risky half of what was asked.
+            if (!point.Succeeded)
+            {
+                StatusText = L.T(point.Outcome switch
+                {
+                    RestorePointOutcome.NothingHappened => "cleanup.restoreSilent",
+                    RestorePointOutcome.Unavailable => "cleanup.restoreUnavailable",
+                    _ => "cleanup.restoreFailed",
+                });
+                return;
+            }
+
+            restoreNote = L.T("cleanup.restoreMade", point.SequenceAfter,
+                              Format.Duration(point.Took));
+        }
+
         var engine = new RuleEngine();
         CleanupReport report = engine.Execute(plan, disposal);
 
-        var parts = new List<string>(3)
+        var parts = new List<string>(4)
         {
             report.Failed > 0
                 ? L.T("cleanup.donePartial", Format.Count(report.Handled), Format.Count(report.Failed))
@@ -3516,6 +3562,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                         Format.Count(report.Handled), Format.Bytes(report.Bytes)),
                 },
         };
+
+        if (restoreNote is not null) parts.Add(restoreNote);
 
         // The Windows tools run after the files, and each reports its own measured gain.
         var tools = new SystemTools();
