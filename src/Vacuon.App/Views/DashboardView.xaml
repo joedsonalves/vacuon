@@ -1,4 +1,4 @@
-<UserControl x:Class="Vacuon.App.Views.DashboardView"
+﻿<UserControl x:Class="Vacuon.App.Views.DashboardView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:infra="clr-namespace:Vacuon.App.Infra">
@@ -188,6 +188,46 @@
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <!-- ==================== espaço que não é arquivo (F1.9) ==================== -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0"
+                    Visibility="{Binding HasSystemSpace, Converter={StaticResource Visible}}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource Text.Section}" Text="{Binding SystemSpaceTitle}"/>
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,4,0,8" TextWrapping="Wrap"
+                               MaxWidth="820" HorizontalAlignment="Left"
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding SystemSpaceHint}"/>
+
+                    <ItemsControl ItemsSource="{Binding SystemSpaceRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                               Width="150" Text="{Binding Label}"/>
+
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                               Width="86" Margin="0,0,14,0" Text="{Binding SizeText}"/>
+
+                                    <!-- How it is dealt with, beside the number: none of these
+                                         is removed the way a file is. -->
+                                    <TextBlock Grid.Column="2" Style="{StaticResource Text.Sub}"
+                                               FontSize="11" TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Text.Muted}"
+                                               Text="{Binding HowText}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
             <!-- ==================== estado inicial ==================== -->
             <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="26"

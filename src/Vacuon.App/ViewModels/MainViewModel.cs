@@ -534,6 +534,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         LoadVolumes();
 
+        // Not awaited: the shadow-copy query is a second or two of somebody else's process,
+        // and the panel filling in a moment later is better than a scan that waits for it.
+        _ = RefreshSystemSpaceAsync();
+
         int again = wasShowing.Length > 0 ? index.FindEntry(wasShowing) : -1;
 
         // Gone since the last scan, or never here: the biggest files are the sane landing
@@ -3507,6 +3511,52 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>Sets the ticked copies aside, through the same quarantine as everything else.</summary>
+    // ---------------- space that is not a file (F1.9) ----------------
+
+    /// <summary>
+    /// The page file, the swap file, the hibernation file and the shadow copies.
+    /// <para>
+    /// This is the answer to "the folders add up to 300 GB and Windows says 340". Without
+    /// it the app's own cross-check reports a gap it cannot explain, which is worse than
+    /// not checking.
+    /// </para>
+    /// </summary>
+    public ObservableCollection<SystemSpaceRow> SystemSpaceRows { get; } = [];
+
+    public bool HasSystemSpace => SystemSpaceRows.Count > 0;
+
+    public string SystemSpaceTitle => L.T("system.title");
+    public string SystemSpaceHint => L.T("system.hint");
+
+    /// <summary>
+    /// Fills the panel: the files from the index, the shadow copies from the system.
+    /// <para>
+    /// ⚠️ The files are read from the <b>index</b>, not from the disk, and that is not an
+    /// optimisation. <c>pagefile.sys</c> and <c>hiberfil.sys</c> cannot be opened at all —
+    /// asking the file system for their size comes back as an error, which is how a machine
+    /// with 12.7 GiB of hibernation file gets reported as having none. The MFT states it
+    /// plainly.
+    /// </para>
+    /// </summary>
+    private async Task RefreshSystemSpaceAsync()
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return;
+
+        List<SystemSpaceItem> files = SystemSpace.InIndex(index);
+        string root = index.Volume.Root;
+
+        // Off the UI thread: this one asks the system and takes a moment.
+        SystemSpaceItem shadow = await Task.Run(() => SystemSpace.ShadowCopies(root));
+
+        SystemSpaceRows.Clear();
+
+        foreach (SystemSpaceItem item in files) SystemSpaceRows.Add(new SystemSpaceRow(item));
+        SystemSpaceRows.Add(new SystemSpaceRow(shadow));
+
+        Raise(nameof(HasSystemSpace));
+    }
+
     /// <summary>True once a search has produced something, so the bulk buttons can appear.</summary>
     public bool HasDuplicateGroups => DuplicateGroups.Count > 0;
 
