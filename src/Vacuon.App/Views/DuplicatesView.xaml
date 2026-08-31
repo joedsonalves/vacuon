@@ -26,6 +26,15 @@
 
         <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,11">
             <StackPanel Orientation="Horizontal">
+                <!-- A mesma pergunta em dois tamanhos: o arquivo e a pasta. Um backup feito
+                     duas vezes sao quatro mil arquivos duplicados e UMA pasta duplicada. -->
+                <RadioButton GroupName="dupmode" VerticalAlignment="Center" Margin="0,0,12,0"
+                             IsChecked="{Binding DuplicatesByFile}"
+                             Content="{DynamicResource S.dup.byFiles}"/>
+                <RadioButton GroupName="dupmode" VerticalAlignment="Center" Margin="0,0,16,0"
+                             IsChecked="{Binding DuplicatesByFolder}"
+                             Content="{DynamicResource S.dup.byFolders}"/>
+
                 <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
                         Content="{DynamicResource S.dup.find}"
                         Command="{Binding FindDuplicatesCommand}"/>
@@ -122,6 +131,63 @@
                                                            Visibility="{Binding HardLinkNote,
                                                                         Converter={StaticResource NotEmpty}}"/>
                                             </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- ==================== pastas idênticas (F4.8) ==================== -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,14,0,0"
+                      Visibility="{Binding HasDuplicateFolders, Converter={StaticResource Visible}}">
+            <ItemsControl ItemsSource="{Binding DuplicateFolderGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                           Text="{Binding HeaderText}"/>
+
+                                <Button Style="{StaticResource Button.Base}" FontSize="10"
+                                        Padding="8,3" Margin="0,8,0,0" HorizontalAlignment="Left"
+                                        Content="{Binding SelectGroupLabel}"
+                                        Click="OnSelectFolderGroup"/>
+
+                                <!-- A pasta que fica não tem checkbox nenhuma, como no
+                                     modo de arquivos. -->
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" CornerRadius="4" Padding="6,2"
+                                            VerticalAlignment="Center"
+                                            Background="{DynamicResource Accent.Muted}">
+                                        <TextBlock FontSize="10" FontWeight="Bold"
+                                                   FontFamily="{StaticResource Font.Ui}"
+                                                   Text="{Binding KeeperLabel}"/>
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                                               Margin="10,0,0,0" VerticalAlignment="Center"
+                                               FontSize="11" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding KeeperPath}"
+                                               ToolTip="{Binding KeeperPath}"/>
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding Copies}" Margin="0,4,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsChecked}" Margin="0,3,0,0"
+                                                      VerticalContentAlignment="Center">
+                                                <TextBlock Style="{StaticResource Text.Sub}"
+                                                           FontSize="11" TextTrimming="CharacterEllipsis"
+                                                           Text="{Binding Path}"
+                                                           ToolTip="{Binding Path}"/>
+                                            </CheckBox>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>

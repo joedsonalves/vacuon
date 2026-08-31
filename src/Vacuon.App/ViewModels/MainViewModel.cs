@@ -92,7 +92,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                 "custom" => CleanupProfile.Custom,
                 _ => CleanupProfile.Quick,
             });
-        FindDuplicatesCommand = new RelayCommand(async () => await FindDuplicatesAsync(),
+        FindDuplicatesCommand = new RelayCommand(async () => await FindDuplicatesEitherWayAsync(),
                                                 () => !IsFindingDuplicates);
         QuarantineDuplicatesCommand = new RelayCommand(QuarantineDuplicates);
         SelectAllDuplicatesCommand = new RelayCommand(SelectAllDuplicates);
@@ -3676,6 +3676,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public void CancelDuplicateSearch() => _duplicateCts?.Cancel();
 
+    /// <summary>Files or folders, whichever the screen is set to.</summary>
+    private Task FindDuplicatesEitherWayAsync() =>
+        DuplicatesByFolder ? FindDuplicateFoldersAsync() : FindDuplicatesAsync();
+
     private async Task FindDuplicatesAsync()
     {
         VolumeIndex? index = Index;
@@ -3764,6 +3768,16 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             }
         }
 
+        foreach (DuplicateFolderGroupViewModel group in DuplicateFolderGroups)
+        {
+            foreach (DuplicateFolderCopyViewModel copy in group.Copies)
+            {
+                if (!copy.IsChecked) continue;
+                count++;
+                bytes += copy.RecoverableBytes;
+            }
+        }
+
         _duplicateSelectedCount = count;
         _duplicateSelectedBytes = bytes;
 
@@ -3797,6 +3811,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             foreach (DuplicateCopyViewModel copy in group.Copies)
                 copy.IsChecked = true;
 
+        foreach (DuplicateFolderGroupViewModel group in DuplicateFolderGroups)
+            group.SelectAll();
+
         UpdateDuplicateSelection();
     }
 
@@ -3804,6 +3821,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     {
         foreach (DuplicateGroupViewModel group in DuplicateGroups)
             foreach (DuplicateCopyViewModel copy in group.Copies)
+                copy.IsChecked = false;
+
+        foreach (DuplicateFolderGroupViewModel group in DuplicateFolderGroups)
+            foreach (DuplicateFolderCopyViewModel copy in group.Copies)
                 copy.IsChecked = false;
 
         UpdateDuplicateSelection();
@@ -3861,7 +3882,103 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     /// <summary>True once a search has produced something, so the bulk buttons can appear.</summary>
-    public bool HasDuplicateGroups => DuplicateGroups.Count > 0;
+    public bool HasDuplicateGroups => DuplicateGroups.Count > 0 || DuplicateFolderGroups.Count > 0;
+
+    // ---------------- duplicados por pasta (F4.8) ----------------
+
+    private bool _duplicatesByFolder;
+
+    /// <summary>
+    /// Whether the search compares whole folders instead of individual files.
+    /// <para>
+    /// The same question asked at a different size. A backup taken twice is four thousand
+    /// duplicate files and one duplicate folder, and only one of those two answers is a
+    /// thing somebody can act on in an afternoon.
+    /// </para>
+    /// </summary>
+    public bool DuplicatesByFolder
+    {
+        get => _duplicatesByFolder;
+        set
+        {
+            if (!Set(ref _duplicatesByFolder, value)) return;
+
+            // The two lists answer different questions; showing one under the other's
+            // heading would be worse than showing nothing.
+            DuplicateGroups.Clear();
+            DuplicateFolderGroups.Clear();
+            RaiseDuplicateGroups();
+            UpdateDuplicateSelection();
+
+            Raise(nameof(DuplicatesByFile));
+            MeasureDuplicateScope();
+        }
+    }
+
+    public bool DuplicatesByFile
+    {
+        get => !_duplicatesByFolder;
+        set { if (value) DuplicatesByFolder = false; }
+    }
+
+    public ObservableCollection<DuplicateFolderGroupViewModel> DuplicateFolderGroups { get; } = [];
+
+    public bool HasDuplicateFolders => DuplicateFolderGroups.Count > 0;
+
+    /// <summary>
+    /// Looks for whole folders that are identical.
+    /// <para>
+    /// Stage one costs nothing and rules out most of the volume: two folders can only be
+    /// identical if they hold the same number of files and the same number of bytes, and the
+    /// index already knows both. Only what survives that is read.
+    /// </para>
+    /// </summary>
+    private async Task FindDuplicateFoldersAsync()
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return;
+
+        _duplicateCts?.Cancel();
+        _duplicateCts = new CancellationTokenSource();
+        CancellationToken token = _duplicateCts.Token;
+
+        IsFindingDuplicates = true;
+        DuplicateFolderGroups.Clear();
+        RaiseDuplicateGroups();
+
+        var progress = new Progress<DuplicateProgress>(p =>
+            DuplicateStatusText = L.T("dup.progress", Format.Count(p.FilesDone),
+                                      Format.Count(p.FilesTotal), Format.Count(p.GroupsFound)));
+
+        try
+        {
+            DuplicateFolderReport report = await Task.Run(
+                () => DuplicateFolderFinder.Find(index, DuplicateFolderFinder.MinimumBytes,
+                                                 KeepPreference.Oldest, progress, token),
+                token);
+
+            foreach (DuplicateFolderGroup group in report.Groups.Take(MaxGroupsShown))
+                DuplicateFolderGroups.Add(new DuplicateFolderGroupViewModel(group, UpdateDuplicateSelection));
+
+            DuplicateStatusText = report.GroupCount == 0
+                ? L.T("dup.folderNone")
+                : report.GroupCount == 1
+                    ? L.T("dup.folderSummaryOne", Format.Bytes(report.RecoverableBytes))
+                    : L.T("dup.folderSummary", Format.Count(report.GroupCount),
+                          Format.Bytes(report.RecoverableBytes));
+        }
+        catch (OperationCanceledException)
+        {
+            DuplicateStatusText = L.T("dup.cancelled");
+        }
+        finally
+        {
+            IsFindingDuplicates = false;
+            RaiseDuplicateGroups();
+            Raise(nameof(HasDuplicateFolders));
+            UpdateDuplicateSelection();
+        }
+    }
 
     /// <summary>
     /// Replaces every ticked copy with a second name for the copy its group keeps (PRD F4.4).
@@ -3965,6 +4082,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         foreach (DuplicateGroupViewModel group in DuplicateGroups)
             foreach (DuplicateCopyViewModel copy in group.Copies)
+                if (copy.IsChecked) paths.Add(copy.Path);
+
+        // Folders too, when the search was run that way: a whole tree is one thing to set
+        // aside, which is the entire reason for asking the question at folder size.
+        foreach (DuplicateFolderGroupViewModel group in DuplicateFolderGroups)
+            foreach (DuplicateFolderCopyViewModel copy in group.Copies)
                 if (copy.IsChecked) paths.Add(copy.Path);
 
         if (paths.Count == 0) return;

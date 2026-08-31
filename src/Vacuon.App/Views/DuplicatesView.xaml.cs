@@ -31,6 +31,12 @@ public partial class DuplicatesView : UserControl
 
     private void OnStop(object sender, RoutedEventArgs e) => Model?.CancelDuplicateSearch();
 
+    private void OnSelectFolderGroup(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is DuplicateFolderGroupViewModel group)
+            group.SelectAll();
+    }
+
     private void OnSelectGroup(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is DuplicateGroupViewModel group)
