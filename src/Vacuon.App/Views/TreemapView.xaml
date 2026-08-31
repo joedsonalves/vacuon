@@ -1,4 +1,4 @@
-<UserControl x:Class="Vacuon.App.Views.TreemapView"
+﻿<UserControl x:Class="Vacuon.App.Views.TreemapView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:infra="clr-namespace:Vacuon.App.Infra"
@@ -36,6 +36,16 @@
                 <TextBlock x:Name="StatsText" Style="{StaticResource Text.Sub}"
                            Margin="14,0,0,0" VerticalAlignment="Center" FontSize="11"
                            Foreground="{DynamicResource Text.Muted}"/>
+
+                <!-- A mesma pasta, contada de outro jeito (F2.8). -->
+                <RadioButton x:Name="AsTreemap" GroupName="mapmode" Margin="20,0,0,0"
+                             VerticalAlignment="Center" IsChecked="True"
+                             Content="{DynamicResource S.treemap.asTreemap}"
+                             Checked="OnModeChanged"/>
+                <RadioButton x:Name="AsSunburst" GroupName="mapmode" Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Content="{DynamicResource S.treemap.asSunburst}"
+                             Checked="OnModeChanged"/>
             </StackPanel>
         </Border>
 
@@ -43,6 +53,10 @@
                 BorderBrush="{DynamicResource Stroke.Subtle}" BorderThickness="1">
             <Grid>
                 <views:TreemapCanvas x:Name="Map"/>
+
+                <!-- A mesma pasta, contada de outro jeito. Uma de cada vez: as duas ao mesmo
+                     tempo seriam duas respostas competindo pela mesma pergunta. -->
+                <views:SunburstCanvas x:Name="Burst" Visibility="Collapsed"/>
 
                 <TextBlock x:Name="EmptyText" Style="{StaticResource Text.Sub}"
                            HorizontalAlignment="Center" VerticalAlignment="Center"

@@ -60,6 +60,89 @@ public partial class TreemapView : UserControl
         Show(index, _currentFolder);
     }
 
+    /// <summary>How deep the sunburst goes. Past three the outer ring is a fog of slivers.</summary>
+    private const int SunburstRings = 3;
+
+    /// <summary>
+    /// The wedges for the folder on screen and two levels under it.
+    /// <para>
+    /// ⚠️ Each ring is laid out <b>inside its parent's wedge</b>, never across the whole
+    /// circle. That is what makes every ring the same disk seen deeper — and getting it
+    /// wrong would be the same failure as two overlapping treemap boxes: one byte drawn
+    /// twice, and a picture that stops summing.
+    /// </para>
+    /// </summary>
+    private List<SunburstSlice> BuildSlices(VolumeIndex index, int folder)
+    {
+        var slices = new List<SunburstSlice>();
+        AddRing(index, folder, 0, 0, Sunburst.FullTurn, slices);
+        return slices;
+    }
+
+    private void AddRing(VolumeIndex index, int folder, int ring,
+                                double startAngle, double sweepAngle, List<SunburstSlice> into)
+    {
+        if (ring >= SunburstRings) return;
+
+        var children = new List<(int Entry, long Bytes, bool IsDirectory)>();
+
+        foreach (int child in index.GetChildren(folder))
+        {
+            ref FileEntry entry = ref index.Entries[child];
+            if (!entry.IsInUse) continue;
+
+            long bytes = entry.IsDirectory
+                ? index.GetSubtreeSizeOnDisk(child)
+                : index.GetSizeOnDisk(child);
+
+            if (bytes <= 0) continue;
+
+            children.Add((child, bytes, entry.IsDirectory));
+        }
+
+        if (children.Count == 0) return;
+
+        children.Sort(static (a, b) => b.Bytes.CompareTo(a.Bytes));
+
+        // Past a few hundred on one ring the wedges are thinner than a hair, and the layout
+        // would spend its time on shapes nobody can see or click.
+        if (children.Count > 400) children.RemoveRange(400, children.Count - 400);
+
+        var weights = new long[children.Count];
+        for (int i = 0; i < children.Count; i++) weights[i] = children[i].Bytes;
+
+        var wedges = new SunburstWedge[children.Count];
+        Sunburst.Layout(weights, ring, startAngle, sweepAngle, wedges);
+
+        for (int i = 0; i < children.Count; i++)
+        {
+            (int entry, long bytes, bool isDirectory) = children[i];
+            ReadOnlySpan<char> name = index.GetName(entry);
+
+            string category = isDirectory ? DominantOf(index, entry) : FileCategories.Of(name);
+            into.Add(new SunburstSlice(wedges[i], entry, name.ToString(), bytes, category));
+
+            // Only folders have anything below them, and only wedges wide enough to be seen
+            // are worth descending into.
+            if (isDirectory && wedges[i].IsVisible(0.02))
+                AddRing(index, entry, ring + 1, wedges[i].StartAngle, wedges[i].SweepAngle, into);
+        }
+    }
+
+    /// <summary>
+    /// Swaps the two pictures. One at a time: both at once would be two answers competing
+    /// for the same question in the same rectangle.
+    /// </summary>
+    private void OnModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (Map is null || Burst is null) return;
+
+        bool sunburst = AsSunburst.IsChecked == true;
+
+        Map.Visibility = sunburst ? Visibility.Collapsed : Visibility.Visible;
+        Burst.Visibility = sunburst ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void Show(VolumeIndex index, int folder)
     {
         var nodes = new List<TreemapNode>();
@@ -94,6 +177,7 @@ public partial class TreemapView : UserControl
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
         Map.SetNodes(nodes);
+        Burst.SetSlices(BuildSlices(index, folder), SunburstRings);
         watch.Stop();
 
         EmptyText.Text = nodes.Count == 0 ? L.T("treemap.emptyFolder") : string.Empty;
