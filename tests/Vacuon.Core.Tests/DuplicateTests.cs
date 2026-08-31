@@ -173,6 +173,35 @@ public class DuplicateFinderTests : IDisposable
         return text.ToString();
     }
 
+
+    [Fact]
+    public void ACloudPlaceholderIsNeverEvenACandidate()
+    {
+        // ⚠️ OneDrive's Files On-Demand leaves a placeholder that reports its full size and
+        // holds almost nothing. Opening it to read makes Windows fetch the whole file, so a
+        // duplicate search over a synced folder would quietly download everything it touched
+        // — an app whose whole job is freeing space, filling the disk instead, over somebody
+        // else's connection. The flag is set by both scanners; nothing here may read past it.
+        byte[] content = Pattern(40_000, 8);
+        Write("aqui.bin", content);
+        Write("na-nuvem.bin", content);
+
+        VolumeIndex index = Index();
+
+        for (int i = 0; i < index.Entries.Length; i++)
+        {
+            if (index.GetName(i).ToString() == "na-nuvem.bin")
+                index.Entries[i].Flags |= EntryFlags.CloudPlaceholder;
+        }
+
+        DuplicateReport report = new DuplicateFinder().Find(index, Small());
+
+        Assert.Empty(report.Groups);
+
+        // And it was ruled out before anything was read, not after.
+        Assert.Equal(0, report.FilesHashed);
+    }
+
     [Fact]
     public void TwoIdenticalFilesAreOneGroup()
     {

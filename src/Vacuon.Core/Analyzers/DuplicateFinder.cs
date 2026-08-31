@@ -217,6 +217,14 @@ public sealed class DuplicateFinder
 
             if (!entry.IsInUse || entry.IsDirectory) continue;
 
+            // ⚠️ A file that lives in the cloud is not read here, and this is not a nicety.
+            // OneDrive's Files On-Demand leaves a placeholder that reports its full size and
+            // holds almost nothing; opening it to read makes Windows fetch the whole thing.
+            // A duplicate search over a synced folder would quietly download every file it
+            // touched — an app whose entire job is freeing space, filling the disk instead,
+            // and over somebody's connection.
+            if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+
             long size = entry.LogicalSize;
             if (size < options.MinimumBytes) continue;
 

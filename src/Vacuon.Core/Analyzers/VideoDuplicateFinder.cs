@@ -150,6 +150,10 @@ public sealed class VideoDuplicateFinder
             ref FileEntry entry = ref entries[i];
 
             if (!entry.IsInUse || entry.IsDirectory) continue;
+
+            // Sampling frames out of a cloud placeholder downloads the video.
+            // See DuplicateFinder.Stage1.
+            if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
             if (entry.LogicalSize < options.MinimumBytes) continue;
             if (!VideoSimilarity.IsVideo(index.GetName(i))) continue;
 
@@ -175,6 +179,10 @@ public sealed class VideoDuplicateFinder
             ref FileEntry entry = ref entries[i];
 
             if (!entry.IsInUse || entry.IsDirectory) continue;
+
+            // Sampling frames out of a cloud placeholder downloads the video.
+            // See DuplicateFinder.Stage1.
+            if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
             if (entry.LogicalSize < options.MinimumBytes) continue;
             if (!VideoSimilarity.IsVideo(index.GetName(i))) continue;
 

@@ -81,6 +81,18 @@ public sealed class Win32Walker(MftScanOptions? options = null)
                 if ((attrs & FileAttributes.Encrypted) != 0) flags |= EntryFlags.Encrypted;
                 if ((attrs & FileAttributes.ReparsePoint) != 0) flags |= EntryFlags.ReparsePoint;
 
+                // ⚠️ Cloud placeholders, on this path too. The MFT scanner has set this flag
+                // since it was written; the walk had not, so on an unelevated session every
+                // reader downstream — the duplicate search, the fingerprints — would happily
+                // read a OneDrive placeholder and make Windows fetch the file. FileAttributes
+                // has no name for these two, so the values are spelled out: RECALL_ON_OPEN
+                // and RECALL_ON_DATA_ACCESS, from winnt.h.
+                const FileAttributes RecallOnOpen = (FileAttributes)0x00040000;
+                const FileAttributes RecallOnDataAccess = (FileAttributes)0x00400000;
+
+                if ((attrs & (RecallOnOpen | RecallOnDataAccess)) != 0)
+                    flags |= EntryFlags.CloudPlaceholder;
+
                 bool isDir = (attrs & FileAttributes.Directory) != 0;
                 if (isDir) flags |= EntryFlags.Directory;
 
