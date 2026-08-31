@@ -2217,11 +2217,67 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         // nothing a copy engine could make faster. One that crosses volumes is a full copy
         // followed by a delete, which is the case worth thirty-two threads and a window that
         // says how long is left — so only that one is handed to the transfer engine.
+        bool leaveJunction = MoveDialog.LeaveJunctionBehind;
+
         MoveReport report = plan.CrossVolume
             ? RunMoveThroughTransfer(owner, paths, plan)
             : service.Execute(paths, plan.Destination);
 
+        // ⚠️ After the move, never before: a junction created first would be the thing the
+        // copy engine walked into, and it would copy the folder into itself.
+        if (leaveJunction) LeaveJunctions(report);
+
         ApplyMove(report, byPath);
+    }
+
+    /// <summary>
+    /// Puts a junction where each moved folder was, pointing at where it went (F5.11/F7.10).
+    /// <para>
+    /// This is what makes "these 240 GB can go to the D:" a real offer rather than a promise
+    /// to fix a hundred broken paths afterwards. A junction is not a shortcut: anything that
+    /// opens the old path lands on the new folder in the file system, below the level where
+    /// a program could tell the difference.
+    /// </para>
+    /// <para>
+    /// ⚠️ Folders only, and only across volumes — the two cases a junction answers. And it
+    /// runs <b>after</b> the move: a junction put in place first is a folder that the copy
+    /// engine would walk into and copy into itself.
+    /// </para>
+    /// </summary>
+    private void LeaveJunctions(MoveReport report)
+    {
+        int made = 0;
+        var failed = new List<string>();
+
+        foreach (MoveResult result in report.Results)
+        {
+            if (!result.Succeeded || !result.IsDirectory || !result.CrossVolume) continue;
+
+            string landed = Path.Combine(report.Destination, result.FinalName);
+            if (!Directory.Exists(landed)) continue;
+
+            if (Junction.Create(result.Source, landed)) made++;
+            else failed.Add(result.Source);
+        }
+
+        if (made == 0 && failed.Count == 0) return;
+
+        var parts = new List<string>(2);
+
+        if (made > 0)
+        {
+            parts.Add(made == 1
+                ? L.T("move.junctionsMadeOne")
+                : L.T("move.junctionsMade", Format.Count(made)));
+        }
+
+        if (failed.Count > 0)
+        {
+            parts.Add(L.T("move.junctionsFailed", Format.Count(failed.Count)));
+            LastFailures = [.. failed];
+        }
+
+        StatusText += "  ·  " + string.Join("  ·  ", parts);
     }
 
     // ================= compactar (F7.11) =================

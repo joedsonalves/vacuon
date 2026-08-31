@@ -34,16 +34,44 @@ public partial class MoveDialog : Window
 
     /// <summary>Shows the dialog and returns <c>true</c> when the user confirmed.</summary>
     /// <param name="plan">Result of <see cref="MoveService.Plan"/> — never a live run.</param>
+    /// <summary>
+    /// True when the person asked for a link to be left where the folders were.
+    /// <para>
+    /// Only ever offered for folders crossing to another drive, because that is the only
+    /// case a junction answers: a move inside one volume keeps working by itself, and a
+    /// file cannot be a junction at all.
+    /// </para>
+    /// </summary>
+    public static bool LeaveJunctionBehind { get; private set; }
+
     public static bool Confirm(Window owner, MoveReport plan)
     {
         var dialog = new MoveDialog { Owner = owner };
         dialog.Populate(plan);
-        return dialog.ShowDialog() == true;
+
+        bool ok = dialog.ShowDialog() == true;
+
+        // Only true when the box was both offered and ticked: a cancelled dialog, or one
+        // where the section never appeared, leaves nothing behind.
+        LeaveJunctionBehind = ok && dialog.LeaveJunction.IsChecked == true;
+
+        return ok;
     }
 
     private void Populate(MoveReport plan)
     {
         List<MoveResult> movable = [.. plan.Movable];
+
+        // The junction only answers one situation: a folder going to another drive. Inside
+        // one volume the old path is the thing that moved, and a file cannot be a junction.
+        bool offerJunction = plan.CrossVolume && movable.Any(r => r.IsDirectory);
+
+        if (offerJunction)
+        {
+            JunctionSection.Visibility = Visibility.Visible;
+            LeaveJunction.Content = L.T("move.leaveJunction");
+            JunctionHint.Text = L.T("move.leaveJunctionHint");
+        }
 
         long bytes = movable.Sum(r => r.Bytes);
         int folders = movable.Count(r => r.IsDirectory);

@@ -102,6 +102,15 @@
             <TextBlock x:Name="BodyNote" Style="{StaticResource Text.Sub}" FontSize="11"
                        Margin="0,10,0,0" TextWrapping="Wrap"
                        Foreground="{DynamicResource Text.Muted}"/>
+
+            <!-- So aparece quando ha pasta indo para outra unidade: e a unica situacao em
+                 que uma junction tem o que fazer. -->
+            <StackPanel x:Name="JunctionSection" Margin="0,12,0,0" Visibility="Collapsed">
+                <CheckBox x:Name="LeaveJunction" Style="{StaticResource Check}"/>
+                <TextBlock x:Name="JunctionHint" Style="{StaticResource Text.Sub}" FontSize="11"
+                           Margin="24,4,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Text.Muted}"/>
+            </StackPanel>
         </StackPanel>
 
         <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right"
