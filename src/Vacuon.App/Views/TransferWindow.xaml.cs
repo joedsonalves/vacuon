@@ -353,6 +353,15 @@ public partial class TransferWindow : Window
 
         var parts = new List<string> { headline, bytes, timing };
 
+        // Said out loud, because it is the difference between "nine files were lost" and
+        // "nine were locked for a moment and came over at the end".
+        if (report.RecoveredCount > 0)
+        {
+            parts.Insert(1, report.RecoveredCount == 1
+                ? L.T("transfer.recoveredOne", Figure(Format.Count(1)))
+                : L.T("transfer.recovered", Figure(Format.Count(report.RecoveredCount))));
+        }
+
         // The one place the app admits its own two readings disagreed, rather than quoting
         // whichever is larger.
         if (report.TotalIsUncertain) parts.Add(L.T("transfer.totalUncertain"));

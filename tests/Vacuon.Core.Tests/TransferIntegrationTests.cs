@@ -343,4 +343,100 @@ public class TransferIntegrationTests : IDisposable
             Assert.False(report.TotalIsUncertain);
         }
     }
+
+    [Fact]
+    public async Task ALockThatIsStillHeld_IsNotRescuedBySayingSoTwice()
+    {
+        // The honest limit of the second pass, kept in a test so nobody later reads the
+        // retry as "the copy always finishes". Measured against the real thing in five
+        // sharing modes: robocopy, File.Copy and the most permissive open .NET offers
+        // succeed on the same files and fail on the same files. A file whose owner denies
+        // read sharing cannot be read by anything on the machine, Explorer included.
+        string source = Dir("held-source");
+        string destination = Dir("held-destination");
+
+        string locked = WriteFile(source, "held.bin", 4096);
+
+        using (var hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = new FileTransferService();
+            TransferPlan plan = service.Plan([source], destination, TransferKind.Copy);
+            TransferReport report = await service.ExecuteAsync(plan);
+
+            Assert.Equal(0, report.RecoveredCount);
+            Assert.Equal(TransferPhase.Failed, report.Phase);
+            Assert.Contains(report.FailedFilePaths,
+                            p => string.Equals(p, locked, StringComparison.OrdinalIgnoreCase));
+
+            // And nothing was invented at the destination to cover for it.
+            Assert.False(File.Exists(Path.Combine(destination, "held-source", "held.bin")));
+        }
+    }
+
+    [Fact]
+    public async Task ALockThatLetGo_IsPickedUpByTheSecondPass()
+    {
+        // The case the second pass exists for. The hold is released while the batch is
+        // still running, which is what happens on a real copy: robocopy gives up on a file
+        // about a second after meeting it, and a batch runs for minutes.
+        string source = Dir("released-source");
+        string destination = Dir("released-destination");
+
+        WriteFile(source, "ordinary.bin", 4096);
+        string locked = WriteFile(source, "released.bin", 8192);
+
+        var hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([source], destination, TransferKind.Copy);
+
+        // Let go once robocopy has had its go at it. The retry runs after the whole batch,
+        // so by then the file is free.
+        using var releasing = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(400, releasing.Token);
+            hold.Dispose();
+        }, releasing.Token);
+
+        TransferReport report = await service.ExecuteAsync(plan);
+        await releasing.CancelAsync();
+        hold.Dispose();
+
+        // Whether this pass or the tool's own retry got it, the file is not a failure and
+        // nothing is left on the list.
+        Assert.Empty(report.FailedFilePaths);
+        Assert.Equal(TransferPhase.Finished, report.Phase);
+
+        string landed = Path.Combine(destination, "released-source", "released.bin");
+        Assert.True(File.Exists(landed));
+        Assert.Equal(8192, new FileInfo(landed).Length);
+
+        // And the bytes it brought over are in the total, not left out of it.
+        // The total is the closing table's, so it is what landed and not what was announced.
+        Assert.Equal(4096 + 8192, report.BytesTransferred);
+        Assert.False(report.TotalIsUncertain);
+    }
+
+    [Fact]
+    public async Task DeletingAFolder_DoesNotReportItsOwnTotalAsUncertain()
+    {
+        // A purge copies nothing, so the Copied column of its closing table is zero while
+        // the files it removed are counted under Extras. Reading Copied for both jobs made
+        // every single delete end with "the two counts of these bytes disagree, so no single
+        // total is quoted" — on a number that was never in doubt.
+        string target = Dir("purge-me");
+        WriteFile(target, "a.bin", 100_000);
+        WriteFile(target, "b.bin", 200_000);
+        WriteFile(Path.Combine(target, "sub"), "c.bin", 300_000);
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([target], string.Empty, TransferKind.Delete);
+        TransferReport report = await service.ExecuteAsync(plan);
+
+        Assert.False(Directory.Exists(target));
+        Assert.False(report.TotalIsUncertain);
+        Assert.Equal(600_000, report.BytesTransferred);
+        Assert.True(report.BytesWereFreed);
+    }
 }

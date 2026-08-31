@@ -200,6 +200,11 @@ public sealed class FileTransferService
             if (result.Outcome == TransferOutcome.Cancelled) cancelled = true;
         }
 
+        // Second pass over what the tool could not take, now that the batch has had time to
+        // run: see RetryFailedAsync for what this can and cannot rescue.
+        int recovered = cancelled ? 0 : await RetryFailedAsync(plan, results, state, cancellationToken)
+            .ConfigureAwait(false);
+
         TransferPhase phase = cancelled
             ? TransferPhase.Cancelled
             : results.Any(r => r.Outcome == TransferOutcome.Failed)
@@ -208,11 +213,11 @@ public sealed class FileTransferService
 
         state.Report(phase, string.Empty);
 
-        // Two readings of the same reality, compared by the app: the bytes counted off the
-        // per-file lines, and the total robocopy printed in its own closing table. They
-        // normally agree to the byte; when they do not, the report says the figure is
-        // uncertain rather than quietly picking one of them.
-        bool uncertain = state.SummaryBytes >= 0 && state.SummaryBytes != state.BytesDone;
+        // Uncertain now means one thing only: a run ended without a readable closing table,
+        // so the figure on screen is the optimistic count off the per-file lines and nothing
+        // confirmed it. When the table is there, it is the total — comparing it against the
+        // lines and reporting the disagreement was reporting a disagreement that is normal.
+        bool uncertain = state.MissingSummary;
 
         return new TransferReport(plan.Kind, plan.Destination, results, phase,
                                   state.BytesDone, uncertain, clock.Elapsed)
@@ -221,11 +226,166 @@ public sealed class FileTransferService
             // the two disagree instead of showing the shorter one as the whole story.
             FailedFileCount = state.SummaryFilesFailed,
 
+            RecoveredCount = recovered,
+
             // A copy frees nothing anywhere. A move frees the source volume only by leaving
             // it, and only the caller knows which volumes are in play. A permanent delete
             // always does.
             BytesWereFreed = plan.Kind == TransferKind.Delete,
         };
+    }
+
+    /// <summary>
+    /// Goes back for the files the tool could not take, one at a time, at the end.
+    /// <para>
+    /// ⚠️ <b>What this rescues, and what it cannot.</b> Measured before it was written, with
+    /// a file held open in five different sharing modes: robocopy, <c>File.Copy</c> and the
+    /// most permissive open .NET offers all succeed on exactly the same three and all fail on
+    /// exactly the same two. A file whose owner denies read sharing is unreadable to every
+    /// program on the machine — Explorer included — and only a shadow copy gets around that.
+    /// So this is <b>not</b> a second engine that is cleverer than the first one, and saying
+    /// it was would be promising what it cannot do.
+    /// </para>
+    /// <para>
+    /// What it does rescue is the far more common case: a lock that was a moment. Robocopy
+    /// is run with <c>/R:1 /W:1</c>, so it gives up on a file about a second after meeting
+    /// it, while a batch runs for minutes — a file that a program had open at second three
+    /// is usually free by the end. Trying again then costs one open per failed file and
+    /// finishes the copy instead of handing back a list.
+    /// </para>
+    /// </summary>
+    /// <returns>How many files the second pass brought over.</returns>
+    private static async Task<int> RetryFailedAsync(TransferPlan plan, List<TransferItemResult> results,
+                                                    RunState state, CancellationToken cancellationToken)
+    {
+        int recovered = 0;
+
+        for (int i = 0; i < results.Count; i++)
+        {
+            TransferItemResult result = results[i];
+            if (result.FailedPaths.Count == 0) continue;
+            if (cancellationToken.IsCancellationRequested) break;
+
+            var stillFailed = new List<string>(result.FailedPaths.Count);
+            long extraBytes = 0;
+
+            foreach (string source in result.FailedPaths)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    stillFailed.Add(source);
+                    continue;
+                }
+
+                long bytes = await RetryOneAsync(plan.Kind, result.Item, source, state, cancellationToken)
+                    .ConfigureAwait(false);
+
+                // -1: still out of reach. -2: it is at the destination already, which
+                // happens when the tool's own retry got it after announcing the failure —
+                // it is not failed, and this pass did not rescue it either.
+                if (bytes == -1) stillFailed.Add(source);
+                else if (bytes >= 0)
+                {
+                    recovered++;
+                    extraBytes += bytes;
+                }
+            }
+
+            if (stillFailed.Count == result.FailedPaths.Count) continue;
+
+            // Everything that was missing arrived, so the item is no longer a failure — and
+            // if some of it is still missing, it stays one, with the shorter list.
+            TransferOutcome outcome = stillFailed.Count == 0 && result.Outcome == TransferOutcome.Failed
+                ? TransferOutcome.Done
+                : result.Outcome;
+
+            results[i] = result with
+            {
+                Outcome = outcome,
+                BytesTransferred = result.BytesTransferred + extraBytes,
+                Message = stillFailed.Count == 0 ? null : result.Message,
+                FailedPaths = stillFailed,
+            };
+        }
+
+        return recovered;
+    }
+
+    /// <summary>
+    /// One file, the long way round.
+    /// </summary>
+    /// <returns>
+    /// The bytes this pass brought over, <c>-1</c> when the file is still out of reach, or
+    /// <c>-2</c> when it turned out to be at the destination already.
+    /// </returns>
+    private static async Task<long> RetryOneAsync(TransferKind kind, TransferItem item, string source,
+                                                  RunState state, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (kind == TransferKind.Delete)
+            {
+                File.Delete(source);
+                if (File.Exists(source)) return -1;
+
+                long size = 0;
+                state.CountFile(source, size);
+                return size;
+            }
+
+            if (!File.Exists(source)) return -1;
+
+            string target = MapToDestination(item, source);
+            if (target.Length == 0) return -1;
+
+            long length = new FileInfo(source).Length;
+
+            // A failed attempt can leave a stub behind. Same length is treated as arrived;
+            // any other length is an unfinished file and gets written over — this is the one
+            // place a transfer overwrites anything, and it is only ever its own wreckage.
+            if (File.Exists(target) && new FileInfo(target).Length == length) return -2;
+
+            string? folder = Path.GetDirectoryName(target);
+            if (folder is not null) Directory.CreateDirectory(folder);
+
+            // The most permissive request there is: whatever the owner allows, this accepts.
+            using (var reader = new FileStream(source, FileMode.Open, FileAccess.Read,
+                                               FileShare.ReadWrite | FileShare.Delete))
+            using (var writer = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                await reader.CopyToAsync(writer, cancellationToken).ConfigureAwait(false);
+            }
+
+            // A move is a copy that then lets go. If the source will not go, the copy still
+            // happened and the item is no worse off than the tool left it.
+            if (kind == TransferKind.Move)
+            {
+                try { File.Delete(source); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+
+            state.CountFile(target, length);
+            return length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                        or System.ComponentModel.Win32Exception
+                                        or NotSupportedException)
+        {
+            return -1;
+        }
+    }
+
+    /// <summary>Where a file under a travelling item is meant to land.</summary>
+    private static string MapToDestination(TransferItem item, string source)
+    {
+        if (!item.IsDirectory)
+            return string.Equals(source, item.Source, StringComparison.OrdinalIgnoreCase) ? item.Destination : string.Empty;
+
+        string root = item.Source.TrimEnd('\\');
+        if (!source.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return string.Empty;
+
+        string relative = source[root.Length..].TrimStart('\\');
+        return relative.Length == 0 ? string.Empty : Path.Combine(item.Destination, relative);
     }
 
     private async Task<TransferItemResult> RunOneAsync(TransferItem item, TransferKind kind,
@@ -414,6 +574,8 @@ public sealed class FileTransferService
 
         foreach (string argument in arguments) info.ArgumentList.Add(argument);
 
+        state.BeginRun(arguments.Contains("/MIR"));
+
         using var process = new Process { StartInfo = info, EnableRaisingEvents = true };
 
         process.OutputDataReceived += (_, e) => state.Consume(e.Data, item);
@@ -442,6 +604,7 @@ public sealed class FileTransferService
             return RunState.CancelledExitCode;
         }
 
+        state.EndRun();
         return process.ExitCode;
     }
 
@@ -472,9 +635,31 @@ public sealed class FileTransferService
         // first file. Null is the only "never reported yet" that cannot be arithmetic.
         private TimeSpan? _lastReport;
 
-        /// <summary>Summary rows seen so far. Every third one is Bytes; the others are Dirs and Files.</summary>
+        /// <summary>
+        /// The closing table of the run in progress, and what the total was before it began.
+        /// <para>
+        /// ⚠️ The per-file lines are an <b>optimistic</b> count and cannot be anything else:
+        /// robocopy announces a file before it knows whether it will land. Measured on the
+        /// real tool, three ways the lines lie about the total — a failed file is announced
+        /// with its full size; a retry announces it a second time; and a retry that
+        /// <b>succeeds</b> was seen to land without announcing itself again at all. Trying to
+        /// undo each announcement as its error arrives fixes the first two and breaks the
+        /// third: the file arrived and its bytes had been taken back out.
+        /// </para>
+        /// <para>
+        /// So the lines drive the bar while the run is going, and the moment the run ends the
+        /// total is snapped to the closing table — the tool's own count of what it actually
+        /// wrote. A run that prints no readable table leaves the optimistic figure standing
+        /// and says the total is uncertain, which is the honest end of it.
+        /// </para>
+        /// </summary>
         private int _summaryRows;
-        private long _summaryBytes = -1;
+        private long _runSummaryBytes = -1;
+        private long _runSummaryFiles = -1;
+        private long _runBaseBytes;
+        private int _runBaseFiles;
+        private bool _runIsPurge;
+        private bool _missingSummary;
         private int _summaryFilesFailed;
 
         // Order matters, because this is the list the window shows, so a list beside a set
@@ -482,6 +667,7 @@ public sealed class FileTransferService
         private readonly List<string> _failed = [];
         private readonly HashSet<string> _failedSeen = new(StringComparer.OrdinalIgnoreCase);
 
+        /* removido: a memória do que está em voo — ver a nota em _runSummaryBytes.
         /// <summary>
         /// What each file in flight was counted as, so a failure can take it back out.
         /// <para>
@@ -501,9 +687,7 @@ public sealed class FileTransferService
         /// outcome, and the one that was already there.
         /// </para>
         /// </summary>
-        private const int InFlightMemory = 512;
-        private readonly Dictionary<string, long> _inFlight = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Queue<string> _inFlightOrder = new();
+        private const int InFlightMemory = 512; */
 
         public RunState(TransferPlan plan, Stopwatch clock, TransferRateMeter meter,
                         IProgress<TransferProgress>? progress)
@@ -516,8 +700,11 @@ public sealed class FileTransferService
 
         public long BytesDone { get { lock (_gate) return _bytes; } }
 
-        /// <summary>Robocopy's own total, or -1 when no run printed a readable summary.</summary>
-        public long SummaryBytes { get { lock (_gate) return _summaryBytes; } }
+        /// <summary>
+        /// True when a run ended without a readable closing table, so the total on screen is
+        /// still the optimistic count off the per-file lines.
+        /// </summary>
+        public bool MissingSummary { get { lock (_gate) return _missingSummary; } }
 
         /// <summary>Files the closing tables counted as FAILED, added up across the batch.</summary>
         public int SummaryFilesFailed { get { lock (_gate) return _summaryFilesFailed; } }
@@ -543,7 +730,6 @@ public sealed class FileTransferService
                 _current = path;
                 _percent = null;
 
-                Remember(path, bytes);
             }
 
             Report(TransferPhase.Running, path);
@@ -580,12 +766,7 @@ public sealed class FileTransferService
                         // One retry means every failure is announced twice. Listing it twice
                         // would read as two files lost where one was.
                         if (_failedSeen.Add(parsed.Path)) _failed.Add(parsed.Path);
-
-                        // And the bytes this file was optimistically credited with go back.
-                        Forget(parsed.Path);
                     }
-
-                    Report(TransferPhase.Running, null);
                     break;
 
                 case RobocopyLineKind.SummaryRow:
@@ -595,40 +776,59 @@ public sealed class FileTransferService
 
                         // Dirs, Files, then Bytes — counted, not read off a label, because
                         // the labels are translated on some installs and the order is not.
-                        if (_summaryRows % 3 == 0)
-                            _summaryBytes = (_summaryBytes < 0 ? 0 : _summaryBytes) + parsed.Bytes;
-
-                        // The Files row carries the tool's own count of what failed, which is
-                        // the figure the named list gets checked against.
-                        if (_summaryRows % 3 == 2) _summaryFilesFailed += (int)parsed.Failed;
+                        //
+                        // ⚠️ Which column is the answer depends on the job. A copy writes, so
+                        // Copied is what landed. A purge — the /MIR onto an empty folder that
+                        // is this app's fast delete — copies nothing and removes everything,
+                        // so its work is in Extras. Reading Copied for both is why a 2 GiB
+                        // delete reported "the two counts of these bytes disagree" every
+                        // single time: the table said zero copied, because nothing was.
+                        if (_summaryRows == 2)
+                        {
+                            _runSummaryFiles = _runIsPurge ? parsed.Extras : parsed.Bytes;
+                            _summaryFilesFailed += (int)parsed.Failed;
+                        }
+                        else if (_summaryRows == 3)
+                        {
+                            _runSummaryBytes = _runIsPurge ? parsed.Extras : parsed.Bytes;
+                        }
                     }
                     break;
             }
         }
 
-        /// <summary>Credits a file, and forgets the oldest one once the window is full.</summary>
-        private void Remember(string path, long bytes)
+        /// <summary>Marks the start of one robocopy run, so its closing table can be applied to it.</summary>
+        public void BeginRun(bool purge)
         {
-            if (path.Length == 0) return;
-
-            if (!_inFlight.ContainsKey(path)) _inFlightOrder.Enqueue(path);
-            _inFlight[path] = bytes;
-
-            while (_inFlightOrder.Count > InFlightMemory)
+            lock (_gate)
             {
-                string oldest = _inFlightOrder.Dequeue();
-                if (!_inFlight.ContainsKey(oldest)) continue;
-                if (!_inFlightOrder.Contains(oldest)) _inFlight.Remove(oldest);
+                _runBaseBytes = _bytes;
+                _runBaseFiles = _files;
+                _runSummaryBytes = -1;
+                _runSummaryFiles = -1;
+                _summaryRows = 0;
+                _runIsPurge = purge;
             }
         }
 
-        /// <summary>Takes a file back out of the count, bytes and all, once it has failed.</summary>
-        private void Forget(string path)
+        /// <summary>
+        /// Replaces this run's optimistic count with what its closing table said it wrote.
+        /// </summary>
+        public void EndRun()
         {
-            if (!_inFlight.Remove(path, out long bytes)) return;
+            lock (_gate)
+            {
+                if (_runSummaryBytes < 0 || _runSummaryFiles < 0)
+                {
+                    // No readable table. The lines are all there is, and the report says so
+                    // rather than presenting an optimistic figure as measured.
+                    _missingSummary = true;
+                    return;
+                }
 
-            _bytes -= bytes;
-            _files--;
+                _bytes = _runBaseBytes + _runSummaryBytes;
+                _files = _runBaseFiles + (int)_runSummaryFiles;
+            }
         }
 
         public void Report(TransferPhase phase, string? current)

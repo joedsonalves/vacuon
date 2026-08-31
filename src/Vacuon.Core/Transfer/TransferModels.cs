@@ -211,6 +211,19 @@ public sealed record TransferReport(
     public int FailedFileCount { get; init; }
 
     /// <summary>
+    /// Files that failed the first time and were picked up by the second pass.
+    /// <para>
+    /// A lock is often a moment rather than a state: the tool gives up after one retry a
+    /// second apart, and by the time a long batch has finished, whatever had the file open
+    /// has usually let go. What this cannot do is rescue a file whose owner denies read
+    /// sharing outright — measured, and it is not a robocopy limitation: a plain copy and
+    /// the most permissive open there is fail on exactly the same files. Nothing on Windows
+    /// reads those without a shadow copy.
+    /// </para>
+    /// </summary>
+    public int RecoveredCount { get; init; }
+
+    /// <summary>
     /// Whether these bytes are space the source volume got back.
     /// <para>
     /// A copy frees nothing anywhere, and a move inside one volume rewrites a directory

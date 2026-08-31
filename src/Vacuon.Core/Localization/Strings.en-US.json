@@ -866,6 +866,8 @@
   "transfer.clickToCopy": "Click to copy this path",
   "transfer.pathCopied": "Path copied",
   "transfer.pathNotCopied": "The clipboard would not take it — the path is still on screen",
+  "transfer.recovered": "{0} picked up on a second try",
+  "transfer.recoveredOne": "{0} picked up on a second try",
   "transfer.itemFatal": "the copy stopped on an error before it could finish",
   "transfer.itemSomeFailed": "some of the files inside could not be copied",
   "transfer.itemFailed": "this one did not go through",
