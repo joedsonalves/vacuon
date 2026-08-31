@@ -1,4 +1,4 @@
-<#
+﻿<#
     Gera assets/vacuon.ico a partir do mesmo desenho do vacuon-logo.svg.
 
     O .ico é redesenhado em cada tamanho em vez de ser reamostrado de uma imagem
@@ -162,3 +162,16 @@ $w.Dispose(); $out.Dispose()
 
 Write-Output "Gerado: $icoPath ($($pngBlobs.Count) tamanhos: $($sizes -join ', '))"
 Write-Output "Gerado: $pngPath"
+
+# O site em docs/ precisa do mesmo desenho: o GitHub Pages so serve o que esta dentro
+# da pasta publicada, entao a copia mora la em vez de apontar para ../assets. Ela sai
+# daqui, e nao da mao, para o favicon nunca divergir do icone do aplicativo.
+$docsDir = Join-Path (Split-Path -Parent $outDir) 'docs'
+if (Test-Path $docsDir) {
+    $docsIco = Join-Path $docsDir 'favicon.ico'
+    $docsPng = Join-Path $docsDir 'vacuon-256.png'
+    Copy-Item $icoPath $docsIco -Force
+    Copy-Item $pngPath $docsPng -Force
+    Write-Output "Copiado:  $docsIco"
+    Write-Output "Copiado:  $docsPng"
+}

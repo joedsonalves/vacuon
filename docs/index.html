@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vacuon — disk space analyzer for Windows</title>
+<meta name="description" content="Disk space analyzer for Windows. Reads the NTFS MFT straight off the volume, shows the real content of what you are about to delete, and never claims a number it did not measure.">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="256x256" href="vacuon-256.png">
+<link rel="apple-touch-icon" href="vacuon-256.png">
+<meta name="theme-color" content="#0D0F16">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vacuon — disk space analyzer for Windows">
+<meta property="og:description" content="Reads the NTFS MFT straight off the volume, shows the real content of what you are about to delete, and never claims a number it did not measure.">
+<meta property="og:url" content="https://joedsonalves.github.io/vacuon/">
+<meta property="og:image" content="https://joedsonalves.github.io/vacuon/vacuon-256.png">
+<meta name="twitter:card" content="summary">
+
+<style>
+  :root{
+    --bg:#0D0F16; --panel:#141827; --line:#252B3F;
+    --ink:#E6E9F2; --muted:#98A1B8; --accent:#FF9A1F; --accent-ink:#1A1206;
+    --max:880px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:var(--max); margin:0 auto; padding:0 20px}
+  a{color:var(--accent)}
+  img{max-width:100%; height:auto}
+
+  header{text-align:center; padding:72px 0 8px}
+  header img.logo{width:96px; height:96px}
+  h1{margin:18px 0 6px; font-size:2.6rem; letter-spacing:-.02em}
+  .tagline{margin:0 auto; max-width:44ch; color:var(--muted); font-size:1.08rem}
+
+  .cta{display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin:28px 0 10px}
+  .btn{
+    display:inline-block; padding:12px 22px; border-radius:10px; font-weight:600;
+    text-decoration:none; border:1px solid var(--line);
+  }
+  .btn.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+  .btn.ghost{color:var(--ink)}
+  .fineprint{text-align:center; color:var(--muted); font-size:.9rem; margin:0}
+
+  pre{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; overflow-x:auto; margin:20px auto; max-width:520px;
+    font:14px/1.5 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;
+  }
+  pre .c{color:var(--muted)}
+
+  .shot{margin:44px 0 8px}
+  .shot img{border:1px solid var(--line); border-radius:12px; display:block}
+  .caption{color:var(--muted); font-size:.86rem; text-align:center; margin:10px 0 0}
+
+  h2{font-size:1.25rem; margin:56px 0 14px; letter-spacing:-.01em}
+  .cards{display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px}
+  .card h3{margin:0 0 6px; font-size:1rem}
+  .card p{margin:0; color:var(--muted); font-size:.94rem}
+
+  .note{
+    background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:10px; padding:16px 20px; margin:24px 0; color:var(--muted); font-size:.95rem;
+  }
+  .note strong{color:var(--ink)}
+
+  footer{
+    border-top:1px solid var(--line); margin-top:64px; padding:26px 0 56px;
+    color:var(--muted); font-size:.88rem; text-align:center;
+  }
+  footer a{margin:0 8px; white-space:nowrap}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <img class="logo" src="vacuon-256.png" alt="Vacuon logo">
+  <h1>Vacuon</h1>
+  <p class="tagline">
+    Disk space analyzer for Windows. Reads the NTFS MFT straight off the volume, shows the
+    real content of what you are about to delete, and never claims a number it did not measure.
+  </p>
+
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/joedsonalves/vacuon/releases/latest/download/Vacuon.exe">⬇ Download for Windows</a>
+    <a class="btn ghost" href="https://github.com/joedsonalves/vacuon">Source on GitHub</a>
+  </div>
+  <p class="fineprint">Portable, 62 MB, nothing to install — it runs from a USB stick.</p>
+
+<pre><span class="c"># or, from a terminal</span>
+winget install Joedsonalves.Vacuon</pre>
+</header>
+
+<main class="wrap">
+
+  <div class="shot">
+    <img src="img/02-explorer-escuro.png" alt="Vacuon showing the folder tree beside the file list, with sizes and thumbnails">
+    <p class="caption">The Explorer: the folder tree, the files inside it, and a thumbnail of what each one actually is.</p>
+  </div>
+
+  <h2>What it does</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>Finds where the space went</h3>
+      <p>Reading the Master File Table directly indexed 2.34 million files in 11.5 seconds on the machine it was built on. Without Administrator it still works, through the slower Windows API — and says which path it used.</p>
+    </div>
+    <div class="card">
+      <h3>Shows what it is before you delete it</h3>
+      <p>Thumbnails of the real content in six sizes, media details, and a preview panel — so you can tell which of five large renders is the final one without opening any of them.</p>
+    </div>
+    <div class="card">
+      <h3>Duplicates, look-alikes and a treemap</h3>
+      <p>Identical files by hash, pictures that merely resemble each other by fingerprint, and the whole volume drawn as boxes sized by what they occupy.</p>
+    </div>
+    <div class="card">
+      <h3>Cleans by rule, and reversibly</h3>
+      <p>A rule catalogue that calls Microsoft's own tools where the work belongs inside Windows, a quarantine it can restore from, and a live monitor reading the NTFS change journal.</p>
+    </div>
+  </div>
+
+  <h2>The rule the whole app is built on</h2>
+  <div class="note">
+    <strong>Vacuon never states a number it did not measure.</strong> That is not a slogan —
+    version 0.3.0 reported <em>Size on disk 758 GiB</em> on a 476 GiB volume, one line above the
+    correct <em>377 GiB used of 476 GiB</em>, and nothing complained, because nothing compared the
+    two. Every scan now cross-checks the space it attributed to files against what the volume
+    reports as used, and says so when the two disagree.
+  </div>
+
+  <h2>Before you download</h2>
+  <div class="note">
+    <strong>Windows will warn you, and that is expected.</strong> The file is not code-signed, so
+    the first run shows a blue <em>“Windows protected your PC”</em> screen: click <em>More info</em>,
+    then <em>Run anyway</em>. If you would rather not trust an unsigned binary from a stranger,
+    that is the correct instinct — the
+    <a href="https://github.com/joedsonalves/vacuon#build-it-yourself">source builds in three commands</a>,
+    and the SHA256 of every published file is in the
+    <a href="https://github.com/joedsonalves/vacuon/releases/latest">release notes</a>.
+  </div>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    <a href="https://github.com/joedsonalves/vacuon">Repository</a>·
+    <a href="https://github.com/joedsonalves/vacuon/releases/latest">Releases</a>·
+    <a href="https://github.com/joedsonalves/vacuon/blob/main/README.pt-BR.md">Português</a>·
+    <a href="https://github.com/joedsonalves/vacuon/issues">Issues</a>·
+    <a href="https://github.com/joedsonalves/vacuon/blob/main/LICENSE">MIT</a>
+  </p>
+  <p>Windows 10 21H2 or newer, x64. Built by <a href="https://github.com/joedsonalves">Joedson Alves</a>.</p>
+</footer>
+
+</body>
+</html>
