@@ -424,6 +424,8 @@ public partial class ExplorerView : UserControl
         RequestVisibleThumbnails();
     }
 
+    private void OnCompress(object sender, RoutedEventArgs e) => Model?.CompressSelection();
+
     private void OnQuarantine(object sender, RoutedEventArgs e)
     {
         MainViewModel? model = Model;

@@ -414,6 +414,7 @@
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.transfer.copyButton}" Click="OnCopyTo"/>
                             <MenuItem Header="{DynamicResource S.move.button}" Click="OnMoveTo"/>
+                            <MenuItem Header="{DynamicResource S.compress.button}" Click="OnCompress"/>
                             <MenuItem Header="{DynamicResource S.quarantine.button}" Click="OnQuarantine"/>
                             <Separator/>
                             <MenuItem Header="{DynamicResource S.select.all}" Command="{Binding SelectAllCommand}"/>
@@ -535,7 +536,14 @@
 
                         <!-- Quarentena antes da Lixeira e do apagar: e a acao de remocao que
                              tem volta, e o PRD quer ela como o caminho padrao. -->
+                        <!-- Antes da quarentena e do apagar, porque e a acao que devolve
+                             espaco sem tirar nada de ninguem. -->
                         <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6"
+                                Content="{DynamicResource S.compress.button}"
+                                ToolTip="{DynamicResource S.compress.buttonHint}"
+                                Click="OnCompress"/>
+
+                        <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="7,0,0,0"
                                 Content="{DynamicResource S.quarantine.button}"
                                 ToolTip="{DynamicResource S.quarantine.buttonHint}"
                                 Click="OnQuarantine"/>

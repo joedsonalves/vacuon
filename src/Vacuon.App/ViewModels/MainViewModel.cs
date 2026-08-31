@@ -2224,6 +2224,74 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         ApplyMove(report, byPath);
     }
 
+    // ================= compactar (F7.11) =================
+
+    /// <summary>
+    /// Stores the ticked items compressed by NTFS.
+    /// <para>
+    /// The one action in this app that gives space back without removing anything: the files
+    /// stay where they are, keep their length, and keep opening. Logs, text and code halve;
+    /// anything already compressed gains nothing, and the report says so rather than
+    /// rounding a zero up into a success.
+    /// </para>
+    /// <para>
+    /// ⚠️ The figure is measured — clusters before, clusters after — never the assumed ratio
+    /// the candidate list carries, which is a number from somebody else's disk.
+    /// </para>
+    /// </summary>
+    public async void CompressSelection()
+    {
+        List<string> paths = BasketPaths(out _);
+
+        if (paths.Count == 0)
+        {
+            StatusText = L.T("move.nothingSelected");
+            return;
+        }
+
+        StatusText = L.T("compress.working");
+
+        List<CompressResult> results = await Task.Run(() =>
+        {
+            var done = new List<CompressResult>(paths.Count);
+            foreach (string path in paths) done.Add(CompressionService.Compress(path));
+            return done;
+        });
+
+        int touched = 0;
+        long freed = 0;
+        var refused = new List<string>();
+
+        foreach (CompressResult result in results)
+        {
+            if (result.Succeeded)
+            {
+                touched++;
+                freed += result.Freed;
+                continue;
+            }
+
+            if (result.Outcome != CompressOutcome.Unchanged)
+                refused.Add($"{result.Path} — {result.Message ?? result.Outcome.ToString()}");
+        }
+
+        StatusText = touched == 0
+            ? L.T("compress.nothing")
+            : refused.Count > 0
+                ? L.T("compress.partial", Format.Count(touched), Format.Bytes(freed), Format.Count(refused.Count))
+                : freed <= 0
+                    ? L.T("compress.gainedNothing", Format.Count(touched))
+                    : touched == 1
+                        ? L.T("compress.doneOne", Format.Count(touched), Format.Bytes(freed))
+                        : L.T("compress.done", Format.Count(touched), Format.Bytes(freed));
+
+        if (refused.Count > 0) LastFailures = [.. refused];
+
+        // The clusters really did come back, and the volume cards still quote the figure the
+        // scan took. The index is not touched: the files are all still there, same length.
+        if (freed != 0) LoadVolumes();
+    }
+
     // ================= copiar =================
 
     /// <summary>

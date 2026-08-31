@@ -114,6 +114,63 @@ public static partial class Kernel32
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool EmptyWorkingSet(IntPtr process);
 
+    private const uint FSCTL_SET_COMPRESSION = 0x9C040;
+    private const ushort COMPRESSION_FORMAT_NONE = 0;
+    private const ushort COMPRESSION_FORMAT_DEFAULT = 1;
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool DeviceIoControl(SafeFileHandle device, uint code,
+                                                ref ushort input, uint inputSize,
+                                                nint output, uint outputSize,
+                                                out uint returned, nint overlapped);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetCompressedFileSizeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial uint GetCompressedFileSize(string lpFileName, out uint lpFileSizeHigh);
+
+    /// <summary>
+    /// Turns NTFS compression on or off for a file or folder that already exists.
+    /// <para>
+    /// ⚠️ On a folder this only decides how files written into it <b>later</b> are stored —
+    /// it does not reach what is already inside. The caller walks the tree.
+    /// </para>
+    /// </summary>
+    public static bool SetCompression(string path, bool compress, bool isDirectory)
+    {
+        // A directory needs BACKUP_SEMANTICS to open at all, and the handle needs write
+        // access because this changes how the file is stored.
+        uint flags = isDirectory ? FILE_FLAG_BACKUP_SEMANTICS : 0;
+
+        using SafeFileHandle handle = CreateFile(path, GENERIC_READ | GENERIC_WRITE,
+                                                 FILE_SHARE_READ | FILE_SHARE_WRITE, 0,
+                                                 OPEN_EXISTING, flags, 0);
+
+        if (handle.IsInvalid) return false;
+
+        ushort format = compress ? COMPRESSION_FORMAT_DEFAULT : COMPRESSION_FORMAT_NONE;
+
+        return DeviceIoControl(handle, FSCTL_SET_COMPRESSION, ref format, sizeof(ushort),
+                               0, 0, out _, 0);
+    }
+
+    /// <summary>
+    /// Bytes this file really occupies — the clusters, not the length.
+    /// <para>
+    /// The only figure that answers "did compressing it help", and the only one that moves
+    /// when it does: the length stays exactly what it was.
+    /// </para>
+    /// </summary>
+    public static long CompressedSizeOf(string path)
+    {
+        uint low = GetCompressedFileSize(path, out uint high);
+
+        // 0xFFFFFFFF is the failure marker, but it is also a legitimate low word, so the
+        // last error decides which one this is.
+        if (low == 0xFFFFFFFF && Marshal.GetLastWin32Error() != 0) return 0;
+
+        return ((long)high << 32) | low;
+    }
+
     /// <summary>
     /// Adds a second name to a file that already exists — the same bytes, another directory
     /// entry. Fails when the new name is taken, when the two are on different volumes, or on
