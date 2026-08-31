@@ -19,6 +19,7 @@ using Vacuon.Core.Preview;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
 using Vacuon.Core.Transfer;
+using Vacuon.Core.Update;
 using Vacuon.Native.Interop;
 
 namespace Vacuon.App.ViewModels;
@@ -1458,6 +1459,45 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsListMode => !_isGallery;
 
     // ---------------- notification area (F8.3, F8.4) ----------------
+
+    // ---------------- version and updates ----------------
+
+    private string _updateNoticeText = string.Empty;
+
+    /// <summary>
+    /// One line, and only when there is something to say: a version newer than this one is
+    /// on offer. Silence is the answer the rest of the time — a "you are up to date" banner
+    /// on every start is a line people stop reading, and then they stop reading the other one.
+    /// </summary>
+    public string UpdateNoticeText
+    {
+        get => _updateNoticeText;
+        private set => Set(ref _updateNoticeText, value);
+    }
+
+    /// <summary>Opens the About window, which owns the version comparison and the hash.</summary>
+    public void ShowAbout(Window owner) => Views.AboutWindow.Show(owner, _settings);
+
+    /// <summary>
+    /// Asks winget for a newer version, in the background, if the setting allows it.
+    /// <para>
+    /// Fired once at start and never awaited: the answer takes a second or two of somebody
+    /// else's process, and nothing on screen waits for it.
+    /// </para>
+    /// </summary>
+    public void StartUpdateCheck()
+    {
+        if (!_settings.CheckUpdatesOnStart) return;
+
+        _ = Task.Run(async () =>
+        {
+            UpdateStatus status = await UpdateCheck.QueryAsync().ConfigureAwait(false);
+            if (status.Outcome != UpdateOutcome.Available || status.Available is null) return;
+
+            Application.Current?.Dispatcher.Invoke(() =>
+                UpdateNoticeText = L.T("settings.updateAvailable", status.Available));
+        });
+    }
 
     public bool ShowTrayIcon
     {

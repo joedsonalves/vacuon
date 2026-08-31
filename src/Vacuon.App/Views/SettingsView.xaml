@@ -163,6 +163,15 @@
                     <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
                                Foreground="{DynamicResource Text.Muted}"
                                Text="{Binding PrivacyNoteText}"/>
+
+                    <!-- Only rendered when there is a newer version; empty text draws nothing. -->
+                    <TextBlock Style="{StaticResource Text.Sub}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Risk.Notable}"
+                               Text="{Binding UpdateNoticeText}"/>
+
+                    <Button Style="{StaticResource Button.Base}" HorizontalAlignment="Left"
+                            Padding="12,6" Margin="0,12,0,0" Click="OnAbout"
+                            Content="{DynamicResource S.settings.about}"/>
                 </StackPanel>
             </Border>
 

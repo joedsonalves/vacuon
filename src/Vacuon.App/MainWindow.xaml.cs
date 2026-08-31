@@ -17,6 +17,10 @@ public partial class MainWindow : Window
         _model = new MainViewModel(App.Settings);
         DataContext = _model;
 
+        // Read-only, in the background, and only if the setting allows: it runs winget and
+        // reads what it printed. Nothing is downloaded and nothing waits on it.
+        Loaded += (_, _) => _model.StartUpdateCheck();
+
         // A barra de título é do Windows, não do WPF: sem sincronizar, o tema escuro
         // fica com uma faixa branca no topo.
         SourceInitialized += (_, _) =>

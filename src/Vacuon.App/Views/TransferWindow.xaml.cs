@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using Vacuon.App.Infra;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Transfer;
+using Vacuon.Native.Interop;
 
 namespace Vacuon.App.Views;
 
@@ -229,7 +230,7 @@ public partial class TransferWindow : Window
         if (named.Count == 0) return;
 
         FailedFilesSection.Visibility = Visibility.Visible;
-        FailedFilesList.ItemsSource = named;
+        FailedFilesList.ItemsSource = Describe(named);
         CopyHint.Text = L.T("transfer.clickToCopy");
         SetToggleText();
 
@@ -243,6 +244,53 @@ public partial class TransferWindow : Window
             FailedFilesNote.Text = L.T("transfer.failedListPartial",
                                        Format.Count(named.Count), Format.Count(report.FailedFileCount));
         }
+    }
+
+    /// <summary>
+    /// One row per file that did not make it, with the program holding it where Windows
+    /// will say who that is.
+    /// <para>
+    /// ⚠️ Only the first <see cref="NameHoldersFor"/> are asked. Each answer is a Restart
+    /// Manager session of its own, which is the price of a per-file answer rather than one
+    /// union of names for the whole batch — cheap for the rows somebody is about to read,
+    /// and not worth paying four hundred times for rows nobody scrolls to.
+    /// </para>
+    /// </summary>
+    private static List<FailedFile> Describe(IReadOnlyList<string> paths)
+    {
+        var rows = new List<FailedFile>(paths.Count);
+
+        for (int i = 0; i < paths.Count; i++)
+        {
+            string held = i < NameHoldersFor ? Holder(paths[i]) : string.Empty;
+            rows.Add(new FailedFile(paths[i], held));
+        }
+
+        return rows;
+    }
+
+    private const int NameHoldersFor = 20;
+
+    private static string Holder(string path)
+    {
+        IReadOnlyList<FileHolder> holders = RestartManager.WhoHolds(path);
+        if (holders.Count == 0) return string.Empty;
+
+        FileHolder first = holders[0];
+
+        string name = first.IsService
+            ? L.T("transfer.heldByService", first.Name)
+            : L.T("transfer.heldBy", first.Name);
+
+        return holders.Count == 1
+            ? name
+            : L.T("transfer.heldByMany", first.Name, Format.Count(holders.Count - 1));
+    }
+
+    /// <summary>A row in the list: the path, and who has it.</summary>
+    private sealed record FailedFile(string Path, string Held)
+    {
+        public Visibility HeldVisibility => Held.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SetToggleText()
@@ -267,11 +315,13 @@ public partial class TransferWindow : Window
     /// </summary>
     private void OnCopyPath(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (sender is not TextBlock block || block.Text.Length == 0) return;
+        // The path alone, never the "in use by" line under it: what goes on the clipboard is
+        // what somebody is going to paste into a box that expects a path.
+        if (sender is not FrameworkElement row || row.DataContext is not FailedFile failed) return;
 
         try
         {
-            Clipboard.SetDataObject(block.Text, copy: true);
+            Clipboard.SetDataObject(failed.Path, copy: true);
             CopyHint.Text = L.T("transfer.pathCopied");
         }
         catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException

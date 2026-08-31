@@ -152,10 +152,16 @@
                         <ItemsControl x:Name="FailedFilesList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding}" Margin="0,2" Cursor="Hand"
-                                               Style="{StaticResource Text.Sub}"
-                                               TextWrapping="Wrap"
-                                               MouseLeftButtonUp="OnCopyPath"/>
+                                    <StackPanel Margin="0,3" Cursor="Hand"
+                                                Background="Transparent"
+                                                MouseLeftButtonUp="OnCopyPath">
+                                        <TextBlock Text="{Binding Path}" TextWrapping="Wrap"
+                                                   Style="{StaticResource Text.Sub}"/>
+                                        <TextBlock Text="{Binding Held}" TextWrapping="Wrap"
+                                                   Style="{StaticResource Text.Sub}" FontSize="11"
+                                                   Foreground="{DynamicResource Risk.Notable}"
+                                                   Visibility="{Binding HeldVisibility}"/>
+                                    </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

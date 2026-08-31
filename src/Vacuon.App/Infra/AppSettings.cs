@@ -57,6 +57,18 @@ public sealed class AppSettings
     public bool ShowTrayIcon { get; set; } = true;
 
     /// <summary>
+    /// Whether the app asks winget for a newer version when it starts.
+    /// <para>
+    /// On by default, because it only ever <b>reads</b>: it runs the package manager already
+    /// on the machine and looks at what it printed. Nothing is downloaded and nothing is
+    /// installed without somebody pressing the button — see the note on
+    /// <c>AboutWindow.OnUpdate</c> for the two measured reasons a silent updater would fail
+    /// in exactly the common cases.
+    /// </para>
+    /// </summary>
+    public bool CheckUpdatesOnStart { get; set; } = true;
+
+    /// <summary>
     /// Whether crossing the threshold below raises a Windows notification.
     /// <para>
     /// Separate from <see cref="ShowTrayIcon"/> even though the notification is posted
