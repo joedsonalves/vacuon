@@ -163,6 +163,10 @@ Folder tree sorted **by size, not by name** — whoever opens the tree wants to 
 
 Instant search over the in-memory index, plus filters for minimum size, age and extension. Buttons for **biggest files**, **biggest folders** and **suspicious**.
 
+**The search box also takes a folder path.** Paste `C:\Users\you\Videos\renders` into it and Vacuon lists what is in there, opening the tree down to it — answered from the scan already in memory, with no trip to the disk. Paste a *file* path and it lands on the file, which is what people actually mean when they paste one. A path plus a size or age filter searches *inside* that folder instead of listing it.
+
+It refuses to guess. A word with no separator in it is a name to search for and always was, so the ordinary search never costs you anything. A path on a drive this scan is not of says exactly that, rather than "no such folder" — the folder may be perfectly real.
+
 ### Thumbnails — see before you delete
 
 <img src="docs/img/03-miniaturas-escuro.png" width="900" alt="List with 256 px thumbnails showing video frames and images">
@@ -236,6 +240,47 @@ means moving into a folder younger than the scan. Vacuon adopts it into the inde
 later journal delta about that record lands on the right entry. When it cannot be placed
 (another volume, a walk-based scan, a record already taken), the app says the scan is now
 behind the disk and to press `F5`, instead of showing the files where they no longer are.
+
+### Copying — robocopy, with a window that says what it measured
+
+<img src="docs/img/20-transferencia.png" width="640" alt="The transfer window: speed, files per second, time left, bytes and elapsed">
+
+**Copy to…** sits beside **Move to…** and works on the same ticked basket. Underneath it is
+`robocopy /E /MT:32`: thirty-two threads walking the tree instead of the Shell's one file at
+a time, which on a folder of thousands of small files is most of the wall clock.
+
+**No console window, ever.** Vacuon starts `robocopy.exe` itself with `CreateNoWindow`, so
+there is no `cmd` anywhere in the chain and nothing that could flash a black rectangle at
+you. That is not a setting that can drift.
+
+But speed is not why robocopy is here rather than a faster loop of our own. It **reports
+every file as it lands**, which is what lets the window show measured bytes rather than a bar
+that moves because time passed. Everything on it is counted from those lines over a stopwatch:
+speed, files per second, bytes done of bytes planned, files done of files planned, elapsed,
+and a time remaining that is the current rate divided into what is left.
+
+The estimate uses a **sliding window**, not an average since the start. Ten thousand small
+files and then one large one are different speeds, and an average keeps quoting the first long
+after it stopped being true — which is why the Windows dialog's estimate has the reputation it
+has. And where a figure is not knowable the window says so: in the first moments there is no
+rate yet, so the line reads *working it out* instead of a confident "0 seconds".
+
+At the end it compares its own count against the total robocopy printed in its closing table.
+They normally agree to the byte. When they do not, the summary says the figure is uncertain
+rather than quietly picking one of them.
+
+Copying is the one batch action that takes nothing away from where it started, so there is no
+confirmation dialog — the folder picker is already an explicit choice, and the window names
+the destination and the size before the first file lands. Nothing is ever overwritten: a name
+the destination already uses goes in as `render (2).mp4`.
+
+**Move and delete use the same engine where it earns its place, and only there.** A move that
+stays on one volume is a rename — instant, and routing it through a copy engine would make it
+take minutes. A move that crosses volumes is a full copy, so it goes through the window.
+Permanent removal of a folder mirrors an empty one onto it, which is one threaded walk instead
+of a recursion per directory. The **Recycle Bin never does**: robocopy cannot recycle, and a
+faster delete that quietly erased instead of recycling would be the app doing something other
+than what the button says.
 
 ### Reopening — snapshot plus the change journal
 

@@ -18,5 +18,5 @@ public static class AppInfo
     /// and must keep describing it, whatever the working tree says today.
     /// </para>
     /// </summary>
-    public const string Version = "0.5.0";
+    public const string Version = "0.6.0";
 }

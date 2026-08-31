@@ -161,6 +161,10 @@ Cartão por volume com a barra de ocupação (vermelha acima de 90%), e três ag
 
 Busca instantânea sobre o índice em memória, mais filtros de tamanho mínimo, idade e extensão. Botões para **maiores arquivos**, **maiores pastas** e **suspeitos**.
 
+**A barra de busca também aceita o caminho de uma pasta.** Cole `C:\Users\voce\Videos\renders` nela e o Vacuon lista o que há lá dentro, abrindo a árvore até ela — respondido pela varredura que já está na memória, sem ir ao disco. Cole o caminho de um *arquivo* e ele para no arquivo, que é o que as pessoas querem dizer quando colam um. Caminho junto com filtro de tamanho ou idade busca *dentro* da pasta, em vez de listá-la.
+
+Ele se recusa a adivinhar. Uma palavra sem separador é um nome para procurar e sempre foi, então a busca comum não custa nada. Um caminho numa unidade que esta varredura não cobre diz exatamente isso, em vez de "não existe essa pasta" — a pasta pode ser perfeitamente real.
+
 ### Miniaturas — ver antes de apagar
 
 <img src="docs/img/03-miniaturas-escuro.png" width="900" alt="Lista com miniaturas de 256 px mostrando frames de vídeo e imagens">
@@ -236,6 +240,47 @@ para que um delta futuro do diário sobre aquele registro caia na entrada certa.
 dá para posicioná-la (outro volume, varredura por API, registro já ocupado), o app diz que a
 varredura ficou atrás do disco e para apertar `F5`, em vez de mostrar os arquivos onde eles
 não estão mais.
+
+### Copiar — robocopy, com uma janela que diz o que mediu
+
+<img src="docs/img/20-transferencia.png" width="640" alt="A janela de transferência: velocidade, arquivos por segundo, tempo restante, bytes e tempo decorrido">
+
+**Copiar para…** fica ao lado de **Mover para…** e age sobre a mesma cesta marcada. Por baixo
+está o `robocopy /E /MT:32`: trinta e duas linhas percorrendo a árvore em vez de um arquivo por
+vez do Shell — o que, numa pasta de milhares de arquivos pequenos, é quase todo o relógio.
+
+**Nenhuma janela de console, nunca.** O Vacuon inicia o `robocopy.exe` ele mesmo com
+`CreateNoWindow`, então não há `cmd` nenhum no caminho e não há o que piscar um retângulo preto
+na sua frente. Isso não é uma opção que possa se perder.
+
+Mas velocidade não é o motivo de o robocopy estar aqui em vez de um laço nosso mais rápido. Ele
+**relata cada arquivo assim que ele chega**, e é isso que deixa a janela mostrar bytes medidos
+em vez de uma barra que anda porque o tempo passou. Tudo ali é contado dessas linhas sobre um
+cronômetro: velocidade, arquivos por segundo, bytes feitos de bytes planejados, arquivos feitos
+de arquivos planejados, tempo decorrido, e um tempo restante que é a taxa atual dividida no que
+falta.
+
+A estimativa usa uma **janela deslizante**, não a média desde o começo. Dez mil arquivos
+pequenos e depois um grande são velocidades diferentes, e a média fica citando a primeira muito
+depois de ela ter deixado de ser verdade — é por isso que a estimativa do diálogo do Windows tem
+a fama que tem. E onde um número não é conhecível, a janela diz: nos primeiros instantes não há
+taxa, então a linha lê *ainda calculando* em vez de um confiante "0 segundos".
+
+No fim ela compara a própria contagem com o total que o robocopy imprimiu na tabela de
+fechamento. Normalmente batem byte a byte. Quando não batem, o resumo diz que o número é
+incerto, em vez de escolher um dos dois em silêncio.
+
+Copiar é a única ação em lote que não tira nada de onde estava, então não há diálogo de
+confirmação — o seletor de pasta já é uma escolha explícita, e a janela diz o destino e o
+tamanho antes do primeiro arquivo. Nada é sobrescrito: um nome que o destino já usa entra como
+`render (2).mp4`.
+
+**Mover e apagar usam o mesmo motor onde ele vale a pena, e só ali.** Um mover que fica no mesmo
+volume é uma renomeação — instantânea, e passá-la por um motor de cópia faria levar minutos. Um
+mover que cruza volumes é uma cópia inteira, então vai pela janela. Apagar uma pasta de vez
+espelha uma pasta vazia sobre ela, que é uma varredura com linhas em vez de uma recursão por
+diretório. A **Lixeira nunca usa**: o robocopy não sabe reciclar, e um apagar mais rápido que
+apagasse de vez em silêncio seria o app fazendo outra coisa que não o que o botão diz.
 
 ### Reabrir — snapshot mais o diário de alterações
 
