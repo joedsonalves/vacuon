@@ -74,6 +74,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         ScanCommand = new RelayCommand(async () => await ScanAsync(), () => !IsScanning);
         CancelScanCommand = new RelayCommand(() => _scanCts?.Cancel(), () => IsScanning);
+        PauseScanCommand = new RelayCommand(TogglePause, () => IsScanning);
         ScanVolumeCommand = new RelayCommand(async p => await ScanAsync(p as VolumeCardViewModel));
         StartWatchCommand = new RelayCommand(StartWatch);
         StopWatchCommand = new RelayCommand(Monitor.Stop);
@@ -381,6 +382,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             if (!Set(ref _isScanning, value)) return;
             (ScanCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CancelScanCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (PauseScanCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }
 
@@ -419,6 +421,38 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public ICommand ScanCommand { get; }
     public ICommand CancelScanCommand { get; }
+
+    // ---------------- pausar e retomar (F1.4) ----------------
+
+    private ScanPause? _pause;
+
+    public ICommand PauseScanCommand { get; }
+
+    /// <summary>True while the scan is held rather than running.</summary>
+    public bool IsScanPaused => _pause?.IsPaused == true;
+
+    /// <summary>The button says what pressing it will do, not what the state is.</summary>
+    public string PauseButtonText => L.T(IsScanPaused ? "scan.resume" : "scan.pause");
+
+    /// <summary>
+    /// Holds the scan, or lets it go again.
+    /// <para>
+    /// Cancelling a scan of two and a half million records throws away eleven seconds of
+    /// disk. Pausing keeps them — which is the whole point, because the reason to stop is
+    /// usually that something else needs the drive for a minute.
+    /// </para>
+    /// </summary>
+    private void TogglePause()
+    {
+        _pause?.Toggle();
+
+        Raise(nameof(IsScanPaused));
+        Raise(nameof(PauseButtonText));
+
+        if (IsScanPaused) StatusText = L.T("scan.paused", Format.Bytes(_bytesReadSoFar));
+    }
+
+    private long _bytesReadSoFar;
     public ICommand ScanVolumeCommand { get; }
     public ICommand RestartElevatedCommand { get; }
 
@@ -446,6 +480,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         var progress = new Progress<ScanProgress>(p =>
         {
             Progress = p.Percent;
+            _bytesReadSoFar = p.BytesRead;
+
+            // While it is held, the line says so and stays saying so: a progress figure that
+            // keeps being redrawn under a paused scan reads as a scan that is still running.
+            if (IsScanPaused) return;
+
             StatusText = p.TotalBytes > 0
                 ? L.T("scan.progress", Format.Percent(p.Percent), Format.Count(p.EntriesFound),
                       p.MegabytesPerSecond.ToString("N0", L.Culture))
@@ -454,7 +494,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         try
         {
-            var options = new MftScanOptions { Progress = progress };
+            // A fresh hold per scan: the one from last time may be sitting paused.
+            _pause = new ScanPause();
+            Raise(nameof(IsScanPaused));
+            Raise(nameof(PauseButtonText));
+
+            var options = new MftScanOptions { Progress = progress, Pause = _pause };
             var orchestrator = new ScanOrchestrator(options);
 
             // Refresh prefers a snapshot plus the journal delta; it falls back to a full

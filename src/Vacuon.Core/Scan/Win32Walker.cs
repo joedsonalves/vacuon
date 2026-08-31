@@ -69,6 +69,9 @@ public sealed class Win32Walker(MftScanOptions? options = null)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // Same hold as the MFT path, so pausing works on an unelevated session too.
+                _options.Pause?.WaitIfPaused(cancellationToken);
+
                 FileAttributes attrs;
                 try { attrs = item.Attributes; }
                 catch (IOException) { continue; }

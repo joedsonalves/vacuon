@@ -186,6 +186,12 @@
                                 AutomationProperties.Name="{DynamicResource S.a11y.themeToggle}"
                                 ToolTip="{Binding ThemeToggleTooltip}"
                                 Click="OnToggleTheme"/>
+                        <!-- Pausar antes de cancelar, na ordem em que se pensa nelas: parar
+                             por um minuto é o pedido comum, e cancelar joga fora o trabalho. -->
+                        <Button Style="{StaticResource Button.Base}" Margin="8,0,0,0"
+                                Content="{Binding PauseButtonText}"
+                                Command="{Binding PauseScanCommand}"
+                                Visibility="{Binding IsScanning, Converter={StaticResource Visible}}"/>
                         <Button Style="{StaticResource Button.Base}" Margin="8,0,0,0"
                                 Content="{DynamicResource S.action.cancel}"
                                 Command="{Binding CancelScanCommand}"

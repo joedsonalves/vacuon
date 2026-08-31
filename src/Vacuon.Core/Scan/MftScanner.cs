@@ -28,6 +28,12 @@ public sealed class MftScanOptions
     public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromMilliseconds(120);
 
     public IProgress<ScanProgress>? Progress { get; init; }
+
+    /// <summary>
+    /// Lets the scan be held and let go again (F1.4). Null means it cannot be paused, which
+    /// is what the command line and the tests want.
+    /// </summary>
+    public ScanPause? Pause { get; init; }
 }
 
 /// <summary>
@@ -126,6 +132,11 @@ public sealed class MftScanner(MftScanOptions? options = null)
             {
                 ct.ThrowIfCancellationRequested();
 
+                // Held between blocks, never inside one: a block is 8 MiB of one sequential
+                // read, and stopping halfway through would leave the device mid-request for
+                // however long somebody keeps it paused.
+                _options.Pause?.WaitIfPaused(ct);
+
                 int read = stream.Read(block.AsSpan(0, blockSize));
                 if (read <= 0) break;
 
@@ -153,17 +164,34 @@ public sealed class MftScanner(MftScanOptions? options = null)
                 {
                     lastReport = sw.Elapsed;
                     _options.Progress.Report(new ScanProgress(
-                        stream.Position, stream.Length, recordsParsed, entriesFound, sw.Elapsed));
+                        stream.Position, stream.Length, recordsParsed, entriesFound, Working(sw)));
                 }
             }
 
             _options.Progress?.Report(new ScanProgress(
-                stream.Length, stream.Length, recordsParsed, entriesFound, sw.Elapsed));
+                stream.Length, stream.Length, recordsParsed, entriesFound, Working(sw)));
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(block);
         }
+    }
+
+    /// <summary>
+    /// Elapsed time with the pauses taken out.
+    /// <para>
+    /// ⚠️ The progress record carries records per second and megabytes per second, and both
+    /// are this figure divided into real work. A scan held for five minutes and resumed would
+    /// otherwise report a rate an order of magnitude under what the disk did — a number
+    /// nobody measured, got by dividing work that happened by time that did not.
+    /// </para>
+    /// </summary>
+    private TimeSpan Working(Stopwatch clock)
+    {
+        TimeSpan held = _options.Pause?.HeldFor ?? TimeSpan.Zero;
+        TimeSpan working = clock.Elapsed - held;
+
+        return working > TimeSpan.Zero ? working : TimeSpan.Zero;
     }
 
     /// <summary>
