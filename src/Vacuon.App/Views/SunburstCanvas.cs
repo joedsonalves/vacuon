@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Vacuon.Core.Analyzers;
 
 namespace Vacuon.App.Views;
@@ -42,6 +43,29 @@ public sealed class SunburstCanvas : FrameworkElement
                  Vacuon.Core.Localization.L.T("a11y.treemap"));
 
         Focusable = true;
+
+        IsVisibleChanged += OnBecameVisible;
+    }
+
+    /// <summary>
+    /// Draws again once there is somewhere to draw.
+    /// <para>
+    /// ⚠️ <b>A collapsed element reads <c>ActualWidth == 0</c>, and coming back from
+    /// collapsed raises no <c>SizeChanged</c>.</b> Measured: showing the canvas, hiding it,
+    /// redrawing while hidden and showing it again ends with a blank picture — the redraw
+    /// wiped the visual because it had no size, and nothing ever told it to try again.
+    /// So a redraw that cannot happen is remembered, and the moment the element is visible
+    /// again it is done, at <see cref="DispatcherPriority.Loaded"/> because the visibility
+    /// change runs before layout has given it a size.
+    /// </para>
+    /// </summary>
+    private bool _pending;
+
+    private void OnBecameVisible(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true || !_pending) return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Render));
     }
 
     public event EventHandler<SunburstSlice>? SliceActivated;
@@ -115,6 +139,16 @@ public sealed class SunburstCanvas : FrameworkElement
 
     private void Render()
     {
+        // Before RenderOpen, never after: RenderOpen wipes the visual, so returning from
+        // inside the using block is what leaves the blank circle behind.
+        if (_slices.Count > 0 && Radius <= 0)
+        {
+            _pending = true;
+            return;
+        }
+
+        _pending = false;
+
         using DrawingContext context = _visual.RenderOpen();
 
         if (_slices.Count == 0 || Radius <= 0) return;

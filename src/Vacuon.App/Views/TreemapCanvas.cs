@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Vacuon.Core.Analyzers;
 
 namespace Vacuon.App.Views;
@@ -48,7 +49,31 @@ public sealed class TreemapCanvas : FrameworkElement
         // Reachable by keyboard, so it is not a hole in the tab order.
         Focusable = true;
         KeyboardNavigation.SetTabNavigation(this, KeyboardNavigationMode.Once);
+
+        IsVisibleChanged += OnBecameVisible;
     }
+
+    /// <summary>
+    /// Draws again once there is somewhere to draw.
+    /// <para>
+    /// ⚠️ <b>A collapsed element reads <c>ActualWidth == 0</c>, and coming back from
+    /// collapsed raises no <c>SizeChanged</c>.</b> Measured: showing the canvas, hiding it,
+    /// redrawing while hidden and showing it again ends with a blank picture — the redraw
+    /// wiped the visual because it had no size, and nothing ever told it to try again.
+    /// So a redraw that cannot happen is remembered, and the moment the element is visible
+    /// again it is done, at <see cref="DispatcherPriority.Loaded"/> because the visibility
+    /// change runs before layout has given it a size.
+    /// </para>
+    /// </summary>
+    private bool _pending;
+
+    private void OnBecameVisible(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is not true || !_pending) return;
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Redraw));
+    }
+
 
     /// <summary>
     /// Activates the box under the keyboard focus.
@@ -119,10 +144,21 @@ public sealed class TreemapCanvas : FrameworkElement
 
     private void Redraw()
     {
-        using DrawingContext dc = _visual.RenderOpen();
-
         double width = ActualWidth;
         double height = ActualHeight;
+
+        // Before RenderOpen, never after — see the note on _pending. The sunburst had this
+        // exact bug reported from use; this canvas had it too, hidden only by being the one
+        // that starts visible.
+        if (_nodes.Count > 0 && (width <= 1 || height <= 1))
+        {
+            _pending = true;
+            return;
+        }
+
+        _pending = false;
+
+        using DrawingContext dc = _visual.RenderOpen();
 
         if (_nodes.Count == 0 || width <= 1 || height <= 1)
         {
