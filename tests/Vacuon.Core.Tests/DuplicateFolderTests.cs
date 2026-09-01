@@ -107,7 +107,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"backup-b\video.mp4", 700_000, 1);
         Write(@"backup-b\notas\leia.txt", 400_000, 2);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         DuplicateFolderGroup group = Assert.Single(report.Groups);
         Assert.Equal(2, group.CopyCount);
@@ -127,7 +127,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"b\dois.bin", 600_000, 4);
         Write(@"b\tres.bin", 10_000, 5);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
     }
@@ -140,7 +140,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"x\config.json", 800_000, 7);
         Write(@"y\settings.json", 800_000, 7);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
 
@@ -162,7 +162,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"b\um.bin", 1_000_000, 3);
         Write(@"b\dois.bin", 500_000, 3);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
         Assert.Equal(0, report.FoldersHashed);
@@ -178,7 +178,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"c2\dados.bin", 900_000, 41);
         Write(@"c3\outro.bin", 900_000, 41);
 
-        DuplicateFolderScope scope = DuplicateFolderFinder.Scope(Index(), minimumBytes: 1000);
+        DuplicateFolderScope scope = DuplicateFolderFinder.Scope(Index(), minimumBytes: 1000, useCache: false);
 
         // c3 shares the size but not the name, so the shape stage drops it and the scope
         // says two folders, not three.
@@ -192,7 +192,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"p\dados.bin", 700_000, 9);
         Write(@"q\dados.bin", 700_000, 11);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
     }
@@ -206,7 +206,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"raiz-a\meio\fundo\arquivo.bin", 900_000, 13);
         Write(@"raiz-b\meio\fundo\arquivo.bin", 900_000, 13);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         DuplicateFolderGroup group = Assert.Single(report.Groups);
         Assert.Contains("raiz-", group.Keeper.Path);
@@ -221,7 +221,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"c2\arquivo.bin", 800_000, 17);
         Directory.CreateDirectory(Path.Combine(_root, "c2", "vazia"));
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
     }
@@ -234,7 +234,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"k3\a.bin", 500_000, 19);
 
         DuplicateFolderGroup group = Assert.Single(
-            DuplicateFolderFinder.Find(Index(), minimumBytes: 1000).Groups);
+            DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false).Groups);
 
         Assert.Equal(3, group.CopyCount);
         Assert.Equal(2, group.Redundant.Count);
@@ -250,7 +250,7 @@ public class DuplicateFolderTests : IDisposable
         Write(@"g1\um.bin", 900_000, 23);
         Write(@"g2\um.bin", 900_001, 23);
 
-        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000, useCache: false);
 
         Assert.Empty(report.Groups);
         Assert.Equal(0, report.FoldersHashed);

@@ -51,7 +51,8 @@ public sealed record DuplicateFolderReport(
     IReadOnlyList<DuplicateFolderGroup> Groups,
     int FoldersConsidered,
     int FoldersHashed,
-    long BytesRead)
+    long BytesRead,
+    int FromCache = 0)
 {
     public int GroupCount => Groups.Count;
 
@@ -88,7 +89,18 @@ public sealed record DuplicateFolderReport(
 /// </para>
 /// </summary>
 /// <summary>What a folder search would have to read, worked out before it starts.</summary>
-public readonly record struct DuplicateFolderScope(int FoldersConsidered, int Candidates, long CandidateBytes);
+/// <param name="Remembered">
+/// How many of the candidates an earlier run already read.
+/// <para>
+/// ⚠️ Not a promise, and the wording on screen has to keep it that way: this counts folders
+/// the cache has an entry for, and whether the entry is still valid is only known once the
+/// tree's metadata is walked — which is work this deliberately does not do. It exists so
+/// that a second run does not announce "up to 110 GiB to read" when the true answer is
+/// almost none of it.
+/// </para>
+/// </param>
+public readonly record struct DuplicateFolderScope(int FoldersConsidered, int Candidates,
+                                                   long CandidateBytes, int Remembered = 0);
 
 public static class DuplicateFolderFinder
 {
@@ -103,22 +115,32 @@ public static class DuplicateFolderFinder
     /// </para>
     /// </summary>
     public static DuplicateFolderScope Scope(VolumeIndex index, long minimumBytes = MinimumBytes,
-                                             CancellationToken cancellationToken = default)
+                                             CancellationToken cancellationToken = default,
+                                             bool useCache = true)
     {
         ArgumentNullException.ThrowIfNull(index);
 
         List<List<int>> buckets = Buckets(index, minimumBytes, out int considered, cancellationToken);
 
+        FolderSignatureCache? cache = useCache ? new FolderSignatureCache() : null;
+
         int candidates = 0;
+        int remembered = 0;
         long bytes = 0;
 
         foreach (List<int> bucket in buckets)
         {
             candidates += bucket.Count;
-            foreach (int folder in bucket) bytes += index.GetSubtreeSize(folder);
+
+            foreach (int folder in bucket)
+            {
+                bytes += index.GetSubtreeSize(folder);
+
+                if (cache is not null && cache.Knows(index.GetFullPath(folder))) remembered++;
+            }
         }
 
-        return new DuplicateFolderScope(considered, candidates, bytes);
+        return new DuplicateFolderScope(considered, candidates, bytes, remembered);
     }
 
     /// <summary>Folders smaller than this are not worth reporting as duplicates of each other.</summary>
@@ -140,9 +162,13 @@ public static class DuplicateFolderFinder
                                              long minimumBytes = MinimumBytes,
                                              KeepPreference keep = KeepPreference.Oldest,
                                              IProgress<DuplicateProgress>? progress = null,
-                                             CancellationToken cancellationToken = default)
+                                             CancellationToken cancellationToken = default,
+                                             bool useCache = true,
+                                             FolderSignatureCache? cache = null)
     {
         ArgumentNullException.ThrowIfNull(index);
+
+        cache ??= useCache ? new FolderSignatureCache() : null;
 
         List<List<int>> buckets = Buckets(index, minimumBytes, out int considered, cancellationToken);
 
@@ -151,7 +177,15 @@ public static class DuplicateFolderFinder
 
         progress?.Report(new DuplicateProgress(0, total, 0));
 
-        return Read(index, buckets, total, considered, keep, progress, cancellationToken);
+        DuplicateFolderReport report =
+            Read(index, buckets, total, considered, keep, progress, cache, cancellationToken);
+
+        // Written at the end rather than as it goes: a run that is cancelled halfway still
+        // keeps what it managed to read, and a run that crashes leaves the previous file
+        // whole instead of a half-written one.
+        cache?.Save();
+
+        return report;
     }
 
     /// <summary>The two stages that cost nothing, shared by <see cref="Scope"/> and the search.</summary>
@@ -222,6 +256,7 @@ public static class DuplicateFolderFinder
     private static DuplicateFolderReport Read(VolumeIndex index, List<List<int>> buckets, int total,
                                               int considered, KeepPreference keep,
                                               IProgress<DuplicateProgress>? progress,
+                                              FolderSignatureCache? cache,
                                               CancellationToken cancellationToken)
     {
         // Stage 3 reads. Every folder's signature is independent of every other's, so they
@@ -253,7 +288,7 @@ public static class DuplicateFolderFinder
 
         Parallel.For(0, total, parallel, i =>
         {
-            signatures[i] = SignatureOf(index.GetFullPath(flat[i]), state, cancellationToken);
+            signatures[i] = SignatureOf(index.GetFullPath(flat[i]), cache, state, cancellationToken);
             state.CountHashed();
 
             // Reported from inside the loop so a long run has a moving number rather than
@@ -264,6 +299,7 @@ public static class DuplicateFolderFinder
         var groups = new List<DuplicateFolderGroup>();
         int hashed = state.FoldersHashed;
         long bytesRead = state.BytesRead;
+        int fromCache = state.FromCache;
         int at = 0;
 
         foreach (List<int> bucket in buckets)
@@ -301,7 +337,7 @@ public static class DuplicateFolderFinder
         groups = DropNested(groups);
         groups.Sort((a, b) => b.RecoverableBytes.CompareTo(a.RecoverableBytes));
 
-        return new DuplicateFolderReport(groups, considered, hashed, bytesRead);
+        return new DuplicateFolderReport(groups, considered, hashed, bytesRead, fromCache);
     }
 
     /// <summary>
@@ -324,19 +360,7 @@ public static class DuplicateFolderFinder
         Shape(index, folder, string.Empty, lines);
         lines.Sort(StringComparer.Ordinal);
 
-        // Hashed rather than joined: the biggest candidates here hold thousands of files,
-        // and keeping every one of those strings alive as a dictionary key is megabytes of
-        // nothing.
-        using var sha = SHA256.Create();
-
-        foreach (string line in lines)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(line);
-            sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
-        }
-
-        sha.TransformFinalBlock([], 0, 0);
-        return Convert.ToHexString(sha.Hash!);
+        return Hashing.OfLines(lines);
     }
 
     private static void Shape(VolumeIndex index, int folder, string prefix, List<string> lines)
@@ -372,11 +396,15 @@ public static class DuplicateFolderFinder
         private long _bytesRead;
         private int _foldersHashed;
 
+        private int _fromCache;
+
         public long BytesRead => Interlocked.Read(ref _bytesRead);
         public int FoldersHashed => Volatile.Read(ref _foldersHashed);
+        public int FromCache => Volatile.Read(ref _fromCache);
 
         public void AddBytes(long bytes) => Interlocked.Add(ref _bytesRead, bytes);
         public void CountHashed() => Interlocked.Increment(ref _foldersHashed);
+        public void CountCached() => Interlocked.Increment(ref _fromCache);
     }
 
     /// <summary>
@@ -389,15 +417,43 @@ public static class DuplicateFolderFinder
     /// </para>
     /// </summary>
     public static string? SignatureOf(string folder, CancellationToken cancellationToken) =>
-        SignatureOf(folder, null, cancellationToken);
+        SignatureOf(folder, null, null, cancellationToken);
 
-    internal static string? SignatureOf(string folder, FolderScanState? state,
-                                        CancellationToken cancellationToken)
+    /// <summary>
+    /// The signature, from the cache when the tree has not moved and from the disk when it
+    /// has.
+    /// <para>
+    /// The stamp and the list of files come out of <b>one</b> walk of the tree, which is
+    /// also the walk the reading would have done. So a cache hit costs a directory
+    /// enumeration and nothing else, and a miss costs exactly what it always cost.
+    /// </para>
+    /// </summary>
+    internal static string? SignatureOf(string folder, FolderSignatureCache? cache,
+                                        FolderScanState? state, CancellationToken cancellationToken)
     {
         if (folder.Length == 0 || !Directory.Exists(folder)) return null;
 
-        var lines = new List<string>();
         string root = folder.TrimEnd('\\');
+        string? stamp = null;
+        List<string>? files = null;
+
+        if (cache is not null)
+        {
+            stamp = FolderSignatureCache.StampOf(root, out files);
+
+            if (stamp is not null)
+            {
+                string? remembered = cache.Get(root, stamp);
+
+                if (remembered is not null)
+                {
+                    state?.CountCached();
+                    return remembered;
+                }
+            }
+        }
+
+        var lines = new List<string>();
 
         var options = new EnumerationOptions
         {
@@ -408,7 +464,11 @@ public static class DuplicateFolderFinder
 
         try
         {
-            foreach (string file in Directory.EnumerateFiles(root, "*", options))
+            // The stamp walk already listed them; walking again would be a second
+            // enumeration of the same tree for the same answer.
+            IEnumerable<string> found = files ?? Directory.EnumerateFiles(root, "*", options);
+
+            foreach (string file in found)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -435,8 +495,14 @@ public static class DuplicateFolderFinder
         }
 
         lines.Sort(StringComparer.Ordinal);
+        string signature = Hashing.OfLines(lines);
 
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", lines))));
+        // ⚠️ Stored only when the stamp is known. A folder that could not be walked for its
+        // metadata has nothing to invalidate the entry later, and an entry nothing can
+        // invalidate is worse than no entry.
+        if (cache is not null && stamp is not null) cache.Put(root, stamp, signature);
+
+        return signature;
     }
 
     /// <summary>

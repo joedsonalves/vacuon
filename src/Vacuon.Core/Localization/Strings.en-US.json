@@ -983,6 +983,8 @@
   "dup.measuring": "Working out what this would have to read…",
   "dup.folderScope": "{0} folders of {1} could still be twins · up to {2} to read",
   "dup.folderScopeNone": "No two folders on this volume share a shape.",
+  "dup.folderFromCache": "{0} of {1} folders were already known from an earlier run",
+  "dup.folderRemembered": "{0} of them were read by an earlier run and will be skipped if nothing inside changed.",
   "cli.headSimilarAudio": "Recordings that sound like the same track",
   "similar.pictures": "Pictures",
   "similar.audio": "Audio",

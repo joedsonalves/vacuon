@@ -3908,7 +3908,14 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                                   Format.Count(scope.Candidates),
                                   Format.Count(scope.FoldersConsidered),
                                   Format.Bytes(scope.CandidateBytes));
-        DuplicateScopeText = L.T("dup.scopeNote");
+
+        // Without this the second run announces the same 110 GiB as the first, when the
+        // true figure is almost none of it. Worded as "already read once" rather than
+        // "will not be read": whether the entries still hold is only known once the run
+        // walks the trees.
+        DuplicateScopeText = scope.Remembered > 0
+            ? L.T("dup.scopeNote") + "  " + L.T("dup.folderRemembered", Format.Count(scope.Remembered))
+            : L.T("dup.scopeNote");
     }
 
     public void CancelDuplicateSearch() => _duplicateCts?.Cancel();
@@ -4239,12 +4246,24 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             foreach (DuplicateFolderGroup group in report.Groups.Take(MaxGroupsShown))
                 DuplicateFolderGroups.Add(new DuplicateFolderGroupViewModel(group, UpdateDuplicateSelection));
 
-            DuplicateStatusText = report.GroupCount == 0
-                ? L.T("dup.folderNone")
-                : report.GroupCount == 1
-                    ? L.T("dup.folderSummaryOne", Format.Bytes(report.RecoverableBytes))
-                    : L.T("dup.folderSummary", Format.Count(report.GroupCount),
-                          Format.Bytes(report.RecoverableBytes));
+            var parts = new List<string>(2)
+            {
+                report.GroupCount == 0
+                    ? L.T("dup.folderNone")
+                    : report.GroupCount == 1
+                        ? L.T("dup.folderSummaryOne", Format.Bytes(report.RecoverableBytes))
+                        : L.T("dup.folderSummary", Format.Count(report.GroupCount),
+                              Format.Bytes(report.RecoverableBytes)),
+            };
+
+            // Said because it explains the clock: the same search that took half an hour
+            // the first time takes minutes the second, and a number that changes that much
+            // without a reason on screen reads as the app having skipped something.
+            if (report.FromCache > 0)
+                parts.Add(L.T("dup.folderFromCache", Format.Count(report.FromCache),
+                              Format.Count(report.FoldersHashed)));
+
+            DuplicateStatusText = string.Join("  ·  ", parts);
         }
         catch (OperationCanceledException)
         {

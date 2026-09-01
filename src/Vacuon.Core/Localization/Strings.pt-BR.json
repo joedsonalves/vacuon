@@ -983,6 +983,8 @@
   "dup.measuring": "Calculando o que isto teria de ler…",
   "dup.folderScope": "{0} pastas de {1} ainda podem ser gêmeas · até {2} para ler",
   "dup.folderScopeNone": "Nenhuma pasta deste volume tem a mesma forma que outra.",
+  "dup.folderFromCache": "{0} de {1} pastas já eram conhecidas de uma execução anterior",
+  "dup.folderRemembered": "{0} delas foram lidas numa execução anterior e serão puladas se nada dentro tiver mudado.",
   "cli.headSimilarAudio": "Gravações que soam como a mesma faixa",
   "similar.pictures": "Imagens",
   "similar.audio": "Áudio",
