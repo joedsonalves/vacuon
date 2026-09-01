@@ -642,7 +642,7 @@ Detalhes em [SECURITY.md](SECURITY.md).
 | **M5** | **Motor de regras, catálogo JSON, ferramentas do Windows** | ✅ |
 | **M6** | **Duplicados exatos, em quatro estágios** | ✅ |
 | **M7** | **Treemap squarified com drill-down** | ✅ |
-| M8 | Imagens e vídeos parecidos, cache de impressões, resíduos, compressão, diff de varreduras · **áudio adiado** | 🟨 |
+| **M8** | **Imagens, vídeos e áudios parecidos, cache de impressões, resíduos, compressão, diff de varreduras** | ✅ |
 | **M9** | **Monitor com tela, limpeza agendada, guarda de espaço, ícone na bandeja e aviso de disco cheio** | ✅ |
 | M10 | Portátil, i18n, docs, controles acessíveis · **assinatura adiada** | 🟨 |
 

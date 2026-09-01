@@ -117,6 +117,7 @@ static class Help
         Console.WriteLine($"    clean                      {L.T("cli.cmdClean")}");
         Console.WriteLine($"    similar <drive|folder>     {L.T("cli.cmdSimilar")}");
         Console.WriteLine($"    similar <drive> --video    {L.T("cli.cmdSimilarVideo")}");
+        Console.WriteLine($"    similar <drive> --audio    {L.T("cli.cmdSimilarAudio")}");
         Console.WriteLine($"    watch <drive>              {L.T("cli.cmdWatch")}");
         Console.WriteLine($"    schedule [list|create|…]   {L.T("cli.cmdSchedule")}");
         Console.WriteLine($"    guard --below=10GB         {L.T("cli.cmdGuard")}");
@@ -795,6 +796,7 @@ static class Commands
         // and a video is several, and two videos are only comparable when their running times
         // agree. The flag chooses which question is being asked.
         if (args.Contains("--video")) return SimilarVideos(scan, args, top, cts.Token);
+        if (args.Contains("--audio")) return SimilarAudio(scan, args, top, cts.Token);
 
         Formatting.WriteHeading(L.T("cli.headSimilar"));
 
@@ -847,6 +849,76 @@ static class Commands
 
         if (report.FromCache > 0)
             Formatting.WriteMuted("  " + L.T("similar.fromCache", Formatting.Count(report.FromCache)));
+
+        Console.WriteLine();
+        return 0;
+    }
+
+    /// <summary>
+    /// The same question asked of recordings: which files on this volume are the same music?
+    /// <para>
+    /// ⚠️ The number printed beside each group is not a percentage of sameness in the way a
+    /// reader assumes. On this scale two unrelated recordings score around 60%, not 0% — the
+    /// fingerprint is twenty-four bits per frame and half of them agree by chance. It is
+    /// printed because 96% and 81% deserve different amounts of suspicion, and the footer
+    /// says what the floor is.
+    /// </para>
+    /// </summary>
+    private static int SimilarAudio(ScanResult scan, string[] args, int top, CancellationToken token)
+    {
+        double threshold = Math.Clamp(ArgInt(args, "--threshold",
+                                             (int)(AudioFingerprint.MatchThreshold * 100)) / 100.0,
+                                      0.5, 1.0);
+
+        Formatting.WriteHeading(L.T("cli.headSimilarAudio"));
+
+        Console.WriteLine();
+        Console.WriteLine("  " + L.T("similar.audioHint"));
+
+        AudioMatchReport report = AudioDuplicateFinder.Find(scan.Index, threshold, null, token);
+
+        foreach (AudioMatchGroup group in report.Groups.Take(top))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  " + L.T("similar.audioHeader",
+                                         Formatting.Count(group.CopyCount),
+                                         group.Similarity.ToString("P0", L.Culture),
+                                         Formatting.Bytes(group.RecoverableBytes)));
+
+            Console.WriteLine($"    [{L.T("similar.keeping")}]     {group.Keeper.Path}"
+                              + $"  ({Formatting.Bytes(group.Keeper.Bytes)})");
+
+            foreach (AudioTrack other in group.Redundant)
+                Console.WriteLine($"    [{L.T("similar.audioCopy")}]  {other.Path}"
+                                  + $"  ({Formatting.Bytes(other.Bytes)})");
+        }
+
+        Console.WriteLine();
+
+        if (report.GroupCount == 0)
+        {
+            Console.WriteLine("  " + L.T("similar.audioNone"));
+        }
+        else
+        {
+            Console.WriteLine("  " + (report.GroupCount == 1
+                ? L.T("similar.audioSummaryOne", Formatting.Bytes(report.RecoverableBytes))
+                : L.T("similar.audioSummary", Formatting.Count(report.GroupCount),
+                      Formatting.Bytes(report.RecoverableBytes))));
+        }
+
+        Formatting.WriteMuted("  " + L.T("similar.audioFingerprinted",
+                                         Formatting.Count(report.FilesFingerprinted),
+                                         Formatting.Count(report.FilesConsidered)));
+
+        // A file Windows has no decoder for was never listened to. Leaving it out in silence
+        // would read as the app having compared it and found it unique.
+        if (report.Unreadable > 0)
+            Formatting.WriteMuted("  " + L.T("similar.audioUnreadable", Formatting.Count(report.Unreadable)));
+
+        // Said on every run, like the watch command's footer: this screen removes nothing,
+        // and nothing it finds may be turned into a link.
+        Formatting.WriteMuted("  " + L.T("similar.audioNoLink"));
 
         Console.WriteLine();
         return 0;

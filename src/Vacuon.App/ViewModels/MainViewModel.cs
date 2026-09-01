@@ -79,10 +79,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         StartWatchCommand = new RelayCommand(StartWatch);
         StopWatchCommand = new RelayCommand(Monitor.Stop);
         RestartElevatedCommand = new RelayCommand(RestartElevated, () => !IsElevated);
-        FindSimilarCommand = new RelayCommand(async () => await FindSimilarAsync(),
+        FindSimilarCommand = new RelayCommand(async () => await FindSimilarEitherWayAsync(),
                                              () => !IsFindingSimilar);
         QuarantineSimilarCommand = new RelayCommand(QuarantineSimilar);
         ClearSimilarSelectionCommand = new RelayCommand(ClearSimilarSelection);
+        SelectAllAudioCommand = new RelayCommand(SelectAllAudio);
         ScanForJunkCommand = new RelayCommand(ScanForJunk);
         RunCleanupCommand = new RelayCommand(RunCleanup);
         SetCleanupProfileCommand = new RelayCommand(p =>
@@ -3170,6 +3171,14 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     {
         if (SimilarGroups.Count > 0 || IsFindingSimilar) return;
 
+        if (SimilarByAudio)
+        {
+            // The picture scope counts pictures. Saying it here would answer a question the
+            // screen is not asking.
+            if (AudioGroups.Count == 0) SimilarStatusText = L.T("similar.audioHint");
+            return;
+        }
+
         VolumeIndex? index = Index;
 
         if (index is null)
@@ -3188,6 +3197,128 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                   Format.Bytes(scope.CandidateBytes));
     }
 
+    // ---------------- parecidos por som (F4.7) ----------------
+
+    private bool _similarByAudio;
+
+    /// <summary>
+    /// Whether the search listens to audio instead of looking at pictures.
+    /// <para>
+    /// The same question about a different sense. A FLAC and an MP3 of one track have nothing
+    /// in common as bytes and everything in common as music, and the exact search — which is
+    /// right about bytes — cannot see it.
+    /// </para>
+    /// </summary>
+    public bool SimilarByAudio
+    {
+        get => _similarByAudio;
+        set
+        {
+            if (!Set(ref _similarByAudio, value)) return;
+
+            SimilarGroups.Clear();
+            AudioGroups.Clear();
+            Raise(nameof(HasAudioGroups));
+            Raise(nameof(SimilarByPictures));
+
+            Raise(nameof(SimilarSubtitle));
+            Raise(nameof(SimilarFindLabel));
+
+            SimilarStatusText = _similarByAudio ? L.T("similar.audioHint") : string.Empty;
+            if (!_similarByAudio) RefreshSimilarStatus();
+        }
+    }
+
+    public bool SimilarByPictures
+    {
+        get => !_similarByAudio;
+        set { if (value) SimilarByAudio = false; }
+    }
+
+    public ObservableCollection<AudioMatchGroupViewModel> AudioGroups { get; } = [];
+
+    public bool HasAudioGroups => AudioGroups.Count > 0;
+
+    /// <summary>The warning that belongs to every audio match, shown once above the list.</summary>
+    public string AudioNoLinkNote => L.T("similar.audioNoLink");
+
+    /// <summary>
+    /// The heading and the button follow the mode.
+    /// <para>
+    /// Leaving them saying "pictures" while the screen is set to audio would be the app
+    /// describing something it is not about to do.
+    /// </para>
+    /// </summary>
+    public string SimilarSubtitle =>
+        L.T(_similarByAudio ? "similar.subtitleAudio" : "similar.subtitle");
+
+    public string SimilarFindLabel =>
+        L.T(_similarByAudio ? "similar.findAudio" : "similar.find");
+
+    /// <summary>
+    /// Looks for recordings that are the same music in different files.
+    /// <para>
+    /// ⚠️ Nothing found here may be turned into a hard link, and the screen says so: a link
+    /// gives two names to one set of bytes, and these files only sound alike. Pointing one
+    /// path at the other's bytes would replace somebody's file rather than remove a copy.
+    /// </para>
+    /// </summary>
+    private async Task FindAudioMatchesAsync()
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return;
+
+        _similarCts?.Cancel();
+        _similarCts = new CancellationTokenSource();
+        CancellationToken token = _similarCts.Token;
+
+        IsFindingSimilar = true;
+        AudioGroups.Clear();
+        Raise(nameof(HasAudioGroups));
+
+        var progress = new Progress<DuplicateProgress>(p =>
+            SimilarStatusText = L.T("similar.audioWorking", Format.Count(p.FilesDone),
+                                    Format.Count(p.FilesTotal)));
+
+        try
+        {
+            AudioMatchReport report = await Task.Run(
+                () => AudioDuplicateFinder.Find(index, AudioFingerprint.MatchThreshold, progress, token),
+                token);
+
+            foreach (AudioMatchGroup group in report.Groups)
+                AudioGroups.Add(new AudioMatchGroupViewModel(group, UpdateSimilarSelection));
+
+            var parts = new List<string>(2)
+            {
+                report.GroupCount == 0
+                    ? L.T("similar.audioNone")
+                    : report.GroupCount == 1
+                        ? L.T("similar.audioSummaryOne", Format.Bytes(report.RecoverableBytes))
+                        : L.T("similar.audioSummary", Format.Count(report.GroupCount),
+                              Format.Bytes(report.RecoverableBytes)),
+            };
+
+            // Files Windows cannot decode are said out loud rather than quietly missing: a
+            // search that skipped half the library in silence would be worse than one that
+            // found nothing.
+            if (report.Unreadable > 0)
+                parts.Add(L.T("similar.audioUnreadable", Format.Count(report.Unreadable)));
+
+            SimilarStatusText = string.Join("  ·  ", parts);
+        }
+        catch (OperationCanceledException)
+        {
+            SimilarStatusText = L.T("similar.cancelled");
+        }
+        finally
+        {
+            IsFindingSimilar = false;
+            Raise(nameof(HasAudioGroups));
+            UpdateSimilarSelection();
+        }
+    }
+
     private CancellationTokenSource? _similarCts;
 
     public void CancelSimilarSearch() => _similarCts?.Cancel();
@@ -3195,6 +3326,17 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public ICommand FindSimilarCommand { get; private set; } = null!;
     public ICommand QuarantineSimilarCommand { get; private set; } = null!;
     public ICommand ClearSimilarSelectionCommand { get; private set; } = null!;
+    public ICommand SelectAllAudioCommand { get; private set; } = null!;
+
+    /// <summary>Ticks every redundant copy in every group. The keepers have no tick to reach.</summary>
+    private void SelectAllAudio()
+    {
+        foreach (AudioMatchGroupViewModel group in AudioGroups) group.SelectAll();
+    }
+
+    /// <summary>Pictures or audio, whichever the screen is set to.</summary>
+    private Task FindSimilarEitherWayAsync() =>
+        SimilarByAudio ? FindAudioMatchesAsync() : FindSimilarAsync();
 
     private async Task FindSimilarAsync()
     {
@@ -3288,6 +3430,16 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             }
         }
 
+        foreach (AudioMatchGroupViewModel group in AudioGroups)
+        {
+            foreach (AudioCopyViewModel copy in group.Copies)
+            {
+                if (!copy.IsChecked) continue;
+                count++;
+                bytes += copy.RecoverableBytes;
+            }
+        }
+
         HasSimilarSelection = count > 0;
         SimilarSelectionText = count == 0
             ? string.Empty
@@ -3299,6 +3451,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         foreach (SimilarGroupViewModel group in SimilarGroups)
             foreach (SimilarVersionViewModel version in group.Versions)
                 version.IsChecked = false;
+
+        foreach (AudioMatchGroupViewModel group in AudioGroups)
+            foreach (AudioCopyViewModel copy in group.Copies)
+                copy.IsChecked = false;
 
         UpdateSimilarSelection();
     }
@@ -3313,6 +3469,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             foreach (SimilarVersionViewModel version in group.Versions)
                 if (version.IsChecked) paths.Add(version.Path);
 
+        foreach (AudioMatchGroupViewModel group in AudioGroups)
+            foreach (AudioCopyViewModel copy in group.Copies)
+                if (copy.IsChecked) paths.Add(copy.Path);
+
         if (paths.Count == 0) return;
 
         var service = new QuarantineService();
@@ -3326,7 +3486,40 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
 
+        if (SimilarByAudio)
+        {
+            // Searching again would decode every file on the volume a second time — minutes,
+            // to learn what the run just did. The moved copies are dropped from the list
+            // instead, and a group with nothing redundant left is no longer a group.
+            DropQuarantinedAudio(report);
+            return;
+        }
+
         _ = FindSimilarAsync();
+    }
+
+    private void DropQuarantinedAudio(QuarantineReport report)
+    {
+        var gone = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (QuarantineResult result in report.Results)
+            if (result.Succeeded) gone.Add(result.Path);
+
+        for (int i = AudioGroups.Count - 1; i >= 0; i--)
+        {
+            AudioMatchGroupViewModel group = AudioGroups[i];
+
+            List<AudioTrack> left = [.. group.Group.Tracks.Where(t => !gone.Contains(t.Path))];
+
+            if (left.Count == group.Group.Tracks.Count) continue;
+
+            if (left.Count < 2) { AudioGroups.RemoveAt(i); continue; }
+
+            AudioGroups[i] = new AudioMatchGroupViewModel(
+                new AudioMatchGroup(left, group.Group.Similarity), UpdateSimilarSelection);
+        }
+
+        Raise(nameof(HasAudioGroups));
+        UpdateSimilarSelection();
     }
 
     // ================= limpeza por regras =================

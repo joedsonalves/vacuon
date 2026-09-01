@@ -21,17 +21,32 @@
         <TextBlock Grid.Row="0" Style="{StaticResource Text.Sub}" TextWrapping="Wrap"
                    MaxWidth="880" HorizontalAlignment="Left"
                    Foreground="{DynamicResource Text.Secondary}"
-                   Text="{DynamicResource S.similar.subtitle}"/>
+                   Text="{Binding SimilarSubtitle}"/>
 
         <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,11">
             <StackPanel Orientation="Horizontal">
+                <!-- Two senses, one question. Pictures are compared by how they look and
+                     audio by how it sounds, and neither can answer for the other. -->
+                <RadioButton GroupName="SimilarMode" VerticalAlignment="Center" FontSize="12"
+                             Content="{DynamicResource S.similar.pictures}"
+                             IsChecked="{Binding SimilarByPictures}"/>
+                <RadioButton GroupName="SimilarMode" VerticalAlignment="Center" FontSize="12"
+                             Margin="14,0,16,0"
+                             Content="{DynamicResource S.similar.audio}"
+                             IsChecked="{Binding SimilarByAudio}"/>
+
                 <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
-                        Content="{DynamicResource S.similar.find}"
+                        Content="{Binding SimilarFindLabel}"
                         Command="{Binding FindSimilarCommand}"/>
 
                 <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
                         Content="{DynamicResource S.dup.cancel}" Click="OnStop"
                         Visibility="{Binding IsFindingSimilar, Converter={StaticResource Visible}}"/>
+
+                <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
+                        Content="{DynamicResource S.dup.selectAll}"
+                        Command="{Binding SelectAllAudioCommand}"
+                        Visibility="{Binding HasAudioGroups, Converter={StaticResource Visible}}"/>
 
                 <TextBlock Style="{StaticResource Text.Sub}" Margin="16,0,0,0"
                            VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="760"
@@ -39,7 +54,83 @@
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="2" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="2" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding HasAudioGroups, Converter={StaticResource Visible}}">
+            <StackPanel>
+                <!-- Said once, above everything, because it is true of every group here and
+                     not of the exact-duplicate screen next door. -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="14,11">
+                    <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap"
+                               MaxWidth="880" HorizontalAlignment="Left"
+                               Text="{Binding AudioNoLinkNote}"/>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding AudioGroups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="16,13">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,8">
+                                        <Button DockPanel.Dock="Right" Style="{StaticResource Button.Base}"
+                                                FontSize="11" Padding="8,3" Click="OnSelectAudioGroup"
+                                                Content="{DynamicResource S.dup.selectGroup}"/>
+
+                                        <TextBlock Style="{StaticResource Text.Body}" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" TextWrapping="Wrap"
+                                                   Text="{Binding HeaderText}"/>
+                                    </DockPanel>
+
+                                    <!-- The keeper has no checkbox at all, not a disabled one:
+                                         "remove every copy" is not a state this screen can
+                                         represent. Same rule as the exact duplicates. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Border CornerRadius="4" Padding="6,2" VerticalAlignment="Center"
+                                                Background="{DynamicResource Accent.Muted}">
+                                            <TextBlock FontSize="10" FontWeight="Bold"
+                                                       FontFamily="{StaticResource Font.Ui}"
+                                                       Text="{Binding KeeperLabel}"/>
+                                        </Border>
+
+                                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                                   Margin="8,0,0,0" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" MaxWidth="820"
+                                                   Text="{Binding KeeperPath}"
+                                                   ToolTip="{Binding KeeperPath}"/>
+                                    </StackPanel>
+
+                                    <ItemsControl ItemsSource="{Binding Copies}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                                                    <CheckBox VerticalAlignment="Center"
+                                                              IsChecked="{Binding IsChecked}"
+                                                              AutomationProperties.Name="{Binding Path}"/>
+
+                                                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                                               Margin="8,0,0,0" VerticalAlignment="Center"
+                                                               FontWeight="SemiBold"
+                                                               Text="{Binding SizeText}"/>
+
+                                                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                                               Margin="10,0,0,0" VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" MaxWidth="780"
+                                                               Foreground="{DynamicResource Text.Muted}"
+                                                               Text="{Binding Path}"
+                                                               ToolTip="{Binding Path}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="2" Margin="0,14,0,0" VerticalScrollBarVisibility="Auto"
+                      Visibility="{Binding SimilarByPictures, Converter={StaticResource Visible}}">
             <ItemsControl ItemsSource="{Binding SimilarGroups}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

@@ -29,6 +29,12 @@ public partial class SimilarView : UserControl
 
     private void OnStop(object sender, RoutedEventArgs e) => Model?.CancelSimilarSearch();
 
+    private void OnSelectAudioGroup(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: AudioMatchGroupViewModel group })
+            group.SelectAll();
+    }
+
     private void OnQuarantineSelected(object sender, RoutedEventArgs e)
     {
         MainViewModel? model = Model;

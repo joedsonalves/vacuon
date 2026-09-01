@@ -173,6 +173,48 @@ internal interface IMFSample
     [PreserveSig] int ConvertToContiguousBuffer(out IMFMediaBuffer buffer);
 }
 
+/// <summary>
+/// The three Media Foundation entry points more than one reader here needs.
+/// <para>
+/// The video frame reader keeps its own copies, on purpose: it works, it has been measured
+/// against real files, and refactoring it to share this would be changing working code to
+/// avoid three lines of duplication. <c>MFStartup</c> is reference counted, so calling it
+/// from both places is not a problem — it is the same runtime either way.
+/// </para>
+/// </summary>
+internal static class MediaFoundationRuntime
+{
+    private static readonly Lock Gate = new();
+    private static bool _started;
+
+    public static bool Start()
+    {
+        lock (Gate)
+        {
+            if (_started) return true;
+
+            // MF_VERSION for Windows 7 and later, MFSTARTUP_NOSOCKET: nothing here reads
+            // from a network.
+            _started = MFStartup(0x00020070, 1) == 0;
+            return _started;
+        }
+    }
+
+    public static int CreateReader(string path, out IMFSourceReader? reader) =>
+        MFCreateSourceReaderFromURL(path, 0, out reader);
+
+    public static int CreateMediaType(out IMFMediaType? type) => MFCreateMediaType(out type);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    private static extern int MFStartup(uint version, uint flags);
+
+    [DllImport("mfplat.dll", ExactSpelling = true)]
+    private static extern int MFCreateMediaType(out IMFMediaType? type);
+
+    [DllImport("mfreadwrite.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int MFCreateSourceReaderFromURL(string url, nint attributes, out IMFSourceReader? reader);
+}
+
 [ComImport]
 [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
