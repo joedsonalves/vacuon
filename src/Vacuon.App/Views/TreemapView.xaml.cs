@@ -35,6 +35,12 @@ public partial class TreemapView : UserControl
         Map.NodeActivated += OnNodeActivated;
         Map.NodeHovered += OnNodeHovered;
 
+        // ⚠️ These two were never connected. The canvas raised both events from the day it
+        // was written and nothing listened, so the sunburst had no hover line and no
+        // drill-down — the picture drew, which is what made it look finished.
+        Burst.SliceActivated += OnSliceActivated;
+        Burst.SliceHovered += OnSliceHovered;
+
         IsVisibleChanged += (_, e) =>
         {
             if (e.NewValue is true) Reset();
@@ -182,6 +188,10 @@ public partial class TreemapView : UserControl
 
         EmptyText.Text = nodes.Count == 0 ? L.T("treemap.emptyFolder") : string.Empty;
 
+        // The pointer has not moved, so no hover event is coming, and the line still names
+        // something from the folder we just left — under a path that no longer leads to it.
+        HoverText.Text = string.Empty;
+
         string path = index.GetFullPath(folder);
         PathText.Text = path.Length > 0 ? path : L.T("treemap.root");
 
@@ -233,6 +243,58 @@ public partial class TreemapView : UserControl
         HoverText.Text = node is null
             ? string.Empty
             : L.T("treemap.hover", node.Name, Format.Bytes(node.Bytes));
+    }
+
+    private void OnSliceHovered(object? sender, SunburstSlice? slice)
+    {
+        HoverText.Text = slice is null
+            ? string.Empty
+            : L.T("treemap.hover", LabelFor(slice), Format.Bytes(slice.Bytes));
+    }
+
+    /// <summary>
+    /// What to call a wedge on the hover line.
+    /// <para>
+    /// The name alone is enough on the inner ring and ambiguous outside it: a sunburst shows
+    /// three levels at once, and half the volume has a folder called <c>bin</c>. So the label
+    /// is the path under the folder on screen — which for the inner ring <em>is</em> the
+    /// name, so the treemap's behaviour comes out unchanged.
+    /// </para>
+    /// </summary>
+    private string LabelFor(SunburstSlice slice)
+    {
+        VolumeIndex? index = Model?.Index;
+        if (index is null || _currentFolder < 0) return slice.Name;
+
+        var parts = new List<string>(4);
+        int at = slice.EntryIndex;
+
+        // Bounded by the depth the sunburst draws, so a broken parent chain cannot spin.
+        for (int step = 0; step <= SunburstRings && at != _currentFolder; step++)
+        {
+            parts.Add(index.GetName(at).ToString());
+
+            uint parent = index.Entries[at].ParentIndex;
+            if (parent >= index.Entries.Length || (int)parent == at) break;
+
+            at = (int)parent;
+        }
+
+        parts.Reverse();
+        return parts.Count == 0 ? slice.Name : string.Join("\\", parts);
+    }
+
+    private void OnSliceActivated(object? sender, SunburstSlice slice)
+    {
+        VolumeIndex? index = Model?.Index;
+        if (index is null) return;
+
+        // A wedge is a folder or a file, unlike a treemap box that carries the answer with
+        // it. Files are not somewhere to go into.
+        if (!index.Entries[slice.EntryIndex].IsDirectory) return;
+
+        _currentFolder = slice.EntryIndex;
+        Show(index, _currentFolder);
     }
 
     private void OnUp(object sender, RoutedEventArgs e)
