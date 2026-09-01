@@ -114,3 +114,12 @@ Desktop.ini
 $RECYCLE.BIN/
 *.tmp
 *~
+
+# O cérebro do projeto: vault do Obsidian com o porquê de cada decisão, cada armadilha e
+# cada número medido. É contexto de trabalho, não parte do produto — o repositório carrega
+# o que alguém precisa para usar e compilar o Vacuon. Mesma razão do CLAUDE.md e do PRD.md.
+# Fica só nesta máquina, e por isso NÃO TEM BACKUP pelo GitHub.
+/vault/
+.obsidian/
+.obsidian-*/
+*.canvas
