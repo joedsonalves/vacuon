@@ -59,6 +59,19 @@
                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                     <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="760"
                                Text="{Binding DuplicateStatusText}"/>
+
+                    <!-- Thin on purpose: it sits under a line of text that already says the
+                         two numbers, and it is there to show the shape of the wait, not to
+                         compete with them. -->
+                    <ProgressBar Height="3" Width="240" Margin="0,5,0,1"
+                                 HorizontalAlignment="Left"
+                                 Minimum="0" Maximum="1"
+                                 Value="{Binding DuplicateProgressValue, Mode=OneWay}"
+                                 Background="{DynamicResource Surface.Input}"
+                                 Foreground="{DynamicResource Accent}"
+                                 BorderThickness="0"
+                                 Visibility="{Binding HasDuplicateProgress,
+                                              Converter={StaticResource Visible}}"/>
                     <!-- The worst case, said plainly, before a read that can take an hour. -->
                     <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" Margin="0,4,0,0"
                                TextWrapping="Wrap" MaxWidth="760"

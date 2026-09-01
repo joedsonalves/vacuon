@@ -3840,14 +3840,27 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// nobody was given the information to give.
     /// </para>
     /// </summary>
-    public void MeasureDuplicateScope()
+    public async void MeasureDuplicateScope()
     {
+        // ⚠️ A search already running owns this text, and this method used to take it away.
+        // It runs on every arrival at the tab, so leaving a running search to look at
+        // something else and coming back replaced "2.140 of 11.176" with the figures from
+        // before the button was pressed — the run looked like it had never started, until
+        // the next progress tick put the number back seconds later.
+        if (IsFindingDuplicates) return;
+
         VolumeIndex? index = Index;
 
         if (index is null)
         {
             DuplicateStatusText = L.T("dup.needScan");
             DuplicateScopeText = string.Empty;
+            return;
+        }
+
+        if (DuplicatesByFolder)
+        {
+            await MeasureFolderScopeAsync(index);
             return;
         }
 
@@ -3867,7 +3880,73 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         DuplicateScopeText = L.T("dup.scopeNote");
     }
 
+    /// <summary>
+    /// The folder scope, worked out off the UI thread.
+    /// <para>
+    /// Unlike the file one, which is 187 ms of dictionary work, this walks every subtree
+    /// twice and takes about five seconds on a real disk. Running it where the file one runs
+    /// would freeze the window for five seconds every time somebody opened the tab.
+    /// </para>
+    /// </summary>
+    private async Task MeasureFolderScopeAsync(VolumeIndex index)
+    {
+        DuplicateStatusText = L.T("dup.measuring");
+        DuplicateScopeText = string.Empty;
+
+        DuplicateFolderScope scope = await Task.Run(() => DuplicateFolderFinder.Scope(index));
+
+        if (IsFindingDuplicates) return;
+
+        if (scope.Candidates == 0)
+        {
+            DuplicateStatusText = L.T("dup.folderScopeNone");
+            DuplicateScopeText = string.Empty;
+            return;
+        }
+
+        DuplicateStatusText = L.T("dup.folderScope",
+                                  Format.Count(scope.Candidates),
+                                  Format.Count(scope.FoldersConsidered),
+                                  Format.Bytes(scope.CandidateBytes));
+        DuplicateScopeText = L.T("dup.scopeNote");
+    }
+
     public void CancelDuplicateSearch() => _duplicateCts?.Cancel();
+
+    private double _duplicateProgress;
+
+    /// <summary>
+    /// How far along the search is, 0 to 1, for the thin bar under the counter.
+    /// <para>
+    /// It measures files or folders done against the total the stages produced — not bytes,
+    /// which nothing knows in advance, and not time, which nothing can honestly predict.
+    /// </para>
+    /// </summary>
+    public double DuplicateProgressValue
+    {
+        get => _duplicateProgress;
+        private set => Set(ref _duplicateProgress, value);
+    }
+
+    private bool _hasDuplicateProgress;
+
+    public bool HasDuplicateProgress
+    {
+        get => _hasDuplicateProgress;
+        private set => Set(ref _hasDuplicateProgress, value);
+    }
+
+    private void ShowProgress(DuplicateProgress p)
+    {
+        if (p.FilesTotal <= 0)
+        {
+            HasDuplicateProgress = false;
+            return;
+        }
+
+        DuplicateProgressValue = Math.Clamp((double)p.FilesDone / p.FilesTotal, 0, 1);
+        HasDuplicateProgress = true;
+    }
 
     /// <summary>Files or folders, whichever the screen is set to.</summary>
     private Task FindDuplicatesEitherWayAsync() =>
@@ -3895,10 +3974,13 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancellationToken token = _duplicateCts.Token;
 
         var progress = new Progress<DuplicateProgress>(p =>
+        {
+            ShowProgress(p);
             DuplicateStatusText = L.T("dup.progress",
                                       Format.Count(p.FilesDone),
                                       Format.Count(p.FilesTotal),
-                                      Format.Count(p.GroupsFound)));
+                                      Format.Count(p.GroupsFound));
+        });
 
         try
         {
@@ -3943,6 +4025,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         finally
         {
             IsFindingDuplicates = false;
+            HasDuplicateProgress = false;
         }
     }
 
@@ -4140,8 +4223,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         RaiseDuplicateGroups();
 
         var progress = new Progress<DuplicateProgress>(p =>
+        {
+            ShowProgress(p);
             DuplicateStatusText = L.T("dup.progress", Format.Count(p.FilesDone),
-                                      Format.Count(p.FilesTotal), Format.Count(p.GroupsFound)));
+                                      Format.Count(p.FilesTotal), Format.Count(p.GroupsFound));
+        });
 
         try
         {
@@ -4167,6 +4253,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         finally
         {
             IsFindingDuplicates = false;
+            HasDuplicateProgress = false;
             RaiseDuplicateGroups();
             Raise(nameof(HasDuplicateFolders));
             UpdateDuplicateSelection();

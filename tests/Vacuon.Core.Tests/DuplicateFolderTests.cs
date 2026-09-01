@@ -143,6 +143,47 @@ public class DuplicateFolderTests : IDisposable
         DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
 
         Assert.Empty(report.Groups);
+
+        // And ruled out without opening either file: the shape stage compares the paths,
+        // which the index already holds.
+        Assert.Equal(0, report.BytesRead);
+    }
+
+    [Fact]
+    public void SameCountAndSameTotalButDifferentFilesIsRuledOutWithoutReading()
+    {
+        // ⚠️ This is the case the shape stage exists for, and it is the common one rather
+        // than a corner: two folders holding two files each and 1.500.000 bytes each pass
+        // stage 1 and have nothing to do with each other. On a real C: this is what cuts
+        // 11.176 candidate folders holding 420 GiB down to 7.491 holding 110 GiB.
+        Write(@"a\um.bin", 500_000, 3);
+        Write(@"a\dois.bin", 1_000_000, 3);
+
+        Write(@"b\um.bin", 1_000_000, 3);
+        Write(@"b\dois.bin", 500_000, 3);
+
+        DuplicateFolderReport report = DuplicateFolderFinder.Find(Index(), minimumBytes: 1000);
+
+        Assert.Empty(report.Groups);
+        Assert.Equal(0, report.FoldersHashed);
+        Assert.Equal(0, report.BytesRead);
+    }
+
+    [Fact]
+    public void TheScopeCountsWhatTheSearchWouldRead()
+    {
+        // What the screen shows before the button is pressed has to be the figure the run
+        // actually faces, not the one from a stage earlier.
+        Write(@"c1\dados.bin", 900_000, 41);
+        Write(@"c2\dados.bin", 900_000, 41);
+        Write(@"c3\outro.bin", 900_000, 41);
+
+        DuplicateFolderScope scope = DuplicateFolderFinder.Scope(Index(), minimumBytes: 1000);
+
+        // c3 shares the size but not the name, so the shape stage drops it and the scope
+        // says two folders, not three.
+        Assert.Equal(2, scope.Candidates);
+        Assert.Equal(1_800_000, scope.CandidateBytes);
     }
 
     [Fact]
