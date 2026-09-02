@@ -141,7 +141,7 @@
   "settings.contentThumbsHint": "Desligado, tudo usa o ícone do tipo: instantâneo e sem tocar no conteúdo dos arquivos.",
   "settings.showHidden": "Mostrar arquivos ocultos e de sistema",
   "settings.thisVersion": "ESTA VERSÃO",
-  "settings.versionTitle": "Vacuon {0} — copiar, mover e apagar com janela de transferência",
+  "settings.versionTitle": "Vacuon {0} — edição, pastas duplicadas, sunburst e áudio parecido",
   "settings.privacyNote": "Nenhum byte sai desta máquina: não há servidor, conta nem telemetria. As preferências ficam em {0}.",
   "status.pathCopied": "Caminho copiado.",
   "status.cannotOpen": "Não foi possível abrir: {0}",
