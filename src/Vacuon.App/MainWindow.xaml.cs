@@ -31,6 +31,11 @@ public partial class MainWindow : Window
         {
             ApplyTitleBar();
 
+            // Reading the MFT needs administrator, so this window is usually on the far side
+            // of the integrity line from the Explorer somebody drags out of — and Windows
+            // drops those messages without a word. See ElevatedDrop.
+            ElevatedDrop.Allow(this);
+
             // After the handle exists: the tray icon addresses a window, and the message
             // hook needs a source to hang from.
             _tray = new TrayService(this, App.Settings);
@@ -191,10 +196,23 @@ public partial class MainWindow : Window
     /// Não só no Explorer: quem arrasta um arquivo para cá quer vê-lo, e obrigar a estar na
     /// aba certa antes seria exigir que a pessoa soubesse a resposta para fazer a pergunta.
     /// </para>
+    /// <para>
+    /// ⚠️ <b>Tunnelling, not bubbling.</b> A <c>TextBox</c> has <c>AllowDrop</c> on by
+    /// default, so it becomes the drop target the moment the pointer is over it — and then
+    /// refuses the file, because a file drop is not text. Bubbling never reached this
+    /// window: "anywhere on the window" was true everywhere except over the search box and
+    /// the editor, which are the two places somebody hovers while carrying a file.
+    /// </para>
+    /// <para>
+    /// Only a file drop is taken. Text dragged into the search box still belongs to the
+    /// search box, which is why this looks at the format before claiming the event.
+    /// </para>
     /// </summary>
     private void OnDragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Link : DragDropEffects.None;
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+        e.Effects = DragDropEffects.Link;
         e.Handled = true;
     }
 
