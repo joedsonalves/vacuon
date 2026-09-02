@@ -648,62 +648,13 @@ public partial class ExplorerView : UserControl
     private void OnEditFindNext(object sender, RoutedEventArgs e) => FindNext();
 
     /// <summary>
-    /// Procura a partir do cursor e dá a volta.
-    /// <para>
-    /// Dar a volta em silêncio esconderia de quem procura que já passou pelo fim; o contador
-    /// ao lado diz quantas ocorrências existem, então a volta não surpreende.
-    /// </para>
+    /// Procura a partir do cursor e dá a volta, pelo <see cref="EditorFind"/> que a janela
+    /// de edição também usa.
     /// </summary>
     private void FindNext()
     {
-        if (EditBox is null || EditFindBox is null) return;
+        if (EditBox is null || Model is null) return;
 
-        TextBox box = EditBox.Box;
-
-        string needle = EditFindBox.Text;
-
-        if (needle.Length == 0)
-        {
-            EditFindStatus.Text = string.Empty;
-            return;
-        }
-
-        string haystack = box.Text;
-        int from = box.SelectionStart + Math.Max(1, box.SelectionLength);
-
-        int at = haystack.IndexOf(needle, Math.Min(from, haystack.Length),
-                                  StringComparison.OrdinalIgnoreCase);
-
-        if (at < 0) at = haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
-
-        if (at < 0)
-        {
-            EditFindStatus.Text = L.T("edit.findNone");
-            return;
-        }
-
-        box.Focus();
-        box.Select(at, needle.Length);
-
-        int line = box.GetLineIndexFromCharacterIndex(at);
-        box.ScrollToLine(Math.Max(0, line - 2));
-
-        EditFindStatus.Text = L.T("edit.findCount", Formatting(Count(haystack, needle)));
+        EditorFind.Next(EditBox, Model);
     }
-
-    private static int Count(string haystack, string needle)
-    {
-        int total = 0;
-        int at = 0;
-
-        while ((at = haystack.IndexOf(needle, at, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            total++;
-            at += needle.Length;
-        }
-
-        return total;
-    }
-
-    private static string Formatting(int value) => value.ToString("N0", L.Culture);
 }

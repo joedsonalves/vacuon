@@ -1,9 +1,7 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
 using Vacuon.App.Infra;
 using Vacuon.App.ViewModels;
-using Vacuon.Core.Localization;
 
 namespace Vacuon.App.Views;
 
@@ -81,49 +79,13 @@ public partial class EditorWindow : Window
 
     private void OnFindNext(object sender, RoutedEventArgs e) => FindNext();
 
+    /// <summary>
+    /// The same Find the pane runs, over the same term. See <see cref="EditorFind"/>.
+    /// </summary>
     private void FindNext()
     {
-        string needle = FindBox.Text;
+        if (DataContext is not MainViewModel model) return;
 
-        if (needle.Length == 0)
-        {
-            FindStatus.Text = string.Empty;
-            return;
-        }
-
-        TextBox box = Editor.Box;
-        string haystack = box.Text;
-        int from = box.SelectionStart + Math.Max(1, box.SelectionLength);
-
-        int at = haystack.IndexOf(needle, Math.Min(from, haystack.Length),
-                                  StringComparison.OrdinalIgnoreCase);
-
-        if (at < 0) at = haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
-
-        if (at < 0)
-        {
-            FindStatus.Text = L.T("edit.findNone");
-            return;
-        }
-
-        box.Focus();
-        box.Select(at, needle.Length);
-        box.ScrollToLine(Math.Max(0, box.GetLineIndexFromCharacterIndex(at) - 2));
-
-        FindStatus.Text = L.T("edit.findCount", Count(haystack, needle).ToString("N0", L.Culture));
-    }
-
-    private static int Count(string haystack, string needle)
-    {
-        int total = 0;
-        int at = 0;
-
-        while ((at = haystack.IndexOf(needle, at, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            total++;
-            at += needle.Length;
-        }
-
-        return total;
+        EditorFind.Next(Editor, model);
     }
 }

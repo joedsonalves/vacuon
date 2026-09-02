@@ -1133,6 +1133,36 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         private set => Set(ref _editStatus, value);
     }
 
+    private string _editFindText = string.Empty;
+
+    /// <summary>What is being looked for inside the file being edited.
+    /// <para>
+    /// ⚠️ <b>It lives here, next to the text, and not in either search box.</b> The pane and
+    /// the editor window are two views of one edit — they already share the text, the status
+    /// and Save — and the thing being searched for is part of that one edit too. Typing
+    /// <c>9222</c> in the pane and opening the window used to hand over an empty box, so the
+    /// question had to be asked twice about a file that was never asked about twice.
+    /// </para>
+    /// <para>
+    /// Shared state rather than copied on open and copied back on close: a copy has to pick
+    /// a moment, and there is no moment that is right while both are on screen at once.
+    /// </para>
+    /// </summary>
+    public string EditFindText
+    {
+        get => _editFindText;
+        set => Set(ref _editFindText, value);
+    }
+
+    private string _editFindStatus = string.Empty;
+
+    /// <summary>How many occurrences there are, or that there are none.</summary>
+    public string EditFindStatus
+    {
+        get => _editFindStatus;
+        set => Set(ref _editFindStatus, value);
+    }
+
     private bool _canEditPreview;
 
     /// <summary>Whether the Edit button has anything to offer for what is selected.</summary>
@@ -1184,6 +1214,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         _editingPath = row.FullPath;
         EditorText = file.Text;
         EditStatus = string.Empty;
+        EditFindStatus = string.Empty;
         IsEditing = true;
 
         Raise(nameof(IsEditorDirty));
@@ -1224,6 +1255,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         _editingPath = row.FullPath;
         EditorText = file.Dump;
         EditStatus = L.T("edit.hexOpen");
+        EditFindStatus = string.Empty;
         IsEditingHex = true;
         IsEditing = true;
 
@@ -1462,6 +1494,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         _editingPath = string.Empty;
         EditorText = string.Empty;
         EditStatus = string.Empty;
+
+        // The count goes, the search term stays. A count belongs to one file and would be a
+        // lie about the next; what somebody is hunting for is usually the same thing from
+        // file to file, which is the whole reason they opened the second one.
+        EditFindStatus = string.Empty;
+
         IsEditing = false;
     }
 

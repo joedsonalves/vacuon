@@ -752,11 +752,19 @@
                                 </Grid.RowDefinitions>
 
                                 <!-- Achar dentro do arquivo aberto. Enter procura o próximo,
-                                     e o contador diz quantos há para não procurar às cegas. -->
+                                     e o contador diz quantos há para não procurar às cegas.
+
+                                     ⚠️ O termo e o contador vivem no view model, não aqui:
+                                     esta caixa e a da janela de edição são duas vistas de
+                                     UMA busca, do mesmo jeito que são duas vistas de uma
+                                     edição. Cada uma com o seu texto obrigava a digitar de
+                                     novo o que já tinha sido digitado. -->
                                 <Border Grid.Row="0" Style="{StaticResource Card}" Padding="8,5" Margin="0,0,0,6">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBox x:Name="EditFindBox" Width="120" FontSize="11"
                                                  Style="{StaticResource Input}"
+                                                 Text="{Binding EditFindText, Mode=TwoWay,
+                                                        UpdateSourceTrigger=PropertyChanged}"
                                                  KeyDown="OnEditFindKey"/>
 
                                         <Button Style="{StaticResource Button.Base}" FontSize="10"
@@ -764,10 +772,11 @@
                                                 Content="{DynamicResource S.edit.findNext}"
                                                 Click="OnEditFindNext"/>
 
-                                        <TextBlock x:Name="EditFindStatus" Style="{StaticResource Text.Sub}"
+                                        <TextBlock Style="{StaticResource Text.Sub}"
                                                    FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"
                                                    TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource Text.Muted}"/>
+                                                   Foreground="{DynamicResource Text.Muted}"
+                                                   Text="{Binding EditFindStatus}"/>
                                     </StackPanel>
                                 </Border>
 

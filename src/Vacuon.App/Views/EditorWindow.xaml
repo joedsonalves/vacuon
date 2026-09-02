@@ -27,17 +27,24 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
+                <!-- ⚠️ The same search as the pane's, not a second one: the term and the
+                     count are bound to the view model both windows share. Typing 9222 in
+                     the pane and opening this window used to hand over an empty box. -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBox x:Name="FindBox" Width="200" FontSize="11"
-                             Style="{StaticResource Input}" KeyDown="OnFindKey"/>
+                             Style="{StaticResource Input}"
+                             Text="{Binding EditFindText, Mode=TwoWay,
+                                    UpdateSourceTrigger=PropertyChanged}"
+                             KeyDown="OnFindKey"/>
 
                     <Button Style="{StaticResource Button.Base}" FontSize="10" Padding="8,3"
                             Margin="6,0,0,0"
                             Content="{DynamicResource S.edit.findNext}" Click="OnFindNext"/>
 
-                    <TextBlock x:Name="FindStatus" Style="{StaticResource Text.Sub}"
+                    <TextBlock Style="{StaticResource Text.Sub}"
                                FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"
-                               Foreground="{DynamicResource Text.Muted}"/>
+                               Foreground="{DynamicResource Text.Muted}"
+                               Text="{Binding EditFindStatus}"/>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
