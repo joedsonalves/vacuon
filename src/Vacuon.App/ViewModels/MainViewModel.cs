@@ -3849,6 +3849,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         // the next progress tick put the number back seconds later.
         if (IsFindingDuplicates) return;
 
+        DuplicateNotice = string.Empty;
+
         VolumeIndex? index = Index;
 
         if (index is null)
@@ -3878,6 +3880,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                                   Format.Count(scope.SizeBuckets),
                                   Format.Bytes(scope.CandidateBytes));
         DuplicateScopeText = L.T("dup.scopeNote");
+
+        // Said every time, not only the first: without a cache, every run pays again.
+        DuplicateNotice = L.T("dup.fileRunNotice");
     }
 
     /// <summary>
@@ -3916,7 +3921,39 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         DuplicateScopeText = scope.Remembered > 0
             ? L.T("dup.scopeNote") + "  " + L.T("dup.folderRemembered", Format.Count(scope.Remembered))
             : L.T("dup.scopeNote");
+
+        DuplicateNotice = scope.Remembered == 0 ? L.T("dup.firstRunNotice") : string.Empty;
     }
+
+    private string _duplicateNotice = string.Empty;
+
+    /// <summary>
+    /// The warning beside the button about what this run is going to cost.
+    /// <para>
+    /// ⚠️ <b>The two modes get different sentences, and the difference is not cosmetic.</b>
+    /// The folder search remembers a tree's signature between runs, so "the next ones take
+    /// seconds" is a promise it can keep — measured, 52,5 min then 13,7 s. The file search
+    /// has no cache and reads the same bytes every time. Printing the folder sentence on the
+    /// file mode would be the app promising something it has no way to deliver, which is the
+    /// house rule in its plainest form.
+    /// </para>
+    /// <para>
+    /// The folder notice disappears once the cache holds something, because the scope line
+    /// then says how many folders were read before. The file notice does not disappear:
+    /// every run really does cost the same.
+    /// </para>
+    /// </summary>
+    public string DuplicateNotice
+    {
+        get => _duplicateNotice;
+        private set
+        {
+            if (!Set(ref _duplicateNotice, value)) return;
+            Raise(nameof(HasDuplicateNotice));
+        }
+    }
+
+    public bool HasDuplicateNotice => _duplicateNotice.Length > 0;
 
     public void CancelDuplicateSearch() => _duplicateCts?.Cancel();
 
@@ -4226,6 +4263,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         CancellationToken token = _duplicateCts.Token;
 
         IsFindingDuplicates = true;
+        DuplicateNotice = string.Empty;
         DuplicateFolderGroups.Clear();
         RaiseDuplicateGroups();
 

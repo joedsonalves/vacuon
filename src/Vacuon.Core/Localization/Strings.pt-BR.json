@@ -985,6 +985,8 @@
   "dup.folderScopeNone": "Nenhuma pasta deste volume tem a mesma forma que outra.",
   "dup.folderFromCache": "{0} de {1} pastas já eram conhecidas de uma execução anterior",
   "dup.folderRemembered": "{0} delas foram lidas numa execução anterior e serão puladas se nada dentro tiver mudado.",
+  "dup.firstRunNotice": "Esta primeira execução lê todas as pastas candidatas e demora. O que ela lê fica guardado, então as próximas são segundos.",
+  "dup.fileRunNotice": "Isto lê todos os arquivos candidatos e demora. Aqui não há cache, então cada execução custa o mesmo.",
   "cli.headSimilarAudio": "Gravações que soam como a mesma faixa",
   "similar.pictures": "Imagens",
   "similar.audio": "Áudio",

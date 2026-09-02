@@ -985,6 +985,8 @@
   "dup.folderScopeNone": "No two folders on this volume share a shape.",
   "dup.folderFromCache": "{0} of {1} folders were already known from an earlier run",
   "dup.folderRemembered": "{0} of them were read by an earlier run and will be skipped if nothing inside changed.",
+  "dup.firstRunNotice": "This first run reads every candidate folder and takes a while. What it reads is remembered, so the next ones are seconds.",
+  "dup.fileRunNotice": "This reads every candidate file and takes a while. There is no cache here, so each run costs the same.",
   "cli.headSimilarAudio": "Recordings that sound like the same track",
   "similar.pictures": "Pictures",
   "similar.audio": "Audio",

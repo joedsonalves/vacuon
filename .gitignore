@@ -119,6 +119,7 @@ $RECYCLE.BIN/
 # cada número medido. É contexto de trabalho, não parte do produto — o repositório carrega
 # o que alguém precisa para usar e compilar o Vacuon. Mesma razão do CLAUDE.md e do PRD.md.
 # Fica só nesta máquina, e por isso NÃO TEM BACKUP pelo GitHub.
+/VACUON-Vault/
 /vault/
 .obsidian/
 .obsidian-*/

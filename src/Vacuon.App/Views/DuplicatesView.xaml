@@ -44,6 +44,16 @@
                         Click="OnStop"
                         Visibility="{Binding IsFindingDuplicates, Converter={StaticResource Visible}}"/>
 
+                <!-- Ao lado do botão, e não no rodapé: é ali que a decisão de esperar é
+                     tomada. Some sozinho quando já há o que lembrar. -->
+                <Border CornerRadius="4" Padding="8,4" Margin="10,0,0,0" VerticalAlignment="Center"
+                        Background="{DynamicResource Accent.Muted}"
+                        Visibility="{Binding HasDuplicateNotice, Converter={StaticResource Visible}}">
+                    <TextBlock FontSize="11" TextWrapping="Wrap" MaxWidth="300"
+                               FontFamily="{StaticResource Font.Ui}"
+                               Text="{Binding DuplicateNotice}"/>
+                </Border>
+
                 <!-- The command existed and nothing was bound to it, so there was no way to
                      tick more than one copy at a time on a list thousands of groups long. -->
                 <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
@@ -57,7 +67,7 @@
                         Visibility="{Binding HasDuplicateGroups, Converter={StaticResource Visible}}"/>
 
                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
-                    <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="760"
+                    <TextBlock Style="{StaticResource Text.Sub}" TextWrapping="Wrap" MaxWidth="430"
                                Text="{Binding DuplicateStatusText}"/>
 
                     <!-- Thin on purpose: it sits under a line of text that already says the
@@ -74,7 +84,7 @@
                                               Converter={StaticResource Visible}}"/>
                     <!-- The worst case, said plainly, before a read that can take an hour. -->
                     <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" Margin="0,4,0,0"
-                               TextWrapping="Wrap" MaxWidth="760"
+                               TextWrapping="Wrap" MaxWidth="430"
                                Foreground="{DynamicResource Text.Muted}"
                                Text="{Binding DuplicateScopeText}"
                                Visibility="{Binding DuplicateScopeText,
