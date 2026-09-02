@@ -281,6 +281,25 @@ public static class FileEditor
         }
     }
 
+    /// <summary>
+    /// The exact bytes <see cref="Save"/> would write for this text.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ Exists so a refused save can be held on to as <b>bytes</b> and written later without
+    /// the encoding decision being made twice. Encoding the editor's text as UTF-8 at the
+    /// point of queueing would quietly rewrite a UTF-16 file into UTF-8, and would put CRLF
+    /// into a file that used LF — the two round-trip rules this class exists to keep.
+    /// </remarks>
+    public static byte[] BytesFor(string text, EditableFile original)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+
+        Encoding encoding = EncodingOf(original.EncodingName, original.HasBom);
+        string body = original.UsesCrLf ? Normalise(text) : Normalise(text).Replace("\r\n", "\n");
+
+        return [.. encoding.GetPreamble(), .. encoding.GetBytes(body)];
+    }
+
     private static IReadOnlyList<FileHolder> WhoHolds(string path)
     {
         try { return RestartManager.WhoHolds(path); }

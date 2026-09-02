@@ -86,6 +86,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         ClearSimilarSelectionCommand = new RelayCommand(ClearSimilarSelection);
         BeginEditCommand = new RelayCommand(BeginEdit, () => CanEditPreview && !IsEditing);
         BeginHexEditCommand = new RelayCommand(BeginHexEdit, _ => CanEditHex && !IsEditing);
+        WatchForReleaseCommand = new RelayCommand(WatchForRelease, () => CanWatchForRelease);
+
+        _pending.Settled += OnPendingSettled;
         SaveEditCommand = new RelayCommand(SaveEdit, () => IsEditing);
         CancelEditCommand = new RelayCommand(CancelEdit, () => IsEditing);
         SelectAllAudioCommand = new RelayCommand(SelectAllAudio);
@@ -993,6 +996,36 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     public bool IsEditingText => _isEditing && !_isEditingHex;
 
+    private readonly PendingSaves _pending = new();
+    private CancellationTokenSource? _pendingCts;
+
+    private byte[]? _refusedContent;
+    private string _refusedPath = string.Empty;
+
+    private bool _canWatchForRelease;
+
+    /// <summary>
+    /// Whether there is an edit that a locked file refused, waiting to be offered a watch.
+    /// <para>
+    /// Telling somebody to close the program and do the work again is the app handing back a
+    /// problem it is better placed to solve: it already knows the path, it already holds the
+    /// bytes, and it can watch.
+    /// </para>
+    /// </summary>
+    public bool CanWatchForRelease
+    {
+        get => _canWatchForRelease;
+        private set => Set(ref _canWatchForRelease, value);
+    }
+
+    private bool _isWatchingForRelease;
+
+    public bool IsWatchingForRelease
+    {
+        get => _isWatchingForRelease;
+        private set => Set(ref _isWatchingForRelease, value);
+    }
+
     private bool _canEditHex;
 
     /// <summary>Whether the bytes of what is selected could be opened at all.</summary>
@@ -1182,12 +1215,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             return;
         }
 
-        EditStatus = result.Outcome switch
-        {
-            SaveOutcome.Protected => L.T("edit.protected"),
-            SaveOutcome.InUse => L.T("edit.inUse", Describe(result.Holders)),
-            _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
-        };
+        Remember(result, _editingPath, parsed.Bytes);
     }
 
     private void SaveEdit()
@@ -1210,12 +1238,72 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             return;
         }
 
+        Remember(result, _editingPath, FileEditor.BytesFor(EditorText, _loaded));
+    }
+
+    /// <summary>
+    /// Says why the save failed and, when it was the lock, keeps the bytes so the wait can be
+    /// offered.
+    /// </summary>
+    private void Remember(SaveResult result, string path, byte[] content)
+    {
         EditStatus = result.Outcome switch
         {
             SaveOutcome.Protected => L.T("edit.protected"),
             SaveOutcome.InUse => L.T("edit.inUse", Describe(result.Holders)),
             _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
         };
+
+        if (result.Outcome != SaveOutcome.InUse) return;
+
+        _refusedPath = path;
+        _refusedContent = content;
+        CanWatchForRelease = true;
+    }
+
+    public ICommand WatchForReleaseCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// Waits for the file to be let go, then writes the edit that was refused.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ The bytes queued are the ones that were refused, not whatever the editor holds when
+    /// the file is finally released. Somebody who kept typing while waiting would otherwise
+    /// get a version they never asked to save — and one they may have been in the middle of.
+    /// </remarks>
+    private void WatchForRelease()
+    {
+        if (_refusedContent is null || _refusedPath.Length == 0) return;
+
+        _pending.Queue(_refusedPath, _refusedContent);
+
+        CanWatchForRelease = false;
+        IsWatchingForRelease = true;
+        EditStatus = L.T("edit.watching", System.IO.Path.GetFileName(_refusedPath));
+
+        _pendingCts?.Cancel();
+        _pendingCts = new CancellationTokenSource();
+
+        _ = _pending.WatchAsync(TimeSpan.FromSeconds(2), _pendingCts.Token);
+    }
+
+    private void OnPendingSettled(object? sender, PendingSaveResult result)
+    {
+        // The watch runs on a pool thread; everything it touches here is on screen.
+        App.Current?.Dispatcher.Invoke(() =>
+        {
+            IsWatchingForRelease = _pending.Count > 0;
+
+            EditStatus = result.Outcome switch
+            {
+                SaveOutcome.Saved => L.T("edit.savedAfterWait",
+                                         System.IO.Path.GetFileName(result.Save.Path)),
+                SaveOutcome.Protected => L.T("edit.protected"),
+                _ when result.Message == "gone" =>
+                    L.T("edit.waitedAndGone", System.IO.Path.GetFileName(result.Save.Path)),
+                _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
+            };
+        });
     }
 
     private static string Describe(IReadOnlyList<FileHolder> holders)
@@ -1230,6 +1318,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     private void CancelEdit()
     {
+        // A espera continua: cancelar a edição é fechar o editor, não desistir do que já foi
+        // aceito para ser escrito quando o arquivo liberar.
+        _refusedContent = null;
+        _refusedPath = string.Empty;
+        CanWatchForRelease = false;
+
         _loaded = null;
         _loadedBytes = null;
         IsEditingHex = false;

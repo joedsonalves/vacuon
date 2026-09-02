@@ -780,10 +780,20 @@
                                Text="{Binding PreviewNote}"
                                Visibility="{Binding PreviewNote, Converter={StaticResource NotEmpty}}"/>
 
-                    <TextBlock Grid.Row="5" Style="{StaticResource Text.Sub}" FontSize="11"
-                               Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="{Binding EditStatus}"
-                               Visibility="{Binding EditStatus, Converter={StaticResource NotEmpty}}"/>
+                    <StackPanel Grid.Row="5" Margin="0,6,0,0"
+                                Visibility="{Binding EditStatus, Converter={StaticResource NotEmpty}}">
+                        <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"
+                                   TextWrapping="Wrap" Text="{Binding EditStatus}"/>
+
+                        <!-- Oferecido só quando o motivo foi o cadeado: o app já tem o
+                             caminho e os bytes, e sabe esperar. -->
+                        <Button Style="{StaticResource Button.Base}" FontSize="10" Padding="8,3"
+                                Margin="0,6,0,0" HorizontalAlignment="Left"
+                                Content="{DynamicResource S.edit.watchForRelease}"
+                                Command="{Binding WatchForReleaseCommand}"
+                                Visibility="{Binding CanWatchForRelease,
+                                             Converter={StaticResource Visible}}"/>
+                    </StackPanel>
                 </Grid>
             </Border>
 

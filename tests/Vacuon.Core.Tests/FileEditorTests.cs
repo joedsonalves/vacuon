@@ -180,6 +180,37 @@ public class FileEditorTests : IDisposable
     }
 
     [Fact]
+    public void TheBytesHeldForALaterSaveAreTheOnesSaveWouldWrite()
+    {
+        // ⚠️ A refused save is kept as bytes and written later. Encoding the editor's text as
+        // UTF-8 at that point would rewrite a UTF-16 file into UTF-8 and put CRLF into a file
+        // that used LF — the two round-trip rules this class exists to keep, undone by the
+        // deferral rather than by the save.
+        string path = Write("adiado.txt", Encoding.UTF8.GetBytes("um' + B + 'ndois' + B + 'n"));
+
+        EditableFile file = FileEditor.Load(path);
+        byte[] held = FileEditor.BytesFor(file.Text, file);
+
+        FileEditor.Save(path, file.Text, file);
+
+        Assert.Equal(File.ReadAllBytes(path), held);
+    }
+
+    [Fact]
+    public void TheHeldBytesKeepUtf16AndItsMark()
+    {
+        string path = Write("adiado-wide.txt", [.. Encoding.Unicode.GetPreamble(),
+                                                .. Encoding.Unicode.GetBytes("largo' + B + 'r' + B + 'n")]);
+
+        EditableFile file = FileEditor.Load(path);
+        byte[] held = FileEditor.BytesFor(file.Text, file);
+
+        Assert.Equal(0xFF, held[0]);
+        Assert.Equal(0xFE, held[1]);
+        Assert.Contains("largo", Encoding.Unicode.GetString(held), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EveryFlavourOfLineEndingComesBackAsCrLfInTheEditor()
     {
         // A text box cannot show a lone CR as a line break, so the editor works in one
