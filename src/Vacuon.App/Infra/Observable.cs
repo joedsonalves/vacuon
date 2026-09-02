@@ -31,7 +31,34 @@ public abstract class Observable : INotifyPropertyChanged
 
 public sealed class RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null) : ICommand
 {
-    public event EventHandler? CanExecuteChanged;
+    private EventHandler? _asked;
+
+    /// <summary>
+    /// ⚠️ <b>Subscribes to <see cref="CommandManager.RequerySuggested"/>, and that is not
+    /// decoration.</b> Without it WPF asks <see cref="CanExecute"/> once, when the binding is
+    /// made, and never again unless somebody remembers to call
+    /// <see cref="RaiseCanExecuteChanged"/>. A button whose condition becomes true later just
+    /// stays disabled — and a disabled ghost button looks exactly like an enabled one that is
+    /// being clicked and ignored.
+    /// <para>
+    /// Found the hard way: the Edit button in the preview rendered, took the click, and did
+    /// nothing, because its condition turned true after a file was selected. Every command in
+    /// this app with a condition that changes over time had the same hole.
+    /// </para>
+    /// </summary>
+    public event EventHandler? CanExecuteChanged
+    {
+        add
+        {
+            CommandManager.RequerySuggested += value;
+            _asked += value;
+        }
+        remove
+        {
+            CommandManager.RequerySuggested -= value;
+            _asked -= value;
+        }
+    }
 
     public RelayCommand(Action execute, Func<bool>? canExecute = null)
         : this(_ => execute(), canExecute is null ? null : _ => canExecute()) { }
@@ -39,5 +66,10 @@ public sealed class RelayCommand(Action<object?> execute, Func<object?, bool>? c
     public bool CanExecute(object? parameter) => canExecute?.Invoke(parameter) ?? true;
     public void Execute(object? parameter) => execute(parameter);
 
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    /// <summary>For the cases that cannot wait for the next requery.</summary>
+    public void RaiseCanExecuteChanged()
+    {
+        _asked?.Invoke(this, EventArgs.Empty);
+        CommandManager.InvalidateRequerySuggested();
+    }
 }
