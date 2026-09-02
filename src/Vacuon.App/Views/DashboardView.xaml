@@ -111,21 +111,23 @@
                         <ItemsControl ItemsSource="{Binding Extensions}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="72"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
-                                                   FontFamily="{StaticResource Font.Mono}"
-                                                   Text="{Binding Extension}"/>
-                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
-                                                   Foreground="{DynamicResource Text.Muted}"
-                                                   Text="{Binding Category}"/>
-                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}"
-                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
-                                    </Grid>
+                                    <Border Style="{StaticResource Row.Hover}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="72"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                       FontFamily="{StaticResource Font.Mono}"
+                                                       Text="{Binding Extension}"/>
+                                            <TextBlock Grid.Column="1" Style="{StaticResource Text.Sub}"
+                                                       Foreground="{DynamicResource Text.Muted}"
+                                                       Text="{Binding Category}"/>
+                                            <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}"
+                                                       Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -139,21 +141,23 @@
                         <ItemsControl ItemsSource="{Binding SizeBuckets}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
-                                                   Text="{Binding Label}"/>
-                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
-                                                   Margin="0,0,12,0" Width="66"
-                                                   Foreground="{DynamicResource Text.Muted}"
-                                                   Text="{Binding Count, Converter={StaticResource Count}}"/>
-                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
-                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
-                                    </Grid>
+                                    <Border Style="{StaticResource Row.Hover}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                       Text="{Binding Label}"/>
+                                            <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                                       Margin="0,0,12,0" Width="66"
+                                                       Foreground="{DynamicResource Text.Muted}"
+                                                       Text="{Binding Count, Converter={StaticResource Count}}"/>
+                                            <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
+                                                       Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -167,21 +171,23 @@
                         <ItemsControl ItemsSource="{Binding AgeBuckets}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid Margin="0,3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
-                                                   Text="{Binding Label}"/>
-                                        <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
-                                                   Margin="0,0,12,0" Width="66"
-                                                   Foreground="{DynamicResource Text.Muted}"
-                                                   Text="{Binding Count, Converter={StaticResource Count}}"/>
-                                        <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
-                                                   Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
-                                    </Grid>
+                                    <Border Style="{StaticResource Row.Hover}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Style="{StaticResource Text.Sub}"
+                                                       Text="{Binding Label}"/>
+                                            <TextBlock Grid.Column="1" Style="{StaticResource Text.Number}"
+                                                       Margin="0,0,12,0" Width="66"
+                                                       Foreground="{DynamicResource Text.Muted}"
+                                                       Text="{Binding Count, Converter={StaticResource Count}}"/>
+                                            <TextBlock Grid.Column="2" Style="{StaticResource Text.Number}" Width="72"
+                                                       Text="{Binding TotalBytes, Converter={StaticResource Bytes}}"/>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
