@@ -715,9 +715,47 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         set
         {
             if (!Set(ref _selectedRow, value)) return;
-            UpdatePreview();
+            SchedulePreview();
         }
     }
+
+    /// <summary>
+    /// Waits a moment before filling the preview, so a row being passed through is not paid
+    /// for.
+    /// </summary>
+    /// <remarks>
+    /// Holding an arrow key walks a row every few tens of milliseconds, and each one used to
+    /// open a file, decode it and paint it — work thrown away before it could be read,
+    /// arriving as a list that stutters under the key. The wait is short enough that a row
+    /// somebody stops on still feels immediate; what it removes is the ones nobody stopped
+    /// on.
+    /// <para>
+    /// ⚠️ <b>The timer is restarted, not left running.</b> Letting it run would fire on the
+    /// first row of a sweep rather than the last, which is the one thing this must not do:
+    /// the preview would show a file the selection has already left.
+    /// </para>
+    /// </remarks>
+    private void SchedulePreview()
+    {
+        _previewDelay ??= new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(90),
+        };
+
+        _previewDelay.Tick -= OnPreviewDue;
+        _previewDelay.Tick += OnPreviewDue;
+
+        _previewDelay.Stop();
+        _previewDelay.Start();
+    }
+
+    private void OnPreviewDue(object? sender, EventArgs e)
+    {
+        _previewDelay?.Stop();
+        UpdatePreview();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _previewDelay;
 
     // ================= painel de preview =================
 
