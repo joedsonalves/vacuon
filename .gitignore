@@ -122,5 +122,10 @@ $RECYCLE.BIN/
 /VACUON-Vault/
 /vault/
 .obsidian/
+
+# Hook que injeta o mapa do cérebro no início de cada sessão. Fica fora do git pela mesma
+# razão que o CLAUDE.md: é ferramenta de trabalho, e sem o vault (que também está fora) o
+# script não teria o que ler.
+/.claude/
 .obsidian-*/
 *.canvas
