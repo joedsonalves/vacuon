@@ -1453,6 +1453,109 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// An entry inside that folder to select, or -1. This is what makes pasting a full file
     /// path land on the file rather than merely in the right folder.
     /// </param>
+    /// <summary>
+    /// Goes to a file by its path: scans the volume if needed, opens the folder, selects the
+    /// row and puts it in the preview.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>A file dropped in is very often newer than the snapshot</b> — somebody drags in
+    /// the thing they just made. So a miss is not reported as "not found": the volume is
+    /// scanned once and the lookup repeated. Only a second miss is worth telling somebody
+    /// about, and by then it means the file really is not on the volume that was scanned.
+    /// </remarks>
+    public async Task<bool> RevealPathAsync(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+
+        string full;
+
+        try { full = System.IO.Path.GetFullPath(path); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException
+                                      or System.IO.PathTooLongException)
+        {
+            RevealStatus = L.T("drop.badPath");
+            return false;
+        }
+
+        if (full.Length < 2 || full[1] != ':')
+        {
+            // A UNC path has no volume to scan, and the index is built per volume.
+            RevealStatus = L.T("drop.notLocal", full);
+            return false;
+        }
+
+        Section = Section.Explorer;
+
+        string wanted = full[..2].ToUpperInvariant();
+        VolumeCardViewModel? volume = null;
+
+        foreach (VolumeCardViewModel candidate in Volumes)
+            if (string.Equals(candidate.Header, wanted, StringComparison.OrdinalIgnoreCase))
+                volume = candidate;
+
+        if (volume is null)
+        {
+            RevealStatus = L.T("drop.noVolume", wanted);
+            return false;
+        }
+
+        // Scanned already, and for this volume? Then try before paying for a scan.
+        bool sameVolume = Index is not null
+                          && SelectedVolume is not null
+                          && string.Equals(SelectedVolume.Header, wanted, StringComparison.OrdinalIgnoreCase);
+
+        if (!sameVolume)
+        {
+            RevealStatus = L.T("drop.scanning", wanted);
+            await ScanAsync(volume);
+        }
+
+        if (Select(full)) return true;
+
+        // Second chance, once, for the file that is newer than the snapshot.
+        RevealStatus = L.T("drop.scanning", wanted);
+        await ScanAsync(volume);
+
+        if (Select(full)) return true;
+
+        RevealStatus = L.T("drop.notFound", System.IO.Path.GetFileName(full));
+        return false;
+    }
+
+    private bool Select(string full)
+    {
+        VolumeIndex? index = Index;
+        if (index is null) return false;
+
+        int entry = index.FindEntry(full);
+        if (entry < 0) return false;
+
+        // A folder opens itself; a file opens the folder that holds it and gets highlighted.
+        if (index.Entries[entry].IsDirectory)
+        {
+            NavigateToFolder(entry);
+        }
+        else
+        {
+            uint parent = index.Entries[entry].ParentIndex;
+            if (parent >= index.Entries.Length) return false;
+
+            NavigateToFolder((int)parent, entry);
+        }
+
+        RevealStatus = string.Empty;
+        return true;
+    }
+
+    private string _revealStatus = string.Empty;
+
+    /// <summary>What happened to the last thing dropped in, when it did not simply work.</summary>
+    public string RevealStatus
+    {
+        get => _revealStatus;
+        private set => Set(ref _revealStatus, value);
+    }
+
     public void NavigateToFolder(int entryIndex, int highlight = -1)
     {
         VolumeIndex? index = Index;

@@ -184,4 +184,28 @@ public partial class MainWindow : Window
                 break;
         }
     }
+
+    /// <summary>
+    /// Aceita arquivo arrastado de fora, em qualquer canto da janela.
+    /// <para>
+    /// Não só no Explorer: quem arrasta um arquivo para cá quer vê-lo, e obrigar a estar na
+    /// aba certa antes seria exigir que a pessoa soubesse a resposta para fazer a pergunta.
+    /// </para>
+    /// </summary>
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Link : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnFileDropped(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0) return;
+
+        e.Handled = true;
+
+        // Um por vez: a prévia mostra um arquivo, e escolher em silêncio qual de cinco seria
+        // o app decidindo por quem arrastou. O primeiro é o que a pessoa segurou.
+        await _model.RevealPathAsync(paths[0]);
+    }
 }

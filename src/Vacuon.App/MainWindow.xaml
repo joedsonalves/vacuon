@@ -1,4 +1,5 @@
 ﻿<Window x:Class="Vacuon.App.MainWindow"
+        AllowDrop="True" Drop="OnFileDropped" DragOver="OnDragOver"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:infra="clr-namespace:Vacuon.App.Infra"

@@ -27,6 +27,15 @@
         <Border Grid.Row="0" Padding="24,12" BorderBrush="{DynamicResource Stroke.Subtle}"
                 BorderThickness="0,0,0,1">
             <StackPanel>
+                <!-- O que aconteceu com o que foi arrastado para dentro, quando nao deu
+                     simplesmente certo. Some sozinho no acerto. -->
+                <Border CornerRadius="4" Padding="10,6" Margin="0,0,0,10"
+                        Background="{DynamicResource Accent.Muted}"
+                        Visibility="{Binding RevealStatus, Converter={StaticResource NotEmpty}}">
+                    <TextBlock Style="{StaticResource Text.Sub}" FontSize="11" TextWrapping="Wrap"
+                               Text="{Binding RevealStatus}"/>
+                </Border>
+
                 <!-- modos + busca -->
                 <Grid>
                     <Grid.ColumnDefinitions>
