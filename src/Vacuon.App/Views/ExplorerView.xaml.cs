@@ -581,6 +581,32 @@ public partial class ExplorerView : UserControl
         }
     }
 
+    /// <summary>
+    /// Abre a edição byte a byte, sempre passando pelo aviso.
+    /// <para>
+    /// ⚠️ A confirmação é passada ao comando, e o comando <b>recusa sem ela</b>. Não é um
+    /// aviso que se pode contornar ligando um botão direto no comando — a guarda vive do
+    /// outro lado.
+    /// </para>
+    /// </summary>
+    private void OnEditHex(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model) return;
+
+        string path = model.SelectedPath;
+        if (path.Length == 0) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+
+        bool executable = path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                          || path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                          || path.EndsWith(".sys", StringComparison.OrdinalIgnoreCase);
+
+        if (!HexWarningDialog.Confirm(owner, path, executable)) return;
+
+        model.BeginHexEditCommand.Execute(true);
+    }
+
     private void OnEditFindKey(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;

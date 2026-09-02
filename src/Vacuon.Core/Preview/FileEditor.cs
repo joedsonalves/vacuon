@@ -191,6 +191,96 @@ public static class FileEditor
         }
     }
 
+    /// <summary>
+    /// The ceiling for editing bytes, far below the text one.
+    /// <para>
+    /// A hex dump is about four and a half characters per byte, so a megabyte of file is
+    /// four and a half million characters in a text box. The limit is what the window can
+    /// lay out, not what the disk can read.
+    /// </para>
+    /// </summary>
+    public const long MaxEditableBytesAsHex = 1024 * 1024;
+
+    /// <summary>A file opened for editing byte by byte.</summary>
+    public sealed record EditableBytes(EditLoadOutcome Outcome, byte[] Bytes, string Dump, long FileBytes)
+    {
+        public bool CanEdit => Outcome == EditLoadOutcome.Loaded;
+    }
+
+    /// <summary>
+    /// Reads the whole file and renders every byte of it as a dump.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>Every byte, not the preview's sample.</b> The preview reads 64 KiB and stops the
+    /// dump at 512 lines, which is eight kilobytes on screen. Editing that and writing it
+    /// back would replace the file with its first eight kilobytes.
+    /// </remarks>
+    public static EditableBytes LoadBytes(string path, long maxBytes = MaxEditableBytesAsHex)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return new EditableBytes(EditLoadOutcome.Unreadable, [], string.Empty, 0);
+
+        if (ProtectedPaths.IsProtected(path))
+            return new EditableBytes(EditLoadOutcome.Protected, [], string.Empty, 0);
+
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists) return new EditableBytes(EditLoadOutcome.Unreadable, [], string.Empty, 0);
+
+            if (info.Length > maxBytes)
+                return new EditableBytes(EditLoadOutcome.TooBig, [], string.Empty, info.Length);
+
+            byte[] bytes = File.ReadAllBytes(path);
+
+            return new EditableBytes(EditLoadOutcome.Loaded, bytes,
+                                     FilePreview.Hex(bytes, int.MaxValue), bytes.LongLength);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                      or ArgumentException or NotSupportedException)
+        {
+            return new EditableBytes(EditLoadOutcome.Unreadable, [], string.Empty, 0);
+        }
+    }
+
+    /// <summary>
+    /// Writes bytes back, the same all-or-nothing way text is written.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>There is no undo for this and the app does not pretend otherwise.</b> Changing a
+    /// byte of a program is not the kind of edit a quarantine helps with — the file keeps its
+    /// name, its size and its place, and only stops working. The screen says so before the
+    /// first keystroke, in the same tier as "Delete forever".
+    /// </remarks>
+    public static SaveResult SaveBytes(string path, byte[] bytes)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+
+        ProtectionVerdict verdict = ProtectedPaths.Check(path);
+        if (verdict.IsProtected) return new SaveResult(SaveOutcome.Protected, verdict.Reason.ToString(), []);
+
+        string temporary = path + ".vacuon-edit";
+
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, path, overwrite: true);
+
+            return SaveResult.Ok();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                      or NotSupportedException or ArgumentException)
+        {
+            Clean(temporary);
+
+            IReadOnlyList<FileHolder> holders = WhoHolds(path);
+
+            return holders.Count > 0
+                ? new SaveResult(SaveOutcome.InUse, ex.Message, holders)
+                : new SaveResult(SaveOutcome.Failed, ex.Message, []);
+        }
+    }
+
     private static IReadOnlyList<FileHolder> WhoHolds(string path)
     {
         try { return RestartManager.WhoHolds(path); }

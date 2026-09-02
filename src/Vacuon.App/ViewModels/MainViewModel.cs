@@ -85,6 +85,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         QuarantineSimilarCommand = new RelayCommand(QuarantineSimilar);
         ClearSimilarSelectionCommand = new RelayCommand(ClearSimilarSelection);
         BeginEditCommand = new RelayCommand(BeginEdit, () => CanEditPreview && !IsEditing);
+        BeginHexEditCommand = new RelayCommand(BeginHexEdit, _ => CanEditHex && !IsEditing);
         SaveEditCommand = new RelayCommand(SaveEdit, () => IsEditing);
         CancelEditCommand = new RelayCommand(CancelEdit, () => IsEditing);
         SelectAllAudioCommand = new RelayCommand(SelectAllAudio);
@@ -890,6 +891,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         FileRowViewModel? row = _selectedRow;
 
         CanEditPreview = false;
+        CanEditHex = false;
         if (!IsEditing) EditStatus = string.Empty;
 
         PreviewImagePath = string.Empty;
@@ -927,6 +929,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         // Video and audio have no still to show; the facts above are the preview.
         if (category is FileCategories.Video or FileCategories.Audio) return;
 
+        // Byte a byte serve para qualquer arquivo que caiba — inclusive um .exe, que é o
+        // caso em que alguém quer isso. O que decide não é o tipo, é o tamanho e a lista de
+        // caminhos protegidos.
+        CanEditHex = row.LogicalSize <= FileEditor.MaxEditableBytesAsHex && !ProtectedPaths.IsProtected(path);
+
         PreviewContent content = FilePreview.Read(path);
 
         switch (content.Kind)
@@ -960,7 +967,40 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     // ================= edicao no painel de previa (F6.15) =================
 
     private EditableFile? _loaded;
+    private FileEditor.EditableBytes? _loadedBytes;
     private string _editingPath = string.Empty;
+
+    private bool _isEditingHex;
+
+    /// <summary>
+    /// Whether the editor is working on bytes rather than on text.
+    /// <para>
+    /// ⚠️ A different tier from editing text, and the screen says so before the first
+    /// keystroke. Changing a byte of a program is not the kind of edit a quarantine helps
+    /// with: the file keeps its name, its size and its place, and only stops working. There
+    /// is no undo, and the app does not pretend there is.
+    /// </para>
+    /// </summary>
+    public bool IsEditingHex
+    {
+        get => _isEditingHex;
+        private set
+        {
+            if (!Set(ref _isEditingHex, value)) return;
+            Raise(nameof(IsEditingText));
+        }
+    }
+
+    public bool IsEditingText => _isEditing && !_isEditingHex;
+
+    private bool _canEditHex;
+
+    /// <summary>Whether the bytes of what is selected could be opened at all.</summary>
+    public bool CanEditHex
+    {
+        get => _canEditHex;
+        private set => Set(ref _canEditHex, value);
+    }
 
     private bool _isEditing;
 
@@ -1000,7 +1040,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
     /// <summary>Whether what is on screen differs from what is on disk.</summary>
     public bool IsEditorDirty =>
-        _loaded is not null && !string.Equals(_editorText, _loaded.Text, StringComparison.Ordinal);
+        (_loaded is not null && !string.Equals(_editorText, _loaded.Text, StringComparison.Ordinal))
+        || (_loadedBytes is not null && !string.Equals(_editorText, _loadedBytes.Dump, StringComparison.Ordinal));
 
     private string _editStatus = string.Empty;
 
@@ -1020,6 +1061,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     }
 
     public ICommand BeginEditCommand { get; private set; } = null!;
+    public ICommand BeginHexEditCommand { get; private set; } = null!;
+
+    /// <summary>The file the preview is showing, for the dialogs that need to name it.</summary>
+    public string SelectedPath => _selectedRow?.FullPath ?? string.Empty;
     public ICommand SaveEditCommand { get; private set; } = null!;
     public ICommand CancelEditCommand { get; private set; } = null!;
 
@@ -1062,8 +1107,93 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         Raise(nameof(IsEditorDirty));
     }
 
+    /// <summary>
+    /// Opens the selected file byte by byte, after the person has been told what that means.
+    /// </summary>
+    /// <param name="confirmed">
+    /// Whether the warning was shown and accepted. The view model refuses without it rather
+    /// than trusting the caller to have asked — the one guard that must not be bypassable by
+    /// wiring a button straight to the command.
+    /// </param>
+    private void BeginHexEdit(object? confirmed)
+    {
+        if (confirmed is not true) return;
+
+        FileRowViewModel? row = _selectedRow;
+        if (row is null || row.IsDirectory) return;
+
+        FileEditor.EditableBytes file = FileEditor.LoadBytes(row.FullPath);
+
+        if (!file.CanEdit)
+        {
+            EditStatus = file.Outcome switch
+            {
+                EditLoadOutcome.TooBig => L.T("edit.hexTooBig", Format.Bytes(file.FileBytes),
+                                              Format.Bytes(FileEditor.MaxEditableBytesAsHex)),
+                EditLoadOutcome.Protected => L.T("edit.protected"),
+                _ => L.T("edit.unreadable"),
+            };
+
+            return;
+        }
+
+        _loadedBytes = file;
+        _loaded = null;
+        _editingPath = row.FullPath;
+        EditorText = file.Dump;
+        EditStatus = L.T("edit.hexOpen");
+        IsEditingHex = true;
+        IsEditing = true;
+
+        Raise(nameof(IsEditorDirty));
+    }
+
+    /// <summary>
+    /// Writes the dump back as bytes.
+    /// </summary>
+    /// <remarks>
+    /// The dump is parsed before anything is written, and a dump that no longer holds the
+    /// same number of bytes is refused. Growing or shrinking a file this way moves every
+    /// offset after the edit, which in an executable breaks it in a way that looks like
+    /// nothing until it is run.
+    /// </remarks>
+    private void SaveHexEdit()
+    {
+        if (_loadedBytes is null || _editingPath.Length == 0) return;
+
+        HexParse parsed = HexDump.Parse(EditorText, _loadedBytes.Bytes.Length);
+
+        if (!parsed.Succeeded)
+        {
+            EditStatus = parsed.Outcome == HexParseOutcome.BadDigit
+                ? L.T("edit.hexBadDigit", Format.Count(parsed.Line))
+                : L.T("edit.hexLengthChanged", Format.Count(_loadedBytes.Bytes.Length));
+
+            return;
+        }
+
+        SaveResult result = FileEditor.SaveBytes(_editingPath, parsed.Bytes);
+
+        if (result.Succeeded)
+        {
+            _loadedBytes = _loadedBytes with { Bytes = parsed.Bytes, Dump = EditorText };
+            EditStatus = L.T("edit.saved");
+            Raise(nameof(IsEditorDirty));
+            return;
+        }
+
+        EditStatus = result.Outcome switch
+        {
+            SaveOutcome.Protected => L.T("edit.protected"),
+            SaveOutcome.InUse => L.T("edit.inUse", Describe(result.Holders)),
+            _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
+        };
+    }
+
     private void SaveEdit()
     {
+        if (IsEditingHex) { SaveHexEdit(); return; }
+
         if (_loaded is null || _editingPath.Length == 0) return;
 
         SaveResult result = FileEditor.Save(_editingPath, EditorText, _loaded);
@@ -1101,6 +1231,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     private void CancelEdit()
     {
         _loaded = null;
+        _loadedBytes = null;
+        IsEditingHex = false;
         _editingPath = string.Empty;
         EditorText = string.Empty;
         EditStatus = string.Empty;

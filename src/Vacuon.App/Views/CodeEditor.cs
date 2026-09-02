@@ -27,8 +27,10 @@ namespace Vacuon.App.Views;
 public sealed class CodeEditor : Grid
 {
     private readonly SyntaxTextBlock _colours = new();
+    private readonly HexTextBlock _hexColours = new();
     private readonly TextBox _box = new();
     private readonly ScrollViewer _behind = new();
+    private readonly Grid _painters = new();
 
     private string _indent = Indentation.Default;
 
@@ -40,7 +42,14 @@ public sealed class CodeEditor : Grid
         _colours.TextWrapping = TextWrapping.NoWrap;
         _colours.Margin = new Thickness(2, 0, 0, 0);
 
-        _behind.Content = _colours;
+        _hexColours.TextWrapping = TextWrapping.NoWrap;
+        _hexColours.Margin = _colours.Margin;
+        _hexColours.Visibility = Visibility.Collapsed;
+
+        _painters.Children.Add(_colours);
+        _painters.Children.Add(_hexColours);
+
+        _behind.Content = _painters;
         _behind.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
         _behind.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
         _behind.IsHitTestVisible = false;
@@ -97,8 +106,44 @@ public sealed class CodeEditor : Grid
         set => SetValue(CaretBrushProperty, value);
     }
 
+    public static readonly DependencyProperty IsHexProperty =
+        DependencyProperty.Register(nameof(IsHex), typeof(bool), typeof(CodeEditor),
+            new PropertyMetadata(false, OnIsHexChanged));
+
+    /// <summary>
+    /// Whether the text is a hex dump rather than source.
+    /// <para>
+    /// Two painters, one shown at a time. A dump and a snippet of code want different
+    /// colours: one separates byte from byte, the other separates word from word, and running
+    /// a code tokenizer over a dump would paint hex digits as numbers and tell nobody
+    /// anything.
+    /// </para>
+    /// </summary>
+    public bool IsHex
+    {
+        get => (bool)GetValue(IsHexProperty);
+        set => SetValue(IsHexProperty, value);
+    }
+
+    private static void OnIsHexChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        var editor = (CodeEditor)d;
+        bool hex = (bool)e.NewValue;
+
+        editor._colours.Visibility = hex ? Visibility.Collapsed : Visibility.Visible;
+        editor._hexColours.Visibility = hex ? Visibility.Visible : Visibility.Collapsed;
+
+        editor.Repaint();
+    }
+
     /// <summary>Gives the find box somewhere to select into.</summary>
     public TextBox Box => _box;
+
+    private void Repaint()
+    {
+        if (IsHex) _hexColours.SourceText = _box.Text;
+        else _colours.SourceText = _box.Text;
+    }
 
     private static void OnTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -107,7 +152,7 @@ public sealed class CodeEditor : Grid
 
         if (!string.Equals(editor._box.Text, text, StringComparison.Ordinal)) editor._box.Text = text;
 
-        editor._colours.SourceText = text;
+        editor.Repaint();
         editor._indent = Indentation.Detect(text);
     }
 
@@ -116,7 +161,7 @@ public sealed class CodeEditor : Grid
 
     private void OnBoxChanged(object sender, TextChangedEventArgs e)
     {
-        _colours.SourceText = _box.Text;
+        Repaint();
         if (!string.Equals(Text, _box.Text, StringComparison.Ordinal)) Text = _box.Text;
     }
 

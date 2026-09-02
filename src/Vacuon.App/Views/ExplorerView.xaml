@@ -610,6 +610,16 @@
                                     Visibility="{Binding IsNotEditing, Converter={StaticResource Visible}}"/>
                         </StackPanel>
 
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,58,0"
+                                    Visibility="{Binding CanEditHex, Converter={StaticResource Visible}}">
+                            <!-- Sempre passa pelo aviso: o comando recusa sem a confirmação,
+                                 então ligar um botão direto nele não contorna nada. -->
+                            <Button Style="{StaticResource Button.Ghost}" FontSize="10" Padding="7,3"
+                                    Content="{DynamicResource S.edit.editHex}"
+                                    Click="OnEditHex"
+                                    Visibility="{Binding IsNotEditing, Converter={StaticResource Visible}}"/>
+                        </StackPanel>
+
                         <StackPanel Grid.Column="1" Orientation="Horizontal"
                                     Visibility="{Binding IsEditing, Converter={StaticResource Visible}}">
                             <Button Style="{StaticResource Button.Primary}" FontSize="10" Padding="9,3"
@@ -717,6 +727,7 @@
                                         BorderBrush="{DynamicResource Stroke.Subtle}"
                                         BorderThickness="1">
                                     <views:CodeEditor x:Name="EditBox"
+                                                      IsHex="{Binding IsEditingHex, Mode=OneWay}"
                                                       Text="{Binding EditorText, Mode=TwoWay,
                                                              UpdateSourceTrigger=PropertyChanged}"
                                                       FileName="{Binding PreviewTitle, Mode=OneWay}"

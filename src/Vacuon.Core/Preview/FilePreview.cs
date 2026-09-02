@@ -136,7 +136,11 @@ public static class FilePreview
     /// </summary>
     public static string Hex(ReadOnlySpan<byte> bytes, int maxLines = 512)
     {
-        var text = new StringBuilder(maxLines * 78);
+        // ⚠️ From the bytes, never from maxLines. `maxLines * 78` overflows to a negative
+        // capacity the moment somebody asks for the whole file instead of a preview, and
+        // StringBuilder throws on it — a crash that only appears with a big enough ceiling.
+        int needed = (bytes.Length + 15) / 16;
+        var text = new StringBuilder(Math.Min(needed, maxLines) * 78);
         int lines = 0;
 
         for (int offset = 0; offset < bytes.Length && lines < maxLines; offset += 16, lines++)
