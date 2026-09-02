@@ -31,6 +31,10 @@ public sealed class CodeEditor : Grid
     private readonly TextBox _box = new();
     private readonly ScrollViewer _behind = new();
     private readonly Grid _painters = new();
+    private readonly System.Windows.Shapes.Rectangle _match = new();
+
+    private int _matchStart = -1;
+    private int _matchLength;
 
     private string _indent = Indentation.Default;
 
@@ -74,6 +78,21 @@ public sealed class CodeEditor : Grid
         _box.PreviewKeyDown += OnKeys;
         _box.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnScrolled));
 
+        // ⚠️ First, so it is painted UNDER the coloured text and under the box. The two
+        // above it have no background of their own, so it shows through both.
+        _match.Fill = new SolidColorBrush(Color.FromArgb(0x66, 0x3D, 0x8B, 0xFD));
+        _match.RadiusX = 2;
+        _match.RadiusY = 2;
+        _match.HorizontalAlignment = HorizontalAlignment.Left;
+        _match.VerticalAlignment = VerticalAlignment.Top;
+        _match.IsHitTestVisible = false;
+        _match.Visibility = Visibility.Collapsed;
+
+        // Scrolled-away matches are positioned outside this control, and without clipping
+        // they would be drawn over whatever sits beside the editor.
+        ClipToBounds = true;
+
+        Children.Add(_match);
         Children.Add(_behind);
         Children.Add(_box);
     }
@@ -165,14 +184,87 @@ public sealed class CodeEditor : Grid
 
     private void OnBoxChanged(object sender, TextChangedEventArgs e)
     {
+        // The offsets are about the text that was there. Keeping the box drawn where the
+        // match used to be would point at a different word after one keystroke.
+        ClearMatch();
+
         Repaint();
         if (!string.Equals(Text, _box.Text, StringComparison.Ordinal)) Text = _box.Text;
+    }
+
+    // ==================== the found match ====================
+
+    /// <summary>
+    /// Draws a box around the range Find landed on.
+    /// <para>
+    /// ⚠️ <b>Drawn here rather than left to the box's own selection.</b> The selection is set
+    /// too, but WPF paints no selection in a box that does not have the keyboard focus —
+    /// measured on 02/09/2026, with the window active and
+    /// <c>IsInactiveSelectionHighlightEnabled</c> on: the pixels under the match came back
+    /// pure <c>#FFFFFF</c>. And taking the focus is exactly what made the second press of
+    /// Enter type a line break into the file, so the choice was between a match nobody can
+    /// see and a Find that edits.
+    /// </para>
+    /// </summary>
+    public void HighlightMatch(int start, int length)
+    {
+        _matchStart = start;
+        _matchLength = length;
+
+        PlaceMatch();
+
+        // And again once the scroll the caller just asked for has actually happened: until
+        // then the box still answers about where the characters were.
+        Dispatcher.BeginInvoke(PlaceMatch, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    public void ClearMatch()
+    {
+        _matchStart = -1;
+        _matchLength = 0;
+        _match.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Puts the box where the characters are now.
+    /// </summary>
+    /// <remarks>
+    /// The rectangles come from the <c>TextBox</c> and are relative to it, which is why this
+    /// has to run again on every scroll: they are viewport coordinates, not text ones.
+    /// </remarks>
+    private void PlaceMatch()
+    {
+        if (_matchStart < 0 || _matchLength <= 0 || _matchStart + _matchLength > _box.Text.Length)
+        {
+            _match.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        Rect head = _box.GetRectFromCharacterIndex(_matchStart);
+        Rect tail = _box.GetRectFromCharacterIndex(_matchStart + _matchLength, true);
+
+        // Off screen, or asked before the box has laid the text out at all.
+        if (head.IsEmpty || tail.IsEmpty
+            || double.IsInfinity(head.X) || double.IsInfinity(tail.X)
+            || double.IsNaN(head.X) || double.IsNaN(tail.X)
+            || tail.Y != head.Y)
+        {
+            _match.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _match.Margin = new Thickness(head.X, head.Y, 0, 0);
+        _match.Width = Math.Max(2, tail.X - head.X);
+        _match.Height = head.Height;
+        _match.Visibility = Visibility.Visible;
     }
 
     private void OnScrolled(object sender, ScrollChangedEventArgs e)
     {
         _behind.ScrollToVerticalOffset(e.VerticalOffset);
         _behind.ScrollToHorizontalOffset(e.HorizontalOffset);
+
+        PlaceMatch();
     }
 
     /// <summary>

@@ -35,22 +35,34 @@ internal static class EditorFind
         if (needle.Length == 0)
         {
             model.EditFindStatus = string.Empty;
+            editor.ClearMatch();
             return;
         }
 
-        int from = box.SelectionStart + Math.Max(1, box.SelectionLength);
+        // Past the match that is selected, or from the caret when nothing is. It used to
+        // always add one, which skipped a match sitting exactly under the caret — so the
+        // first press of Enter jumped over the first occurrence in the file.
+        int from = box.SelectionStart + box.SelectionLength;
 
         TextMatch match = FindInText.Next(box.Text, needle, from);
 
         if (!match.Found)
         {
             model.EditFindStatus = L.T("edit.findNone");
+            editor.ClearMatch();
             return;
         }
 
-        box.Focus();
+        // ⚠️ The focus stays in the search box. Moving it into the editor is what made the
+        // second press of Enter type a line break into the file instead of finding the next
+        // occurrence — an edit nobody asked for, arriving through a key that was supposed to
+        // only look at things.
         box.Select(match.Index, match.Length);
         box.ScrollToLine(Math.Max(0, box.GetLineIndexFromCharacterIndex(match.Index) - LinesAbove));
+
+        // The selection alone is invisible while the box does not have the focus, so the
+        // editor draws the match itself. See CodeEditor.HighlightMatch.
+        editor.HighlightMatch(match.Index, match.Length);
 
         model.EditFindStatus = L.T("edit.findCount", match.Total.ToString("N0", L.Culture));
     }
