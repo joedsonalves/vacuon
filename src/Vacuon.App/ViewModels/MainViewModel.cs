@@ -997,6 +997,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public bool IsEditingText => _isEditing && !_isEditingHex;
 
     private readonly PendingSaves _pending = new();
+    private readonly PendingSaveStore _pendingStore = new();
     private CancellationTokenSource? _pendingCts;
 
     private byte[]? _refusedContent;
@@ -1264,6 +1265,81 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public ICommand WatchForReleaseCommand { get; private set; } = null!;
 
     /// <summary>
+    /// Edits from an earlier session that were never written.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ Asked at startup rather than written at startup. The file may have been changed by
+    /// something else in the meantime, and writing over that without a word would be the app
+    /// making a decision that belongs to the person — the reason the dialog offers to open
+    /// the edit before committing to it.
+    /// </remarks>
+    public IReadOnlyList<StoredSave> WaitingFromLastTime() => _pendingStore.Load();
+
+    /// <summary>Writes the edits from an earlier session, or gives up on them.</summary>
+    public int ResumePending()
+    {
+        int written = 0;
+
+        foreach (StoredSave entry in _pendingStore.Load())
+        {
+            byte[]? content = _pendingStore.Content(entry);
+            if (content is null) continue;
+
+            _pending.Queue(entry.Path, content);
+        }
+
+        written = _pending.TryAll();
+
+        if (_pending.Count > 0)
+        {
+            IsWatchingForRelease = true;
+
+            _pendingCts?.Cancel();
+            _pendingCts = new CancellationTokenSource();
+
+            _ = _pending.WatchAsync(TimeSpan.FromSeconds(2), _pendingCts.Token);
+        }
+
+        return written;
+    }
+
+    public void DiscardPending()
+    {
+        _pending.Clear();
+        _pendingStore.Clear();
+        IsWatchingForRelease = false;
+    }
+
+    /// <summary>
+    /// Opens the waiting edit in the editor so it can be looked at before it is written.
+    /// </summary>
+    /// <returns><c>false</c> when the file it belongs to is no longer there.</returns>
+    public bool ReviewPending(StoredSave entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        byte[]? content = _pendingStore.Content(entry);
+        if (content is null || !System.IO.File.Exists(entry.Path)) return false;
+
+        EditableFile file = FileEditor.Load(entry.Path);
+        if (!file.CanEdit) return false;
+
+        _loaded = file;
+        _loadedBytes = null;
+        IsEditingHex = false;
+        _editingPath = entry.Path;
+
+        // What is shown is the edit that was waiting, over what the file holds now — which is
+        // exactly the comparison somebody needs to decide whether it still applies.
+        EditorText = System.Text.Encoding.UTF8.GetString(content);
+        EditStatus = L.T("pending.reviewing", System.IO.Path.GetFileName(entry.Path));
+        IsEditing = true;
+
+        Raise(nameof(IsEditorDirty));
+        return true;
+    }
+
+    /// <summary>
     /// Waits for the file to be let go, then writes the edit that was refused.
     /// </summary>
     /// <remarks>
@@ -1276,6 +1352,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         if (_refusedContent is null || _refusedPath.Length == 0) return;
 
         _pending.Queue(_refusedPath, _refusedContent);
+
+        // ⚠️ Kept on disk as well, so closing Vacuon does not throw the edit away. The wait
+        // is for somebody to close another program, which can easily outlast this session.
+        _pendingStore.Keep(_refusedPath, _refusedContent);
 
         CanWatchForRelease = false;
         IsWatchingForRelease = true;
@@ -1293,6 +1373,10 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         App.Current?.Dispatcher.Invoke(() =>
         {
             IsWatchingForRelease = _pending.Count > 0;
+
+            // Settled either way: written, or refused for a reason waiting will not change.
+            // Leaving it on disk would offer it again at the next launch.
+            _pendingStore.Forget(result.Save.Path);
 
             EditStatus = result.Outcome switch
             {

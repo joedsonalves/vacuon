@@ -1,0 +1,56 @@
+<Window x:Class="Vacuon.App.Views.PendingSaveDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="620" SizeToContent="Height" MaxHeight="620"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        Background="{DynamicResource Surface.Window}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+
+    <Grid Margin="22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TitleText" Grid.Row="0" Style="{StaticResource Text.Title}"
+                   FontSize="17" TextWrapping="Wrap"/>
+
+        <TextBlock x:Name="BodyText" Grid.Row="1" Style="{StaticResource Text.Body}"
+                   Margin="0,10,0,0" TextWrapping="Wrap"/>
+
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="12,10"
+                MaxHeight="260">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="SaveList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,3">
+                                <TextBlock Style="{StaticResource Text.Sub}" FontWeight="SemiBold"
+                                           Text="{Binding FileName}"/>
+                                <TextBlock Style="{StaticResource Text.Sub}" FontSize="10"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource Text.Muted}"
+                                           Text="{Binding Path}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Três saídas, e nenhuma delas é fechar a janela e esquecer: escrever agora, abrir
+             para olhar antes, ou jogar fora dizendo que é isso que está sendo feito. -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button x:Name="DiscardButton" Style="{StaticResource Button.Base}"
+                    MinWidth="104" Click="OnDiscard"/>
+            <Button x:Name="ReviewButton" Style="{StaticResource Button.Base}"
+                    MinWidth="104" Margin="8,0,0,0" Click="OnReview"/>
+            <Button x:Name="SaveButton" Style="{StaticResource Button.Primary}"
+                    MinWidth="104" Margin="8,0,0,0" Click="OnSave"/>
+        </StackPanel>
+    </Grid>
+</Window>

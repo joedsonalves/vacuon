@@ -19,7 +19,11 @@ public partial class MainWindow : Window
 
         // Read-only, in the background, and only if the setting allows: it runs winget and
         // reads what it printed. Nothing is downloaded and nothing waits on it.
-        Loaded += (_, _) => _model.StartUpdateCheck();
+        Loaded += (_, _) =>
+        {
+            _model.StartUpdateCheck();
+            AskAboutPendingSaves();
+        };
 
         // A barra de título é do Windows, não do WPF: sem sincronizar, o tema escuro
         // fica com uma faixa branca no topo.
@@ -143,4 +147,41 @@ public partial class MainWindow : Window
         Navigate(Section.Settings, "nav.settings");
 
     private void OnToggleTheme(object sender, RoutedEventArgs e) => _model.ToggleTheme();
+
+    /// <summary>
+    /// Asks about edits that never got written before the app was last closed.
+    /// <para>
+    /// ⚠️ Asked, not written. The file may have been changed by something else since, and
+    /// writing over that without a word would be the app deciding something that belongs to
+    /// the person — which is why one of the three ways out is to open the edit and look at it
+    /// first.
+    /// </para>
+    /// </summary>
+    private void AskAboutPendingSaves()
+    {
+        IReadOnlyList<Vacuon.Core.Preview.StoredSave> waiting = _model.WaitingFromLastTime();
+        if (waiting.Count == 0) return;
+
+        switch (Views.PendingSaveDialog.Ask(this, waiting))
+        {
+            case Views.PendingChoice.Save:
+                _model.ResumePending();
+                break;
+
+            case Views.PendingChoice.Review:
+                // The Explorer is where the editor lives, so the review has to happen there.
+                _model.Section = ViewModels.Section.Explorer;
+                _model.ReviewPending(waiting[0]);
+                break;
+
+            case Views.PendingChoice.Discard:
+                _model.DiscardPending();
+                break;
+
+            default:
+                // Closing the window keeps them: the edit already outlived one close, and a
+                // stray Escape should not be what finally loses it.
+                break;
+        }
+    }
 }
