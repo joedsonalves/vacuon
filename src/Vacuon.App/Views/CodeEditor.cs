@@ -27,7 +27,7 @@ namespace Vacuon.App.Views;
 public sealed class CodeEditor : Grid
 {
     private readonly SyntaxTextBlock _colours = new();
-    private readonly HexTextBlock _hexColours = new();
+    private readonly HexCanvas _hexColours = new();
     private readonly TextBox _box = new();
     private readonly ScrollViewer _behind = new();
     private readonly Grid _painters = new();
@@ -42,9 +42,13 @@ public sealed class CodeEditor : Grid
         _colours.TextWrapping = TextWrapping.NoWrap;
         _colours.Margin = new Thickness(2, 0, 0, 0);
 
-        _hexColours.TextWrapping = TextWrapping.NoWrap;
+        // ⚠️ Drawn, not built out of Runs. The dump of a one-megabyte file is 65 536 lines,
+        // and the TextBlock this replaced took 12,4 s to build and lay out one of 181 KiB —
+        // which is what "opening the byte editor froze the window" was.
         _hexColours.Margin = _colours.Margin;
         _hexColours.Visibility = Visibility.Collapsed;
+        _hexColours.HorizontalAlignment = HorizontalAlignment.Left;
+        _hexColours.VerticalAlignment = VerticalAlignment.Top;
 
         _painters.Children.Add(_colours);
         _painters.Children.Add(_hexColours);

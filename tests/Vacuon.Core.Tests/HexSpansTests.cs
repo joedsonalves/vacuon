@@ -130,4 +130,76 @@ public class HexSpansTests
 
         Assert.Equal(5, Of(dump, HexKind.Offset).Count);
     }
+
+    // ================= drawing only the lines on screen (F6.19) =================
+
+    [Fact]
+    public void LineStartsFindsEveryLine()
+    {
+        string dump = Dump([.. Enumerable.Range(0, 64).Select(i => (byte)i)]);
+
+        int[] starts = HexSpans.LineStarts(dump);
+
+        Assert.Equal(4, starts.Length);
+        Assert.Equal(0, starts[0]);
+
+        // Every start but the first sits immediately after a newline, and nowhere else.
+        for (int i = 1; i < starts.Length; i++) Assert.Equal(NEWLINE, dump[starts[i] - 1]);
+    }
+
+    [Fact]
+    public void LineStartsHandlesTheShortLastLine()
+    {
+        // Seventeen bytes: one full line and one of a single byte. A renderer working out
+        // where line two begins by multiplying would still be right here, and wrong about
+        // where line two ENDS — so the ends are what this checks.
+        string dump = Dump([.. Enumerable.Range(0, 17).Select(i => (byte)i)]);
+
+        int[] starts = HexSpans.LineStarts(dump);
+
+        Assert.Equal(2, starts.Length);
+
+        string second = dump[starts[1]..HexSpans.LineEnd(dump, starts, 1)];
+
+        Assert.StartsWith("00000010", second);
+        Assert.DoesNotContain(NEWLINE, second);
+    }
+
+    [Fact]
+    public void LineStartsOfNothingIsNothing()
+    {
+        Assert.Empty(HexSpans.LineStarts(string.Empty));
+    }
+
+    /// <summary>
+    /// ⚠️ The invariant the drawing depends on: classifying one line at a time has to give
+    /// exactly what classifying the whole dump gives.
+    /// </summary>
+    /// <remarks>
+    /// The preview draws a band of lines and the byte editor draws another band of the same
+    /// dump. If these two ever disagreed, the same file would be coloured differently
+    /// depending on which screen it was looked at from, and neither would look broken.
+    /// </remarks>
+    [Fact]
+    public void LineByLineAgreesWithTheWholeDump()
+    {
+        var bytes = new byte[600];
+        for (int i = 0; i < bytes.Length; i++) bytes[i] = (byte)(i * 7);
+
+        string dump = Dump(bytes);
+
+        List<HexSpan> whole = HexSpans.Classify(dump);
+
+        var piecemeal = new List<HexSpan>();
+        int[] starts = HexSpans.LineStarts(dump);
+
+        for (int i = 0; i < starts.Length; i++)
+        {
+            HexSpans.Line(dump, starts[i], HexSpans.LineEnd(dump, starts, i), piecemeal);
+        }
+
+        Assert.Equal(whole, piecemeal);
+    }
+
+    private const char NEWLINE = '\n';
 }

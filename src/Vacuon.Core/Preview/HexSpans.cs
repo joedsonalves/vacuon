@@ -70,8 +70,20 @@ public static class HexSpans
         return spans;
     }
 
-    private static void Line(string dump, int start, int end, List<HexSpan> spans)
+    /// <summary>
+    /// Classifies one line of the dump, appending to <paramref name="spans"/>.
+    /// </summary>
+    /// <remarks>
+    /// Offsets are absolute, into <paramref name="dump"/>, not relative to the line. That is
+    /// what lets a renderer classify only the lines it is about to draw without cutting them
+    /// out of the dump first — the same positions it would have got from
+    /// <see cref="Classify(string)"/>, so the two can never disagree about a line.
+    /// </remarks>
+    public static void Line(string dump, int start, int end, List<HexSpan> spans)
     {
+        ArgumentNullException.ThrowIfNull(dump);
+        ArgumentNullException.ThrowIfNull(spans);
+
         if (end - start < BytesStart) return;
 
         spans.Add(new HexSpan(start, OffsetWidth, HexKind.Offset));
@@ -113,6 +125,64 @@ public static class HexSpans
             i = run - 1;
         }
     }
+
+    /// <summary>
+    /// The character offset at which each line of the dump begins.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>Found by scanning, never by multiplying.</b> The lines a dump is made of happen
+    /// to be a fixed width, and computing <c>line * 78</c> would be a second description of
+    /// the formatter's layout living apart from the formatter — the drift this whole class
+    /// avoids by reading the rendered text. It is also wrong on the last line, which is short
+    /// whenever the file does not end on a sixteen-byte boundary.
+    /// </remarks>
+    public static int[] LineStarts(string dump)
+    {
+        ArgumentNullException.ThrowIfNull(dump);
+
+        if (dump.Length == 0) return [];
+
+        var starts = new List<int>(dump.Length / 78 + 1);
+        int at = 0;
+
+        while (at < dump.Length)
+        {
+            starts.Add(at);
+
+            int next = dump.IndexOf('\n', at);
+            if (next < 0) break;
+
+            at = next + 1;
+        }
+
+        return [.. starts];
+    }
+
+    /// <summary>
+    /// Where line <paramref name="line"/> ends: the newline is not part of it.
+    /// </summary>
+    /// <remarks>
+    /// ⚠️ <b>The last line is the one that catches people, this author included.</b> Every
+    /// other line ends one character before the next one starts, but the last has no next —
+    /// and a dump ends with a newline, so taking the end of the string would hand the line
+    /// its own line break. <see cref="Classify(string)"/> never sees that character, so a
+    /// renderer that did would colour the last line of a file differently from the classifier
+    /// and nothing would look wrong. Both ask this instead.
+    /// </remarks>
+    public static int LineEnd(string dump, int[] starts, int line)
+    {
+        ArgumentNullException.ThrowIfNull(dump);
+        ArgumentNullException.ThrowIfNull(starts);
+
+        if (line + 1 < starts.Length) return starts[line + 1] - 1;
+
+        int end = dump.Length;
+        if (end > 0 && dump[end - 1] == NewLine) end--;
+
+        return end;
+    }
+
+    private const char NewLine = '\n';
 
     /// <summary>
     /// Where the readable column starts: after the last run of two or more spaces.

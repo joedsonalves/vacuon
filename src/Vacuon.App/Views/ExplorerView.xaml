@@ -709,7 +709,9 @@
                                                  Source="{Binding PreviewImageSource}"
                                                  Visibility="{Binding HasPreviewImage, Converter={StaticResource Visible}}"/>
 
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                            <ScrollViewer x:Name="PreviewScroll"
+                                          ScrollChanged="OnPreviewScrolled"
+                                          VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           Visibility="{Binding PreviewText, Converter={StaticResource NotEmpty}}">
                                 <Grid Visibility="{Binding IsNotEditing,
@@ -724,13 +726,18 @@
 
                                     <!-- Um despejo hexadecimal e um trecho de codigo pedem
                                          cores diferentes: um separa byte de byte, o outro
-                                         separa palavra de palavra. -->
-                                    <views:HexTextBlock SourceText="{Binding PreviewText, Mode=OneWay}"
-                                                        Foreground="{DynamicResource Text.Secondary}"
-                                                        FontFamily="{StaticResource Font.Mono}" FontSize="11"
-                                                        TextWrapping="NoWrap"
-                                                        Visibility="{Binding IsPreviewMonospaced,
-                                                                     Converter={StaticResource Visible}}"/>
+                                         separa palavra de palavra.
+
+                                         Desenhado, nao montado com um Run por trecho: o
+                                         despejo de um arquivo de 1 MiB tem 65.536 linhas, e
+                                         montar todas custava 12,4 s travando a janela. -->
+                                    <views:HexCanvas x:Name="PreviewHex"
+                                                     SourceText="{Binding PreviewText, Mode=OneWay}"
+                                                     TextElement.Foreground="{DynamicResource Text.Secondary}"
+                                                     TextElement.FontFamily="{StaticResource Font.Mono}"
+                                                     TextElement.FontSize="11"
+                                                     Visibility="{Binding IsPreviewMonospaced,
+                                                                  Converter={StaticResource Visible}}"/>
                                 </Grid>
                             </ScrollViewer>
 

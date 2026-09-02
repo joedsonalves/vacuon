@@ -145,6 +145,19 @@ public partial class ExplorerView : UserControl
     // ==================== selection ====================
 
     /// <summary>Back to fitted. The same thing a double-click on the picture does.</summary>
+    /// <summary>
+    /// Tells the hex canvas which band of the dump is on screen.
+    /// </summary>
+    /// <remarks>
+    /// The canvas is the full height of the dump and the scroller translates it, so this
+    /// hands over the offset to choose lines with — never to move them by.
+    /// </remarks>
+    private void OnPreviewScrolled(object sender, ScrollChangedEventArgs e)
+    {
+        PreviewHex.ViewportHeight = e.ViewportHeight;
+        PreviewHex.VerticalOffset = e.VerticalOffset;
+    }
+
     private void OnPreviewFit(object sender, RoutedEventArgs e) => PreviewZoom.Reset();
 
     // ---------------- shell context menu (M3, F6.10) ----------------
