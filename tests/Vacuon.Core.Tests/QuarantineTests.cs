@@ -418,7 +418,7 @@ public class QuarantineServiceTests : IDisposable
                 new QuarantineItem
                 {
                     StoredName = "00001.bin",
-                    OriginalPath = @"C:\Users\romeu\Videos\render.mp4",
+                    OriginalPath = @"C:\Users\Joaozinho\Videos\render.mp4",
                     Bytes = 9_412_233_216,
                     IsDirectory = false,
                     Reason = "manual",
@@ -436,7 +436,7 @@ public class QuarantineServiceTests : IDisposable
         Assert.Equal(batch.CreatedUtc, read.CreatedUtc);
         Assert.Equal(9_412_233_216, read.TotalBytes);
         Assert.Equal(folder, read.BatchFolder);
-        Assert.Equal(@"C:\Users\romeu\Videos\render.mp4", read.Items[0].OriginalPath);
+        Assert.Equal(@"C:\Users\Joaozinho\Videos\render.mp4", read.Items[0].OriginalPath);
     }
 
     [Fact]
