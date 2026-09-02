@@ -699,18 +699,20 @@
                                     </StackPanel>
                                 </Border>
 
-                                <TextBox x:Name="EditBox" Grid.Row="1"
-                                         Text="{Binding EditorText, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True" AcceptsTab="True"
-                                         TextWrapping="NoWrap"
-                                         VerticalScrollBarVisibility="Auto"
-                                         HorizontalScrollBarVisibility="Auto"
-                                         FontFamily="{StaticResource Font.Mono}" FontSize="11"
-                                         Background="{DynamicResource Surface.Input}"
-                                         Foreground="{DynamicResource Text.Primary}"
-                                         BorderBrush="{DynamicResource Stroke.Subtle}"
-                                         BorderThickness="1"
-                                         AutomationProperties.Name="{Binding PreviewTitle}"/>
+                                <Border Grid.Row="1"
+                                        Background="{DynamicResource Surface.Input}"
+                                        BorderBrush="{DynamicResource Stroke.Subtle}"
+                                        BorderThickness="1">
+                                    <views:CodeEditor x:Name="EditBox"
+                                                      Text="{Binding EditorText, Mode=TwoWay,
+                                                             UpdateSourceTrigger=PropertyChanged}"
+                                                      FileName="{Binding PreviewTitle, Mode=OneWay}"
+                                                      TextElement.FontFamily="{StaticResource Font.Mono}"
+                                                      TextElement.FontSize="11"
+                                                      TextElement.Foreground="{DynamicResource Text.Secondary}"
+                                                      CaretBrush="{DynamicResource Text.Primary}"
+                                                      AutomationProperties.Name="{Binding PreviewTitle}"/>
+                                </Border>
                             </Grid>
 
                             <TextBlock Style="{StaticResource Text.Sub}" FontSize="11"

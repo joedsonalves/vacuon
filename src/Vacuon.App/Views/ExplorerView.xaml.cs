@@ -602,6 +602,8 @@ public partial class ExplorerView : UserControl
     {
         if (EditBox is null || EditFindBox is null) return;
 
+        TextBox box = EditBox.Box;
+
         string needle = EditFindBox.Text;
 
         if (needle.Length == 0)
@@ -610,8 +612,8 @@ public partial class ExplorerView : UserControl
             return;
         }
 
-        string haystack = EditBox.Text;
-        int from = EditBox.SelectionStart + Math.Max(1, EditBox.SelectionLength);
+        string haystack = box.Text;
+        int from = box.SelectionStart + Math.Max(1, box.SelectionLength);
 
         int at = haystack.IndexOf(needle, Math.Min(from, haystack.Length),
                                   StringComparison.OrdinalIgnoreCase);
@@ -624,11 +626,11 @@ public partial class ExplorerView : UserControl
             return;
         }
 
-        EditBox.Focus();
-        EditBox.Select(at, needle.Length);
+        box.Focus();
+        box.Select(at, needle.Length);
 
-        int line = EditBox.GetLineIndexFromCharacterIndex(at);
-        EditBox.ScrollToLine(Math.Max(0, line - 2));
+        int line = box.GetLineIndexFromCharacterIndex(at);
+        box.ScrollToLine(Math.Max(0, line - 2));
 
         EditFindStatus.Text = L.T("edit.findCount", Formatting(Count(haystack, needle)));
     }
