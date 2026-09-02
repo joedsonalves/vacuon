@@ -117,7 +117,7 @@ public static class FilePreview
         return Encoding.UTF8;
     }
 
-    private static string Decode(byte[] bytes, Encoding encoding)
+    internal static string Decode(byte[] bytes, Encoding encoding)
     {
         string text = encoding.GetString(bytes).TrimStart('﻿');
 

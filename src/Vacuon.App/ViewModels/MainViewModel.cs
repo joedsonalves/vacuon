@@ -16,6 +16,7 @@ using Vacuon.Core.Localization;
 using Vacuon.Core.Monitoring;
 using Vacuon.Core.Optimization;
 using Vacuon.Core.Preview;
+using Vacuon.Core.Safety;
 using Vacuon.Core.Scan;
 using Vacuon.Core.Security;
 using Vacuon.Core.Transfer;
@@ -83,6 +84,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                                              () => !IsFindingSimilar);
         QuarantineSimilarCommand = new RelayCommand(QuarantineSimilar);
         ClearSimilarSelectionCommand = new RelayCommand(ClearSimilarSelection);
+        BeginEditCommand = new RelayCommand(BeginEdit, () => CanEditPreview && !IsEditing);
+        SaveEditCommand = new RelayCommand(SaveEdit, () => IsEditing);
+        CancelEditCommand = new RelayCommand(CancelEdit, () => IsEditing);
         SelectAllAudioCommand = new RelayCommand(SelectAllAudio);
         ScanForJunkCommand = new RelayCommand(ScanForJunk);
         RunCleanupCommand = new RelayCommand(RunCleanup);
@@ -885,6 +889,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     {
         FileRowViewModel? row = _selectedRow;
 
+        CanEditPreview = false;
+        if (!IsEditing) EditStatus = string.Empty;
+
         PreviewImagePath = string.Empty;
         PreviewText = string.Empty;
         PreviewFacts = string.Empty;
@@ -926,6 +933,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         {
             case PreviewKind.Text:
                 PreviewText = content.Text;
+
+                // Offered only for what can actually be written: the same guards the editor
+                // enforces, asked before the button appears rather than after it is pressed.
+                CanEditPreview = content.FileBytes <= FileEditor.MaxEditableBytes
+                                 && !ProtectedPaths.IsProtected(path);
                 break;
 
             case PreviewKind.Binary:
@@ -943,6 +955,156 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         if (content.Truncated)
             PreviewNote = L.T("preview.truncated", Format.Bytes(content.BytesRead),
                               Format.Bytes(content.FileBytes));
+    }
+
+    // ================= edicao no painel de previa (F6.15) =================
+
+    private EditableFile? _loaded;
+    private string _editingPath = string.Empty;
+
+    private bool _isEditing;
+
+    /// <summary>
+    /// Whether the preview pane is an editor right now.
+    /// <para>
+    /// ⚠️ While this is true the file list and the tree are disabled. Not to be strict: the
+    /// alternative is a person typing into a box, clicking another file, and losing what
+    /// they wrote to a screen that gave no sign it was about to. Save or Cancel are one
+    /// click away, and the dedicated window exists for edits long enough to want the list
+    /// back.
+    /// </para>
+    /// </summary>
+    public bool IsEditing
+    {
+        get => _isEditing;
+        private set
+        {
+            if (!Set(ref _isEditing, value)) return;
+            Raise(nameof(IsNotEditing));
+        }
+    }
+
+    public bool IsNotEditing => !_isEditing;
+
+    private string _editorText = string.Empty;
+
+    public string EditorText
+    {
+        get => _editorText;
+        set
+        {
+            if (!Set(ref _editorText, value)) return;
+            Raise(nameof(IsEditorDirty));
+        }
+    }
+
+    /// <summary>Whether what is on screen differs from what is on disk.</summary>
+    public bool IsEditorDirty =>
+        _loaded is not null && !string.Equals(_editorText, _loaded.Text, StringComparison.Ordinal);
+
+    private string _editStatus = string.Empty;
+
+    public string EditStatus
+    {
+        get => _editStatus;
+        private set => Set(ref _editStatus, value);
+    }
+
+    private bool _canEditPreview;
+
+    /// <summary>Whether the Edit button has anything to offer for what is selected.</summary>
+    public bool CanEditPreview
+    {
+        get => _canEditPreview;
+        private set => Set(ref _canEditPreview, value);
+    }
+
+    public ICommand BeginEditCommand { get; private set; } = null!;
+    public ICommand SaveEditCommand { get; private set; } = null!;
+    public ICommand CancelEditCommand { get; private set; } = null!;
+
+    /// <summary>
+    /// Opens the selected file for editing.
+    /// <para>
+    /// ⚠️ This reads the file <b>again, whole</b>, rather than editing the preview text. The
+    /// preview holds the first 64 KiB; saving that back would write those bytes over the
+    /// whole file. <see cref="FileEditor"/> refuses anything that does not fit rather than
+    /// opening part of it, and the reason is shown here.
+    /// </para>
+    /// </summary>
+    private void BeginEdit()
+    {
+        FileRowViewModel? row = _selectedRow;
+        if (row is null || row.IsDirectory) return;
+
+        EditableFile file = FileEditor.Load(row.FullPath);
+
+        if (!file.CanEdit)
+        {
+            EditStatus = file.Outcome switch
+            {
+                EditLoadOutcome.TooBig => L.T("edit.tooBig", Format.Bytes(file.Bytes),
+                                              Format.Bytes(FileEditor.MaxEditableBytes)),
+                EditLoadOutcome.NotText => L.T("edit.notText"),
+                EditLoadOutcome.Protected => L.T("edit.protected"),
+                _ => L.T("edit.unreadable"),
+            };
+
+            return;
+        }
+
+        _loaded = file;
+        _editingPath = row.FullPath;
+        EditorText = file.Text;
+        EditStatus = string.Empty;
+        IsEditing = true;
+
+        Raise(nameof(IsEditorDirty));
+    }
+
+    private void SaveEdit()
+    {
+        if (_loaded is null || _editingPath.Length == 0) return;
+
+        SaveResult result = FileEditor.Save(_editingPath, EditorText, _loaded);
+
+        if (result.Succeeded)
+        {
+            // The file on disk is now what is on screen, so the editor is clean without
+            // being closed: saving is not the same act as finishing.
+            _loaded = _loaded with { Text = EditorText };
+            EditStatus = L.T("edit.saved");
+            Raise(nameof(IsEditorDirty));
+
+            UpdatePreview();
+            return;
+        }
+
+        EditStatus = result.Outcome switch
+        {
+            SaveOutcome.Protected => L.T("edit.protected"),
+            SaveOutcome.InUse => L.T("edit.inUse", Describe(result.Holders)),
+            _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
+        };
+    }
+
+    private static string Describe(IReadOnlyList<FileHolder> holders)
+    {
+        if (holders.Count == 0) return string.Empty;
+
+        var names = new List<string>(holders.Count);
+        foreach (FileHolder holder in holders) names.Add(holder.Name);
+
+        return string.Join(", ", names);
+    }
+
+    private void CancelEdit()
+    {
+        _loaded = null;
+        _editingPath = string.Empty;
+        EditorText = string.Empty;
+        EditStatus = string.Empty;
+        IsEditing = false;
     }
 
     private static string DescribeMedia(MediaInfo media)

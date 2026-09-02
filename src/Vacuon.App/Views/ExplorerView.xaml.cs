@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Vacuon.App.ViewModels;
 using Vacuon.Core.Actions;
+using Vacuon.Core.Localization;
 using Vacuon.Native.Interop;
 
 namespace Vacuon.App.Views;
@@ -551,4 +552,100 @@ public partial class ExplorerView : UserControl
             ? days : 0;
         RequestVisibleThumbnails();
     }
+
+    // ---------------- edição no painel (F6.15) ----------------
+
+    /// <summary>
+    /// Ctrl+S salva, Esc cancela.
+    /// <para>
+    /// Registrado no <c>PreviewKeyDown</c> do controle inteiro porque um <c>TextBox</c> com
+    /// <c>AcceptsTab</c> engole muita tecla antes que ela suba, e a combinação que salva não
+    /// pode depender de onde o foco está dentro do painel.
+    /// </para>
+    /// </summary>
+    private void OnEditKeys(object sender, KeyEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || !model.IsEditing) return;
+
+        if (e.Key == Key.S && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            model.SaveEditCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            model.CancelEditCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void OnEditFindKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+
+        FindNext();
+        e.Handled = true;
+    }
+
+    private void OnEditFindNext(object sender, RoutedEventArgs e) => FindNext();
+
+    /// <summary>
+    /// Procura a partir do cursor e dá a volta.
+    /// <para>
+    /// Dar a volta em silêncio esconderia de quem procura que já passou pelo fim; o contador
+    /// ao lado diz quantas ocorrências existem, então a volta não surpreende.
+    /// </para>
+    /// </summary>
+    private void FindNext()
+    {
+        if (EditBox is null || EditFindBox is null) return;
+
+        string needle = EditFindBox.Text;
+
+        if (needle.Length == 0)
+        {
+            EditFindStatus.Text = string.Empty;
+            return;
+        }
+
+        string haystack = EditBox.Text;
+        int from = EditBox.SelectionStart + Math.Max(1, EditBox.SelectionLength);
+
+        int at = haystack.IndexOf(needle, Math.Min(from, haystack.Length),
+                                  StringComparison.OrdinalIgnoreCase);
+
+        if (at < 0) at = haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+
+        if (at < 0)
+        {
+            EditFindStatus.Text = L.T("edit.findNone");
+            return;
+        }
+
+        EditBox.Focus();
+        EditBox.Select(at, needle.Length);
+
+        int line = EditBox.GetLineIndexFromCharacterIndex(at);
+        EditBox.ScrollToLine(Math.Max(0, line - 2));
+
+        EditFindStatus.Text = L.T("edit.findCount", Formatting(Count(haystack, needle)));
+    }
+
+    private static int Count(string haystack, string needle)
+    {
+        int total = 0;
+        int at = 0;
+
+        while ((at = haystack.IndexOf(needle, at, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            total++;
+            at += needle.Length;
+        }
+
+        return total;
+    }
+
+    private static string Formatting(int value) => value.ToString("N0", L.Culture);
 }
