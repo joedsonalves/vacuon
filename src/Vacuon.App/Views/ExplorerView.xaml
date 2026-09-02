@@ -602,34 +602,67 @@
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                    Text="{Binding PreviewTitle}" ToolTip="{Binding PreviewTitle}"/>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                    Visibility="{Binding CanEditPreview, Converter={StaticResource Visible}}">
-                            <Button Style="{StaticResource Button.Ghost}" FontSize="10" Padding="7,3"
+                        <!-- ⚠️ UM painel só. Três StackPanels no mesmo Grid.Column se
+                             desenham um por cima do outro, e "Bytes" saiu sobreposto a
+                             "Edit" — dois botões legíveis viram um borrão que não é nenhum
+                             dos dois. Cada botão controla a própria visibilidade. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button FontSize="10" Padding="7,3"
                                     Content="{DynamicResource S.edit.edit}"
-                                    Command="{Binding BeginEditCommand}"
-                                    Visibility="{Binding IsNotEditing, Converter={StaticResource Visible}}"/>
-                        </StackPanel>
+                                    Command="{Binding BeginEditCommand}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CanEditPreview}" Value="True"/>
+                                                    <Condition Binding="{Binding IsNotEditing}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,58,0"
-                                    Visibility="{Binding CanEditHex, Converter={StaticResource Visible}}">
                             <!-- Sempre passa pelo aviso: o comando recusa sem a confirmação,
                                  então ligar um botão direto nele não contorna nada. -->
-                            <Button Style="{StaticResource Button.Ghost}" FontSize="10" Padding="7,3"
+                            <Button FontSize="10" Padding="7,3" Margin="5,0,0,0"
                                     Content="{DynamicResource S.edit.editHex}"
-                                    Click="OnEditHex"
-                                    Visibility="{Binding IsNotEditing, Converter={StaticResource Visible}}"/>
-                        </StackPanel>
+                                    Click="OnEditHex">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding CanEditHex}" Value="True"/>
+                                                    <Condition Binding="{Binding IsNotEditing}" Value="True"/>
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </MultiDataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                    Visibility="{Binding IsEditing, Converter={StaticResource Visible}}">
                             <Button Style="{StaticResource Button.Primary}" FontSize="10" Padding="9,3"
                                     Content="{DynamicResource S.edit.save}"
-                                    Command="{Binding SaveEditCommand}"/>
+                                    Command="{Binding SaveEditCommand}"
+                                    Visibility="{Binding IsEditing, Converter={StaticResource Visible}}"/>
+
+                            <Button Style="{StaticResource Button.Base}" FontSize="10" Padding="7,3"
+                                    Margin="5,0,0,0"
+                                    Content="{DynamicResource S.edit.window}"
+                                    Click="OnOpenInWindow"
+                                    Visibility="{Binding IsEditing, Converter={StaticResource Visible}}"/>
 
                             <Button Style="{StaticResource Button.Base}" FontSize="10" Padding="7,3"
                                     Margin="5,0,0,0"
                                     Content="{DynamicResource S.edit.cancel}"
-                                    Command="{Binding CancelEditCommand}"/>
+                                    Command="{Binding CancelEditCommand}"
+                                    Visibility="{Binding IsEditing, Converter={StaticResource Visible}}"/>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal"

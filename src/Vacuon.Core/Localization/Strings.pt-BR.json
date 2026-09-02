@@ -1021,6 +1021,8 @@
   "pending.review": "Abrir e ver antes",
   "pending.discard": "Jogar fora",
   "pending.reviewing": "Esta é a edição que esperava por {0}. Salvar escreve por cima do que o arquivo tem agora; Cancelar deixa o arquivo como está.",
+  "edit.window": "Abrir numa janela",
+  "edit.close": "Fechar",
   "cli.headSimilarAudio": "Gravações que soam como a mesma faixa",
   "similar.pictures": "Imagens",
   "similar.audio": "Áudio",

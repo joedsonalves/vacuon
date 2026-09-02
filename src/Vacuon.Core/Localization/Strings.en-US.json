@@ -1021,6 +1021,8 @@
   "pending.review": "Open and look first",
   "pending.discard": "Throw them away",
   "pending.reviewing": "This is the edit that was waiting for {0}. Save writes it over what the file holds now; Cancel leaves the file alone.",
+  "edit.window": "Open in a window",
+  "edit.close": "Close",
   "cli.headSimilarAudio": "Recordings that sound like the same track",
   "similar.pictures": "Pictures",
   "similar.audio": "Audio",

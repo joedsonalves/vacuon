@@ -607,6 +607,23 @@ public partial class ExplorerView : UserControl
         model.BeginHexEditCommand.Execute(true);
     }
 
+    /// <summary>
+    /// Abre a mesma edição numa janela própria, para quem não quer trabalhar no painel.
+    /// </summary>
+    /// <remarks>
+    /// A janela recebe o <b>mesmo</b> view model, então não existem duas edições: existe uma,
+    /// vista de dois lugares. Duas cópias do mesmo arquivo abertas ao mesmo tempo é como
+    /// alguém acaba gravando a antiga por cima da nova sem que nenhuma das telas tenha
+    /// mentido.
+    /// </remarks>
+    private void OnOpenInWindow(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || !model.IsEditing) return;
+
+        Window owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
+        EditorWindow.Open(owner, model);
+    }
+
     private void OnEditFindKey(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
