@@ -918,8 +918,18 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         // Media facts first: they answer "which copy do I keep" for exactly the files whose
         // content a text preview could not help with.
-        MediaInfo media = MediaProbe.Read(path);
-        if (!media.IsEmpty) PreviewFacts = DescribeMedia(media);
+        //
+        // ⚠️ Asked only of the three kinds that can answer. Every field MediaInfo carries —
+        // duration, resolution, codec, camera, coordinates — comes from an image, a video or
+        // an audio handler, and the call is not cheap: measured over 8 110 files of this
+        // disk, 7 005 of them outside those three cost 63 s between them and not one
+        // answered anything. That is nine milliseconds spent on every arrow-key press
+        // through a list of executables, to be told nothing.
+        if (category is FileCategories.Image or FileCategories.Video or FileCategories.Audio)
+        {
+            MediaInfo media = MediaProbe.Read(path);
+            if (!media.IsEmpty) PreviewFacts = DescribeMedia(media);
+        }
 
         if (category == FileCategories.Image)
         {
