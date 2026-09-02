@@ -134,7 +134,7 @@ public static class FilePreview
     /// format are legible, so a file with the wrong extension gives itself away by eye.
     /// </para>
     /// </summary>
-    internal static string Hex(ReadOnlySpan<byte> bytes, int maxLines = 512)
+    public static string Hex(ReadOnlySpan<byte> bytes, int maxLines = 512)
     {
         var text = new StringBuilder(maxLines * 78);
         int lines = 0;

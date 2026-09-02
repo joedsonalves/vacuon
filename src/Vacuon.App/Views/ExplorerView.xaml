@@ -660,13 +660,26 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto"
                                           HorizontalScrollBarVisibility="Auto"
                                           Visibility="{Binding PreviewText, Converter={StaticResource NotEmpty}}">
-                                <views:SyntaxTextBlock SourceText="{Binding PreviewText, Mode=OneWay}"
-                                                       FileName="{Binding PreviewTitle, Mode=OneWay}"
-                                                       Foreground="{DynamicResource Text.Secondary}"
-                                                       FontFamily="{StaticResource Font.Mono}" FontSize="11"
-                                                       TextWrapping="NoWrap"
-                                                       Visibility="{Binding IsNotEditing,
-                                                                    Converter={StaticResource Visible}}"/>
+                                <Grid Visibility="{Binding IsNotEditing,
+                                                   Converter={StaticResource Visible}}">
+                                    <views:SyntaxTextBlock SourceText="{Binding PreviewText, Mode=OneWay}"
+                                                           FileName="{Binding PreviewTitle, Mode=OneWay}"
+                                                           Foreground="{DynamicResource Text.Secondary}"
+                                                           FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                                           TextWrapping="NoWrap"
+                                                           Visibility="{Binding IsPreviewMonospaced,
+                                                                        Converter={StaticResource InverseVisible}}"/>
+
+                                    <!-- Um despejo hexadecimal e um trecho de codigo pedem
+                                         cores diferentes: um separa byte de byte, o outro
+                                         separa palavra de palavra. -->
+                                    <views:HexTextBlock SourceText="{Binding PreviewText, Mode=OneWay}"
+                                                        Foreground="{DynamicResource Text.Secondary}"
+                                                        FontFamily="{StaticResource Font.Mono}" FontSize="11"
+                                                        TextWrapping="NoWrap"
+                                                        Visibility="{Binding IsPreviewMonospaced,
+                                                                     Converter={StaticResource Visible}}"/>
+                                </Grid>
                             </ScrollViewer>
 
                             <!-- O editor cobre a prévia enquanto estiver aberto: a mesma
