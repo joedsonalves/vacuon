@@ -137,6 +137,11 @@ Description: |-
   perceptual fingerprint, and a preview panel shows media details, text and images without
   leaving the app.
 
+  Files and folders can be copied or moved to another folder with a transfer window that
+  counts real bytes, and a file can be opened for editing without leaving the app - as text
+  with syntax colouring, or byte by byte, which works on an executable too and asks before
+  it does.
+
   Every scan cross-checks the space it attributed to files against what the volume reports
   as used, and says so when the two disagree.
 
@@ -193,6 +198,11 @@ Description: |-
   mudancas do NTFS e mostra quais pastas estao crescendo agora. Imagens parecidas sao
   agrupadas por uma impressao perceptual, e um painel de previa mostra ficha tecnica de
   midia, texto e imagem sem sair do app.
+
+  Arquivos e pastas podem ser copiados ou movidos para outra pasta com uma janela de
+  transferencia que conta bytes de verdade, e um arquivo pode ser editado sem sair do app -
+  como texto com cores de sintaxe, ou byte a byte, o que funciona ate num executavel e
+  pergunta antes.
 
   Toda varredura confere o espaco atribuido a arquivos contra o que o volume declara em uso,
   e avisa quando os dois nao batem.
