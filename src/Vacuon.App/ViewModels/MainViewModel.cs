@@ -1578,9 +1578,18 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         int entry = index.FindEntry(full);
         if (entry < 0) return false;
 
-        // A folder opens itself; a file opens the folder that holds it and gets highlighted.
-        if (index.Entries[entry].IsDirectory)
+        // A folder and a file land the same way: the folder that holds it opens, and the
+        // thing itself is the highlighted row.
+        //
+        // Opening a dropped folder instead would be the one case that answers a different
+        // question from the one asked. Somebody dragging a folder into a disk-space tool is
+        // asking how big it is, and that number is on its row in its parent — stepping
+        // inside replaces it with the sizes of its children and never shows the total.
+        // Going in is still a double-click away; getting back out to see the size was the
+        // part that needed a way in.
+        if (entry == index.RootIndex)
         {
+            // A volume root has no parent to be a row in.
             NavigateToFolder(entry);
         }
         else
