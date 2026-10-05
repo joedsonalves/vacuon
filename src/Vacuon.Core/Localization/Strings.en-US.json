@@ -345,6 +345,8 @@
   "delete.confirm": "Delete",
   "delete.cancel": "Cancel",
   "delete.done": "{0} items deleted · {1} freed",
+  "delete.working": "Deleting {0} items…",
+  "delete.workingBin": "Moving {0} items to the Recycle Bin… the window stays usable meanwhile",
   "delete.donePartial": "{0} deleted ({1} freed) · {2} failed",
   "delete.nothingSelected": "Nothing selected.",
   "delete.allBlocked": "Every selected item is protected. Nothing was deleted.",

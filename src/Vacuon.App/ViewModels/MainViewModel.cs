@@ -2612,8 +2612,12 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// for <c>Shift+Del</c>.
     /// </param>
     /// <param name="owner">Owner window for the confirmation dialog.</param>
-    public void DeleteSelection(DeleteMode mode, Window owner)
+    public async void DeleteSelection(DeleteMode mode, Window owner)
     {
+        // One at a time: the second would plan against an index the first has not finished
+        // changing, and both would be removing files from the same list.
+        if (_deleting) return;
+
         VolumeIndex? index = Index;
         List<int> selected = EffectiveEntries();
 
@@ -2641,9 +2645,24 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         List<string> paths = [.. byPath.Keys];
         var service = new DeleteService();
 
+        // ⚠️ What each folder weighs comes from the index, read here on the window's thread
+        // and handed over as a table. The service would otherwise walk every selected folder
+        // to weigh it - measured on npm's cache, 9.7 s before the confirmation could appear,
+        // and the same again when the delete ran - and the background run below must not
+        // read the index while this thread may be changing it.
+        var weights = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+
+        if (index is not null)
+        {
+            foreach ((string path, int entry) in byPath)
+                if (index.Entries[entry].IsDirectory) weights[path] = index.GetSubtreeSize(entry);
+        }
+
+        long? SizeOf(string path) => weights.TryGetValue(path.TrimEnd('\\'), out long bytes) ? bytes : null;
+
         // Plan first, always. The dialog shows exactly what will happen, including the
         // items the protection list refuses to touch.
-        DeleteReport plan = service.Plan(paths, mode);
+        DeleteReport plan = service.Plan(paths, mode, SizeOf);
 
         if (!DeleteDialog.Confirm(owner, plan, mode)) return;
 
@@ -2654,9 +2673,30 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         bool worthTheEngine = mode == DeleteMode.Permanent
                            && plan.Results.Any(r => r.Succeeded && r.IsDirectory);
 
-        DeleteReport report = worthTheEngine
-            ? RunDeleteThroughTransfer(owner, paths)
-            : service.Execute(paths, mode);
+        DeleteReport report;
+
+        if (worthTheEngine)
+        {
+            report = RunDeleteThroughTransfer(owner, paths);
+        }
+        else
+        {
+            // ⚠️ Off the window's thread. The Recycle Bin is the shell's, and slow: 6.35 ms a
+            // file measured in batches, 31.2 ms one call per file as it used to be — so a
+            // thousand ticked files held the window for half a minute with nothing on screen.
+            _deleting = true;
+            StatusText = L.T(mode == DeleteMode.RecycleBin ? "delete.workingBin" : "delete.working",
+                             Format.Count(paths.Count));
+
+            try
+            {
+                report = await Task.Run(() => service.Execute(paths, mode, CancellationToken.None, SizeOf));
+            }
+            finally
+            {
+                _deleting = false;
+            }
+        }
 
         // Take out of the index exactly what the disk reported as gone, and measure the
         // result from the entries themselves — the whole subtree included. All in one call:
@@ -2691,6 +2731,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         ReportDeletion(report, removed, mode);
         AfterDeletion(removed);
     }
+
+    /// <summary>True while a delete is running off the window's thread.</summary>
+    private bool _deleting;
 
     /// <summary>
     /// Says what happened — and, for the Recycle Bin, what did not.

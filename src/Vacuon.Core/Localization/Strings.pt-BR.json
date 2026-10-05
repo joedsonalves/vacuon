@@ -345,6 +345,8 @@
   "delete.confirm": "Apagar",
   "delete.cancel": "Cancelar",
   "delete.done": "{0} itens apagados · {1} liberados",
+  "delete.working": "Apagando {0} itens…",
+  "delete.workingBin": "Mandando {0} itens para a Lixeira… a janela continua usável enquanto isso",
   "delete.donePartial": "{0} apagados ({1} liberados) · {2} falharam",
   "delete.nothingSelected": "Nada selecionado.",
   "delete.allBlocked": "Todos os itens selecionados estão protegidos. Nada foi apagado.",

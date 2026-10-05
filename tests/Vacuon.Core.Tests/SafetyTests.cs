@@ -294,6 +294,86 @@ public class DeleteServiceTests : IDisposable
         Assert.False(File.Exists(file));
     }
 
+    /// <summary>
+    /// A stand-in for the shell that behaves the way the real one was measured to: in order,
+    /// and stopping at the first file it cannot move.
+    /// </summary>
+    private sealed class StoppingShell
+    {
+        public int Calls { get; private set; }
+
+        public int Recycle(IReadOnlyList<string> paths)
+        {
+            Calls++;
+
+            foreach (string path in paths)
+            {
+                try { File.Delete(path); }
+                catch (IOException) { return 0x20; }
+            }
+
+            return 0;
+        }
+    }
+
+    [Fact]
+    public void RecycleBin_GoesInBatches_AndCarriesOnPastAFileItCannotMove()
+    {
+        // Measured on the real shell: 200 files with the 51st held open came back with 50 in
+        // the bin and the other 150 untouched. A batch that trusted the call would report all
+        // 200 one way or the other; this one reads the disk and goes on after the held file.
+        string[] files = [.. Enumerable.Range(0, 7).Select(i => File_($"bin{i}.bin", 10))];
+
+        using FileStream third = new(files[2], FileMode.Open, FileAccess.Read, FileShare.None);
+        using FileStream sixth = new(files[5], FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var shell = new StoppingShell();
+        DeleteReport report = new DeleteService(shell.Recycle).Execute(files, DeleteMode.RecycleBin);
+
+        Assert.Equal(7, report.Results.Count);
+        Assert.Equal(files, report.Results.Select(r => r.Path));     // still in the order asked
+
+        Assert.Equal(5, report.DeletedCount);
+        Assert.False(report.Results[2].Succeeded);
+        Assert.False(report.Results[5].Succeeded);
+        Assert.True(File.Exists(files[2]));
+        Assert.True(File.Exists(files[5]));
+
+        // One call to the start, one after each file it stopped at - not one per file.
+        Assert.Equal(3, shell.Calls);
+    }
+
+    [Fact]
+    public void RecycleBin_ThroughTheRealShell_SaysWhichOneStayed()
+    {
+        string[] files = [.. Enumerable.Range(0, 4).Select(i => File_($"real{i}.bin", 16))];
+
+        DeleteReport report;
+        using (new FileStream(files[1], FileMode.Open, FileAccess.Read, FileShare.None))
+            report = new DeleteService().Execute(files, DeleteMode.RecycleBin);
+
+        Assert.Equal(3, report.DeletedCount);
+        Assert.False(report.Results[1].Succeeded);
+        Assert.True(File.Exists(files[1]));
+        Assert.False(File.Exists(files[0]));
+        Assert.False(File.Exists(files[3]));
+    }
+
+    [Fact]
+    public void Plan_TakesAFoldersWeightFromTheCaller_InsteadOfWalkingIt()
+    {
+        string folder = Path.Combine(_sandbox, "weighed");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "a.bin"), new byte[100]);
+
+        DeleteReport plan = new DeleteService().Plan([folder], DeleteMode.RecycleBin, _ => 123_456);
+
+        Assert.Equal(123_456, Assert.Single(plan.Results).Bytes);
+
+        // And without it, the walk is still there.
+        Assert.Equal(100, Assert.Single(new DeleteService().Plan([folder], DeleteMode.RecycleBin).Results).Bytes);
+    }
+
     [Fact]
     public void EmptySelectionProducesEmptyReport()
     {
