@@ -280,6 +280,42 @@ public static class FileIdentity
         }
     }
 
+    /// <summary>
+    /// How many names the file has — its hard links, as the file system counts them — or -1
+    /// when it could not be read.
+    /// <para>
+    /// ⚠️ Not the link count in the MFT record header, which counts every <c>$FILE_NAME</c>
+    /// including the DOS short name a long name is given (see "Link count não é contagem de
+    /// hardlinks"). This one comes back 1 for an ordinary long-named file on a volume that
+    /// makes short names — there is a test that says so.
+    /// </para>
+    /// </summary>
+    public static int NameCountOf(string path)
+    {
+        try
+        {
+            using SafeFileHandle handle = Kernel32.CreateFile(
+                path,
+                0,
+                Kernel32.FILE_SHARE_READ | Kernel32.FILE_SHARE_WRITE | Kernel32.FILE_SHARE_DELETE,
+                0,
+                Kernel32.OPEN_EXISTING,
+                Kernel32.FILE_FLAG_BACKUP_SEMANTICS,
+                0);
+
+            if (handle.IsInvalid) return -1;
+
+            return Kernel32.GetFileInformationByHandle(handle, out ByHandleFileInformation info)
+                ? (int)Math.Min(info.nNumberOfLinks, int.MaxValue)
+                : -1;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                        or ArgumentException or NotSupportedException)
+        {
+            return -1;
+        }
+    }
+
     /// <summary>FILE_ID_DESCRIPTOR, in its FileId form.</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct FileIdDescriptor

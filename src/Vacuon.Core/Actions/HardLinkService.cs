@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using Microsoft.Win32.SafeHandles;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
 using Vacuon.Native.Interop;
@@ -104,7 +105,7 @@ public static class HardLinkService
         // ⚠️ Read both again, now. The search hashed them minutes or hours ago, and this
         // step does not move a file aside — it replaces its contents with somebody else's,
         // and there is no undo for that. A plan is not evidence about the present.
-        if (!SameContent(keeperFull, copyFull, out long bytes))
+        if (!SameContent(keeperFull, copyFull))
             return new LinkResult(copyFull, LinkOutcome.ContentChanged, 0);
 
         string aside = copyFull + ".vacuon-link-" + Guid.NewGuid().ToString("N")[..8];
@@ -133,32 +134,76 @@ public static class HardLinkService
             return new LinkResult(copyFull, LinkOutcome.Failed, 0, $"CreateHardLink: {error}");
         }
 
-        try
-        {
-            File.Delete(aside);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        // ⚠️ What deleting the copy gives back is read off the copy before it goes, not taken
+        // from its length: its own clusters, which are fewer than its length when NTFS stores
+        // it compressed — and nothing at all when it is itself a second name somewhere, because
+        // that other name keeps the clusters. The length went into the total either way.
+        int names = FileIdentity.NameCountOf(aside);
+        long held = Kernel32.CompressedSizeOf(aside);
+
+        if (!Discard(aside, otherNames: names != 1))
         {
             // The link is there and the path works; what is left is a stray file holding the
             // space this was supposed to give back. Reported as such, not as a success.
             return new LinkResult(copyFull, LinkOutcome.Failed, 0, L.T("link.strandedCopy", aside));
         }
 
-        return new LinkResult(copyFull, LinkOutcome.Linked, bytes);
+        return new LinkResult(copyFull, LinkOutcome.Linked, names == 1 ? held : 0);
     }
 
-    /// <summary>Byte for byte, streamed, and the length of what was compared.</summary>
-    private static bool SameContent(string left, string right, out long bytes)
+    /// <summary>Removes the old copy's name. False when it will not go.</summary>
+    /// <param name="otherNames">Whether the file may live on under another name once this one is gone.</param>
+    private static bool Discard(string aside, bool otherNames)
     {
-        bytes = 0;
+        try
+        {
+            var file = new FileInfo(aside);
+            FileAttributes attributes = file.Attributes;
 
+            if ((attributes & FileAttributes.ReadOnly) == 0)
+            {
+                file.Delete();
+                return !File.Exists(aside);
+            }
+
+            // ⚠️ Read-only is not a decision anybody made about keeping this copy, and Delete
+            // refuses on it. The copy used to stay beside its new link under a made-up name,
+            // holding exactly the space this was meant to give back, reported as a failure.
+            file.IsReadOnly = false;
+
+            if (!otherNames)
+            {
+                file.Delete();
+                return !File.Exists(aside);
+            }
+
+            // The mark belongs to the file, not to the name. A copy that is also a name
+            // somewhere else lives on under it, and gets its mark back through a handle held
+            // across the delete — the name itself goes when the handle closes.
+            using (SafeFileHandle handle = File.OpenHandle(aside, FileMode.Open, FileAccess.Write,
+                                                           FileShare.ReadWrite | FileShare.Delete))
+            {
+                File.Delete(aside);
+                File.SetAttributes(handle, attributes);
+            }
+
+            return !File.Exists(aside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Byte for byte, streamed.</summary>
+    private static bool SameContent(string left, string right)
+    {
         try
         {
             using FileStream a = Open(left);
             using FileStream b = Open(right);
 
             if (a.Length != b.Length) return false;
-            bytes = a.Length;
 
             byte[] hashA = SHA256.HashData(a);
             byte[] hashB = SHA256.HashData(b);

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Vacuon.Core.Actions;
+using Vacuon.Native.Interop;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -20,7 +21,18 @@ public class HardLinkTests : IDisposable
 
     public void Dispose()
     {
-        try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
+        try
+        {
+            // Read-only files are left by some of these on purpose, and the recursive delete
+            // refuses them.
+            if (Directory.Exists(_root))
+            {
+                foreach (string file in Directory.GetFiles(_root, "*", SearchOption.AllDirectories))
+                    File.SetAttributes(file, FileAttributes.Normal);
+
+                Directory.Delete(_root, recursive: true);
+            }
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
         GC.SuppressFinalize(this);
@@ -171,5 +183,80 @@ public class HardLinkTests : IDisposable
 
         Assert.Empty(Directory.GetFiles(_root, "*.vacuon-link-*"));
         Assert.Equal(2, Directory.GetFiles(_root).Length);
+    }
+
+    [Fact]
+    public void AReadOnlyCopy_IsReplacedToo_AndNothingIsLeftBesideIt()
+    {
+        // Measured before this was written: the link was made, the delete of the old copy
+        // refused on its read-only mark, and the copy stayed beside the link under a made-up
+        // name — holding exactly the space this was meant to give back, reported as a failure.
+        byte[] content = Pattern(60_000, 7);
+        string keeper = Write("keeper.bin", content);
+        string copy = Write("copy.bin", content);
+        File.SetAttributes(copy, FileAttributes.ReadOnly);
+
+        LinkResult result = HardLinkService.Replace(keeper, copy);
+
+        Assert.Equal(LinkOutcome.Linked, result.Outcome);
+        Assert.Equal(content.Length, result.BytesFreed);
+        Assert.Empty(Directory.GetFiles(_root, "*.vacuon-link-*"));
+        Assert.Equal(Hash(keeper), Hash(copy));
+    }
+
+    [Fact]
+    public void ACopyThatIsAlsoANameSomewhereElse_FreesNothing_AndKeepsItsMark()
+    {
+        // Its other name keeps the clusters, so linking this one gives none of them back —
+        // and the read-only mark it had to lose to be deleted belongs to the file still
+        // living under that other name.
+        byte[] content = Pattern(60_000, 8);
+        string keeper = Write("keeper.bin", content);
+        string copy = Write("copy.bin", content);
+        string elsewhere = Path.Combine(_root, "elsewhere.bin");
+        Assert.True(Kernel32.CreateHardLink(elsewhere, copy, 0));
+        File.SetAttributes(copy, FileAttributes.ReadOnly);
+
+        LinkResult result = HardLinkService.Replace(keeper, copy);
+
+        Assert.Equal(LinkOutcome.Linked, result.Outcome);
+        Assert.Equal(0, result.BytesFreed);
+        Assert.Empty(Directory.GetFiles(_root, "*.vacuon-link-*"));
+
+        Assert.Equal(content, File.ReadAllBytes(elsewhere));
+        Assert.True((File.GetAttributes(elsewhere) & FileAttributes.ReadOnly) != 0);
+        Assert.Equal(1, FileIdentity.NameCountOf(elsewhere));
+    }
+
+    [Fact]
+    public void ALongNameWithAShortOneBesideIt_IsStillOneName()
+    {
+        // The MFT record header counts the DOS short name a long name is given as a second
+        // name. The count used here must not, or every long-named copy would free nothing.
+        byte[] content = Pattern(60_000, 10);
+        string keeper = Write("keeper.bin", content);
+        string copy = Write("uma copia com um nome comprido demais.bin", content);
+
+        Assert.Equal(1, FileIdentity.NameCountOf(copy));
+        Assert.Equal(content.Length, HardLinkService.Replace(keeper, copy).BytesFreed);
+    }
+
+    [Fact]
+    public void ACompressedCopy_FreesWhatItHeld_NotItsLength()
+    {
+        // The length went into the total whatever the copy really occupied. Stored compressed,
+        // it held a fraction of that, and the fraction is what comes back.
+        byte[] content = new byte[400_000];
+        string keeper = Write("keeper.bin", content);
+        string copy = Write("copy.bin", content);
+        Assert.Equal(CompressOutcome.Compressed, CompressionService.Compress(copy).Outcome);
+
+        long held = Kernel32.CompressedSizeOf(copy);
+        Assert.True(held < content.Length, $"the copy did not compress: {held}");
+
+        LinkResult result = HardLinkService.Replace(keeper, copy);
+
+        Assert.Equal(LinkOutcome.Linked, result.Outcome);
+        Assert.Equal(held, result.BytesFreed);
     }
 }
