@@ -2984,7 +2984,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     public async void ShredSelection(Window owner)
     {
         VolumeIndex? index = Index;
-        List<string> paths = [.. BasketPaths(out _).Where(File.Exists)];
+        List<string> paths = [.. BasketPaths(out Dictionary<string, int> byPath).Where(File.Exists)];
 
         if (paths.Count == 0)
         {
@@ -3017,6 +3017,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         int gone = 0;
         long shredded = 0;
         var failed = new List<string>();
+        var entries = new List<int>(results.Count);
 
         foreach (ShredResult result in results)
         {
@@ -3024,6 +3025,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             {
                 gone++;
                 shredded += result.Bytes;
+                if (byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry)) entries.Add(entry);
                 continue;
             }
 
@@ -3042,9 +3044,19 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (gone > 0)
         {
-            DropDeletedRows();
-            RefreshAggregates();
-            LoadVolumes();
+            // ⚠️ Overwritten and deleted on disk — and, until now, never taken out of the
+            // index. DropDeletedRows drops the rows whose entries are free, and nothing had
+            // freed these: every shredded file stayed in the list, in the totals and in the
+            // breakdowns, until the next scan. A file somebody went to the trouble of
+            // destroying, still listed as there.
+            Removal removed = index is not null && entries.Count > 0
+                ? index.MarkDeleted(CollectionsMarshal.AsSpan(entries))
+                : default;
+
+            AfterDeletion(removed);
+
+            // Free space moved either way.
+            if (removed.IsEmpty) LoadVolumes();
         }
     }
 
