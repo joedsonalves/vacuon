@@ -1,5 +1,8 @@
 using Vacuon.Core.Actions;
+using Vacuon.Core.Index;
+using Vacuon.Core.Scan;
 using Vacuon.Native.Interop;
+using Vacuon.Native.Ntfs;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -156,6 +159,85 @@ public class CompressionServiceTests : IDisposable
         Assert.Contains(outside, result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(CompressionService.IsCompressed(theirs));
         Assert.False(CompressionService.IsCompressed(outside));
+    }
+
+    /// <summary>An index of one file under the test folder, sized the way a scan sized it before compression.</summary>
+    private VolumeIndex IndexOf(string file)
+    {
+        var names = new NameBlob(512);
+        var entries = new FileEntry[4];
+        string name = Path.GetFileName(file);
+        long length = new FileInfo(file).Length;
+
+        entries[0] = new FileEntry
+        {
+            RecordNumber = 0,
+            ParentIndex = 0,
+            NameOffset = names.Append(_root),
+            NameLength = (ushort)_root.Length,
+            Flags = EntryFlags.Directory,
+            HardLinkCount = 1,
+        };
+        entries[1] = new FileEntry
+        {
+            RecordNumber = 1,
+            ParentIndex = 0,
+            NameOffset = names.Append(name),
+            NameLength = (ushort)name.Length,
+            LogicalSize = length,
+            AllocatedSize = (length + 4095) / 4096 * 4096,
+            HardLinkCount = 1,
+        };
+
+        var volume = new VolumeInfo('C', "Test", "NTFS", 1_000_000_000, 500_000_000, 4096, false);
+        return new VolumeIndex(entries, names, volume, ScanStrategy.Win32Walk);
+    }
+
+    [Fact]
+    public void AfterCompressing_TheIndexHoldsTheClustersTheFileHoldsNow()
+    {
+        // Compressing changes no length, so nothing in the index moved: the list showed the
+        // file, and its folder, at the size it had before, beside "1 item compressed · freed".
+        string path = WriteLog("measured.log", 20_000);
+        VolumeIndex index = IndexOf(path);
+        long before = index.TotalBytesOnDisk;
+
+        List<(int Entry, string Path)> files = OnDiskRemeasure.FilesUnder(index, [0]);
+        Assert.Equal(CompressOutcome.Compressed, CompressionService.Compress(path).Outcome);
+
+        Assert.True(OnDiskRemeasure.Apply(index, OnDiskRemeasure.Measure(files, 4096)));
+
+        long held = Kernel32.CompressedSizeOf(path);
+        Assert.Equal(held, index.Entries[1].AllocatedSize);
+        Assert.True((index.Entries[1].Flags & EntryFlags.Compressed) != 0);
+        Assert.Equal(held, index.TotalBytesOnDisk);
+        Assert.True(index.TotalBytesOnDisk < before, $"{index.TotalBytesOnDisk} is not below {before}");
+    }
+
+    [Fact]
+    public void AfterAReopen_TheJournalsCompressionRecordReadsTheClustersAgain()
+    {
+        // The journal says a file was compressed and nothing about how big it is now. The
+        // replay used to leave the size alone — and when it did read one, it rounded the
+        // length, which for a compressed file is the size it had before.
+        string path = WriteLog("replayed.log", 20_000);
+        VolumeIndex index = IndexOf(path);
+        Assert.Equal(CompressOutcome.Compressed, CompressionService.Compress(path).Outcome);
+
+        var applier = new DeltaApplier(index);
+        var record = new UsnRecord
+        {
+            IsValid = true,
+            FileReferenceNumber = 1,
+            ParentFileReferenceNumber = 0,
+            Reason = UsnReason.CompressionChange,
+            Attributes = NtfsFileAttributes.Compressed,
+        };
+        applier.Apply(ref record);
+        applier.Finish();
+
+        Assert.Equal(Kernel32.CompressedSizeOf(path), index.Entries[1].AllocatedSize);
+        Assert.True(index.Entries[1].AllocatedSize < new FileInfo(path).Length);
     }
 
     [Fact]

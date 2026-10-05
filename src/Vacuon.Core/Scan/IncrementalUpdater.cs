@@ -252,7 +252,14 @@ internal sealed class DeltaApplier(VolumeIndex index)
         if ((record.Reason & (UsnReason.CompressionChange | UsnReason.ReparsePointChange
                             | UsnReason.HardLinkChange)) != 0)
         {
-            target.Flags = Translate(record.Attributes) | (target.Flags & EntryFlags.Suspicious);
+            // The attributes say nothing about how many names the file has, so that flag is
+            // kept, like the one this app sets itself.
+            target.Flags = Translate(record.Attributes)
+                         | (target.Flags & (EntryFlags.Suspicious | EntryFlags.HardLinked));
+
+            // Compressing or uncompressing changes what the file holds on the disk and no
+            // length the journal carries — so the clusters are read again with the sizes.
+            if ((record.Reason & UsnReason.CompressionChange) != 0) _needsSize.Add(entry);
         }
 
         // ---- size changes ----
@@ -298,13 +305,11 @@ internal sealed class DeltaApplier(VolumeIndex index)
 
                 target.LogicalSize = info.Length;
 
-                // Without the MFT there is no AllocatedSize, so round to the cluster —
-                // and that estimate is exactly why the UI labels the column "not
-                // measured" outside an MFT scan.
-                uint cluster = index.Volume.BytesPerCluster;
-                target.AllocatedSize = cluster == 0
-                    ? info.Length
-                    : (info.Length + cluster - 1) / cluster * cluster;
+                // Without the MFT there is no AllocatedSize for a plain file, so its length
+                // is rounded to the cluster. One stored compressed or sparse is measured: the
+                // rounded length was the size it had BEFORE it was compressed, and a file
+                // compressed through this app came back after a reopen at its old size.
+                target.AllocatedSize = Actions.OnDiskRemeasure.OnDisk(path, info, index.Volume.BytesPerCluster);
 
                 target.LastWriteUtc = SafeFileTime(info.LastWriteTimeUtc);
                 target.CreatedUtc = SafeFileTime(info.CreationTimeUtc);

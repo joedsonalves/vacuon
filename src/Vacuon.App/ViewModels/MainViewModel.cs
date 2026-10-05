@@ -3148,7 +3148,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     /// </summary>
     public async void CompressSelection()
     {
-        List<string> paths = BasketPaths(out _);
+        List<string> paths = BasketPaths(out Dictionary<string, int> byPath);
 
         if (paths.Count == 0)
         {
@@ -3158,12 +3158,30 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         StatusText = L.T("compress.working");
 
-        List<CompressResult> results = await Task.Run(() =>
+        // Listed here, on the window's thread, where the child index is built and read.
+        VolumeIndex? index = Index;
+        List<(int Entry, string Path)> files = index is null ? [] : OnDiskRemeasure.FilesUnder(index, byPath.Values);
+        uint cluster = index?.Volume.BytesPerCluster ?? 0;
+
+        (List<CompressResult> results, List<(int Entry, long OnDisk, bool Compressed)> measured) = await Task.Run(() =>
         {
             var done = new List<CompressResult>(paths.Count);
             foreach (string path in paths) done.Add(CompressionService.Compress(path));
-            return done;
+
+            // ⚠️ Compressing changes no length, so nothing in the index moved: every file went
+            // on showing the size it had, and the folders above it too, under a status line
+            // saying how much had come back. The clusters are read again, file by file.
+            return (done, OnDiskRemeasure.Measure(files, cluster));
         });
+
+        // Back on the window's thread, and only into the index the files were listed from.
+        if (index is not null && ReferenceEquals(index, Index) && OnDiskRemeasure.Apply(index, measured))
+        {
+            Root?.Resync();
+            RefreshAggregates();
+
+            if (Mode == ListMode.Folder && _currentFolderIndex >= 0) ShowFolder(_currentFolderIndex);
+        }
 
         int touched = 0;
         long freed = 0;
@@ -3195,7 +3213,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         if (refused.Count > 0) LastFailures = [.. refused];
 
         // The clusters really did come back, and the volume cards still quote the figure the
-        // scan took. The index is not touched: the files are all still there, same length.
+        // scan took. The files keep their entries and their lengths; what they hold on the
+        // disk was read again above.
         if (freed != 0) LoadVolumes();
     }
 
