@@ -4185,11 +4185,14 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (!QuarantineDialog.Confirm(owner, plan)) return;
 
+        // Looked up before anything moves: afterwards there is nothing at those paths to find.
+        Dictionary<string, int> byPath = EntriesAt(paths);
+
         QuarantineReport report = service.Execute(paths, "similar");
 
-        ReportQuarantine(report, 0);
-
-        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+        // The same treatment the list gives its own quarantine — status, failures, and the
+        // index told where the files went. See QuarantineDuplicates for what went wrong here.
+        ApplyQuarantine(report, byPath);
 
         if (SimilarByAudio)
         {
@@ -5139,15 +5142,44 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         if (!QuarantineDialog.Confirm(owner, plan)) return;
 
+        // Looked up before anything moves: afterwards there is nothing at those paths to find.
+        Dictionary<string, int> byPath = EntriesAt(paths);
+
         QuarantineReport report = service.Execute(paths, "duplicates");
 
-        ReportQuarantine(report, 0);
-
-        if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
+        // ⚠️ The index is told, as it is when the list quarantines. This tab used to report and
+        // move on: the files left their folders on disk and stayed in them in the index, so the
+        // Explorer, the treemap and the dashboard went on showing every one of them where it
+        // had been, until the next scan - and a click on one landed on nothing.
+        ApplyQuarantine(report, byPath);
 
         // Whatever was set aside is no longer where the group says it is, so the listing is
         // rebuilt from the disk rather than patched in place.
         _ = FindDuplicatesAsync();
+    }
+
+    /// <summary>
+    /// The entry of each path in the index on screen, by looking it up there.
+    /// <para>
+    /// ⚠️ Not the entry number a result row carries from its search. That number belongs to
+    /// the index the search ran on, and after a rescan the same number is somebody else's
+    /// record: moving it would move a stranger. The path is asked of the index as it is now.
+    /// </para>
+    /// </summary>
+    private Dictionary<string, int> EntriesAt(IEnumerable<string> paths)
+    {
+        var byPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        VolumeIndex? index = Index;
+        if (index is null) return byPath;
+
+        foreach (string path in paths)
+        {
+            int entry = index.FindEntry(path);
+            if (entry >= 0) byPath[path.TrimEnd('\\')] = entry;
+        }
+
+        return byPath;
     }
 
     // ================= quarentena =================
