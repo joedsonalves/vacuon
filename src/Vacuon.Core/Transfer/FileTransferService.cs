@@ -420,13 +420,7 @@ public sealed class FileTransferService
 
             try
             {
-                // The most permissive request there is: whatever the owner allows, this accepts.
-                using (var reader = new FileStream(source, FileMode.Open, FileAccess.Read,
-                                                   FileShare.ReadWrite | FileShare.Delete))
-                using (var writer = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    await reader.CopyToAsync(writer, cancellationToken).ConfigureAwait(false);
-                }
+                await CopyWholeAsync(original, target, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -560,6 +554,43 @@ public sealed class FileTransferService
             // A sweep that cannot finish leaves what it did not reach as it was — no worse off
             // than before there was a sweep at all.
         }
+    }
+
+    /// <summary>The attributes a copy carries over. The rest describe how a file is stored, not what it is.</summary>
+    private const FileAttributes Carried = FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System
+                                         | FileAttributes.Archive | FileAttributes.NotContentIndexed;
+
+    /// <summary>
+    /// Copies one file the way robocopy's default <c>/COPY:DAT</c> does: the data, then the
+    /// three times and the attributes.
+    /// <para>
+    /// ⚠️ Measured on the real tool rather than read off its help: a file created in 2019,
+    /// written in 2020, read in 2021 and marked read-only and hidden came out of robocopy
+    /// with all three dates and both marks. The second pass copied the bytes and nothing
+    /// else, so a file it rescued arrived dated today and visible — sorted, filtered and
+    /// backed up as something it was not, beside a thousand others that came over right.
+    /// And with the date wrong, <see cref="IsWhole"/> would rightly call it a fragment.
+    /// </para>
+    /// <para>
+    /// The dates go on before the attributes: once a file is read-only, it does not take them.
+    /// </para>
+    /// </summary>
+    internal static async Task CopyWholeAsync(FileInfo original, string target, CancellationToken cancellationToken)
+    {
+        // The most permissive request there is: whatever the owner allows, this accepts.
+        using (var reader = new FileStream(original.FullName, FileMode.Open, FileAccess.Read,
+                                           FileShare.ReadWrite | FileShare.Delete))
+        using (var writer = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await reader.CopyToAsync(writer, cancellationToken).ConfigureAwait(false);
+        }
+
+        File.SetCreationTimeUtc(target, original.CreationTimeUtc);
+        File.SetLastWriteTimeUtc(target, original.LastWriteTimeUtc);
+        File.SetLastAccessTimeUtc(target, original.LastAccessTimeUtc);
+
+        FileAttributes carried = original.Attributes & Carried;
+        File.SetAttributes(target, carried == 0 ? FileAttributes.Normal : carried);
     }
 
     /// <summary>Where a file under a travelling item is meant to land.</summary>

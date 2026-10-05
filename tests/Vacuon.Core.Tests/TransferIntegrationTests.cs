@@ -675,6 +675,49 @@ public class TransferIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task WhatTheSecondPassCopies_CarriesTheDatesAndMarksRobocopyWould()
+    {
+        // Measured on robocopy itself: /COPY:DAT carries all three dates and the read-only and
+        // hidden marks. The second pass carried the bytes and nothing else.
+        string from = Dir("dates-from");
+        string to = Dir("dates-to");
+
+        string source = WriteFile(from, "kept.bin", 70_000);
+        File.SetCreationTimeUtc(source, new DateTime(2019, 1, 2, 3, 4, 5, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(source, new DateTime(2020, 6, 7, 8, 9, 10, DateTimeKind.Utc));
+        File.SetLastAccessTimeUtc(source, new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        File.SetAttributes(source, FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.Archive);
+
+        string target = Path.Combine(to, "kept.bin");
+
+        try
+        {
+            // Read before the copy, as the second pass reads it: reading the file afterwards
+            // moves its last-access time, and that is the source's date this has to carry.
+            var original = new FileInfo(source);
+            _ = original.Length;
+
+            await FileTransferService.CopyWholeAsync(original, target, CancellationToken.None);
+
+            // The dates first. Reading the contents below touches the access time.
+            var copy = new FileInfo(target);
+            Assert.Equal(new DateTime(2019, 1, 2, 3, 4, 5, DateTimeKind.Utc), copy.CreationTimeUtc);
+            Assert.Equal(new DateTime(2020, 6, 7, 8, 9, 10, DateTimeKind.Utc), copy.LastWriteTimeUtc);
+            Assert.Equal(new DateTime(2021, 1, 1, 0, 0, 0, DateTimeKind.Utc), copy.LastAccessTimeUtc);
+            Assert.Equal(FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.Archive, copy.Attributes);
+
+            // And by the rule that decides what counts as arrived, it has.
+            Assert.True(FileTransferService.IsWhole(original, copy));
+            Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+        }
+        finally
+        {
+            File.SetAttributes(source, FileAttributes.Normal);
+            if (File.Exists(target)) File.SetAttributes(target, FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
     public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
     {
         // Measured on the real tool before this was written: the purge removes everything
