@@ -183,6 +183,8 @@ public sealed class NearDuplicateFinder
 
         FileEntry[] entries = index.Entries;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < entries.Length; i++)
         {
             ref FileEntry entry = ref entries[i];
@@ -192,6 +194,8 @@ public sealed class NearDuplicateFinder
             // Same reason as the exact search: reading a cloud placeholder to fingerprint
             // it makes Windows fetch the whole file. See DuplicateFinder.Stage1.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
             if (FileCategories.Of(index.GetName(i)) != FileCategories.Image) continue;
 
             if (entry.LogicalSize < options.MinimumBytes)
@@ -218,6 +222,8 @@ public sealed class NearDuplicateFinder
         int belowMinimum = 0;
         FileEntry[] entries = index.Entries;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < entries.Length; i++)
         {
             ref FileEntry entry = ref entries[i];
@@ -227,6 +233,8 @@ public sealed class NearDuplicateFinder
             // Same reason as the exact search: reading a cloud placeholder to fingerprint
             // it makes Windows fetch the whole file. See DuplicateFinder.Stage1.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
 
             // Only what could carry a picture. Asking the shell for a thumbnail of every
             // file on a volume would decode millions of things that have no image in them.

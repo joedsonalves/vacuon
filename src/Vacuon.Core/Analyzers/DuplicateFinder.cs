@@ -211,6 +211,8 @@ public sealed class DuplicateFinder
         FileEntry[] entries = index.Entries;
         eligibleFiles = 0;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < entries.Length; i++)
         {
             ref FileEntry entry = ref entries[i];
@@ -224,6 +226,8 @@ public sealed class DuplicateFinder
             // touched — an app whose entire job is freeing space, filling the disk instead,
             // and over somebody's connection.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
 
             long size = entry.LogicalSize;
             if (size < options.MinimumBytes) continue;

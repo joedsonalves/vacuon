@@ -199,11 +199,15 @@ public static class DuplicateFolderFinder
         var byShape = new Dictionary<(int Files, long Bytes), List<int>>();
         considered = 0;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < index.Entries.Length; i++)
         {
             ref FileEntry entry = ref index.Entries[i];
             if (!entry.IsInUse || !entry.IsDirectory) continue;
             if (i == index.RootIndex) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
 
             long bytes = index.GetSubtreeSize(i);
             if (bytes < minimumBytes) continue;

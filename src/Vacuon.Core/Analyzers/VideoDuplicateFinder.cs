@@ -145,6 +145,8 @@ public sealed class VideoDuplicateFinder
 
         FileEntry[] entries = index.Entries;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < entries.Length; i++)
         {
             ref FileEntry entry = ref entries[i];
@@ -154,6 +156,8 @@ public sealed class VideoDuplicateFinder
             // Sampling frames out of a cloud placeholder downloads the video.
             // See DuplicateFinder.Stage1.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
             if (entry.LogicalSize < options.MinimumBytes) continue;
             if (!VideoSimilarity.IsVideo(index.GetName(i))) continue;
 
@@ -174,6 +178,8 @@ public sealed class VideoDuplicateFinder
         var candidates = new List<int>();
         FileEntry[] entries = index.Entries;
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < entries.Length; i++)
         {
             ref FileEntry entry = ref entries[i];
@@ -183,6 +189,8 @@ public sealed class VideoDuplicateFinder
             // Sampling frames out of a cloud placeholder downloads the video.
             // See DuplicateFinder.Stage1.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
             if (entry.LogicalSize < options.MinimumBytes) continue;
             if (!VideoSimilarity.IsVideo(index.GetName(i))) continue;
 

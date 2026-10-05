@@ -94,6 +94,8 @@ public static class AudioDuplicateFinder
 
         var candidates = new List<int>();
 
+        HoldingAreas held = HoldingAreas.Of(index);
+
         for (int i = 0; i < index.Entries.Length; i++)
         {
             ref FileEntry entry = ref index.Entries[i];
@@ -104,6 +106,8 @@ public static class AudioDuplicateFinder
             // Same rule as everywhere else that opens a file: reading a cloud placeholder
             // downloads it, and a fingerprint is not worth somebody's connection.
             if ((entry.Flags & EntryFlags.CloudPlaceholder) != 0) continue;
+            // Not the copy anybody keeps, and not one to offer either. See HoldingAreas.
+            if (held.Contains(i)) continue;
 
             ReadOnlySpan<char> name = index.GetName(i);
             if (!IsAudio(name)) continue;
