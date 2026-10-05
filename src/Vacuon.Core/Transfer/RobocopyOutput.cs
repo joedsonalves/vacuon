@@ -259,12 +259,16 @@ public static class RobocopyOutput
     /// of the tool doing the work is not the person's business either.
     /// </para>
     /// </summary>
-    public static string Describe(int exitCode)
+    public static string Describe(int exitCode, TransferKind kind = TransferKind.Copy)
     {
-        if (exitCode < 0 || exitCode == 16) return L.T("transfer.itemFatal");
+        // A purge copies nothing, and "could not be copied" under a folder somebody asked to
+        // delete reads as the wrong operation having run.
+        bool deleting = kind == TransferKind.Delete;
+
+        if (exitCode < 0 || exitCode == 16) return L.T(deleting ? "transfer.itemFatalDelete" : "transfer.itemFatal");
 
         return (exitCode & 8) != 0
-            ? L.T("transfer.itemSomeFailed")
+            ? L.T(deleting ? "transfer.itemSomeNotDeleted" : "transfer.itemSomeFailed")
             : L.T("transfer.itemFailed");
     }
 }

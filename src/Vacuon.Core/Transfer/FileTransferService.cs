@@ -295,20 +295,35 @@ public sealed class FileTransferService
 
             // Everything that was missing arrived, so the item is no longer a failure — and
             // if some of it is still missing, it stays one, with the shorter list.
-            TransferOutcome outcome = stillFailed.Count == 0 && result.Outcome == TransferOutcome.Failed
-                ? TransferOutcome.Done
-                : result.Outcome;
+            bool finished = stillFailed.Count == 0 && result.Outcome == TransferOutcome.Failed
+                            && Finished(plan.Kind, result.Item);
 
             results[i] = result with
             {
-                Outcome = outcome,
+                Outcome = finished ? TransferOutcome.Done : result.Outcome,
                 BytesTransferred = result.BytesTransferred + extraBytes,
-                Message = stillFailed.Count == 0 ? null : result.Message,
+                Message = finished ? null : result.Message,
                 FailedPaths = stillFailed,
             };
         }
 
         return recovered;
+    }
+
+    /// <summary>
+    /// Whether an item whose files have all been dealt with is now really done.
+    /// <para>
+    /// For a copy, the files arriving is the whole job. A folder delete is done when the
+    /// folder is gone: the purge left it standing because of the files the second pass has
+    /// just removed, so it gets one more go here — and stays a failure if it still will not go.
+    /// </para>
+    /// </summary>
+    private static bool Finished(TransferKind kind, TransferItem item)
+    {
+        if (kind != TransferKind.Delete || !item.IsDirectory) return true;
+
+        RemoveFolder(item.Source);
+        return !Directory.Exists(item.Source);
     }
 
     /// <summary>
@@ -325,10 +340,21 @@ public sealed class FileTransferService
         {
             if (kind == TransferKind.Delete)
             {
-                File.Delete(source);
+                var file = new FileInfo(source);
+
+                // Gone already — whoever held it deleted it, or the purge's folder removal took
+                // it. Not a failure any more, and not this pass's doing either. A folder the
+                // purge could not read is named too, and that one this pass cannot help.
+                if (!file.Exists) return Directory.Exists(source) ? -1 : -2;
+
+                // Read before it goes. This used to count every file it removed as zero bytes,
+                // so a folder freed in two passes reported only the first one's share.
+                long size = file.Length;
+
+                if (file.IsReadOnly) file.IsReadOnly = false;
+                file.Delete();
                 if (File.Exists(source)) return -1;
 
-                long size = 0;
                 state.CountFile(source, size);
                 return size;
             }
@@ -477,11 +503,29 @@ public sealed class FileTransferService
         {
             // One file has nothing to parallelise. Robocopy would cost a process launch to
             // do what a single call does.
-            File.Delete(item.Source);
-            state.CountFile(item.Source, item.Bytes);
+            try
+            {
+                var file = new FileInfo(item.Source);
 
-            return new TransferItemResult(item,
-                File.Exists(item.Source) ? TransferOutcome.Failed : TransferOutcome.Done, item.Bytes);
+                // As the other permanent delete does it: a read-only flag is not a decision
+                // anybody made about keeping the file, and File.Delete refuses on it.
+                if (file.Exists && file.IsReadOnly) file.IsReadOnly = false;
+                file.Delete();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Named the way a purge names the files it could not take, so the window lists
+                // it with whoever holds it, and the second pass gets to try it again.
+                state.NameFailed(item.Source);
+                return new TransferItemResult(item, TransferOutcome.Failed, 0, ex.Message) { FailedPaths = [item.Source] };
+            }
+
+            // Counted once it is gone, never before: the bytes of a file still sitting there
+            // were going into the "freed" total either way.
+            if (File.Exists(item.Source)) return new TransferItemResult(item, TransferOutcome.Failed, 0);
+
+            state.CountFile(item.Source, item.Bytes);
+            return new TransferItemResult(item, TransferOutcome.Done, item.Bytes);
         }
 
         // ⚠️ /MIR erases whatever it is aimed at. Everything that could make it the wrong
@@ -509,17 +553,61 @@ public sealed class FileTransferService
             List<string> args = RobocopyArguments.Purge(empty, full, _threads);
             int code = await RunRobocopyAsync(args, item, state, cancellationToken).ConfigureAwait(false);
 
-            // The mirror empties the folder; it does not remove it.
-            if (code != RunState.CancelledExitCode && Directory.Exists(full))
-                Directory.Delete(full, recursive: true);
+            if (code == RunState.CancelledExitCode)
+            {
+                return new TransferItemResult(item, TransferOutcome.Cancelled, state.BytesDone - before)
+                {
+                    FailedPaths = state.FailedSince(failedBefore),
+                };
+            }
 
-            return Verdict(item, code, state.BytesDone - before, !Directory.Exists(full),
-                           state.FailedSince(failedBefore));
+            // The mirror empties the folder; it does not remove it.
+            string? refusal = RemoveFolder(full);
+
+            IReadOnlyList<string> failed = state.FailedSince(failedBefore);
+
+            // ⚠️ Extras is what the purge FOUND, not what it removed. Measured against the real
+            // tool, on a folder of three files plus one that another process held open: the
+            // table read 4 files and 5,300,000 bytes under Extras, 0 under FAILED, the exit
+            // code was 2 — success — and the 5,000,000-byte file was still there. Whatever it
+            // named as failed and is still on disk now goes back out of the total, which was
+            // otherwise reporting that file's bytes as freed.
+            state.Unfree(failed);
+
+            long bytes = state.BytesDone - before;
+
+            // Gone is gone, whatever the exit code said on the way: the folder not being there
+            // is the one thing a delete promised.
+            if (!Directory.Exists(full)) return new TransferItemResult(item, TransferOutcome.Done, bytes);
+
+            // Still there. This used to arrive as the exception from the removal above, which
+            // the caller turned into "failed, 0 bytes" with no file named — a folder that had
+            // lost everything but one file, reported as if nothing had happened to it at all.
+            string message = !RobocopyOutput.Succeeded(code) ? RobocopyOutput.Describe(code, TransferKind.Delete)
+                           : failed.Count == 0 && refusal is not null ? refusal
+                           : L.T("transfer.notGone");
+
+            return new TransferItemResult(item, TransferOutcome.Failed, bytes, message) { FailedPaths = failed };
         }
         finally
         {
             try { if (Directory.Exists(empty)) Directory.Delete(empty, recursive: true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>Removes what a purge left of a folder.</summary>
+    /// <returns>Why it would not go, or null when it went or was already gone.</returns>
+    private static string? RemoveFolder(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return ex.Message;
         }
     }
 
@@ -733,6 +821,44 @@ public sealed class FileTransferService
             }
 
             Report(TransferPhase.Running, path);
+        }
+
+        /// <summary>Names a file this side failed on itself, the way an error line names one for robocopy.</summary>
+        public void NameFailed(string path)
+        {
+            lock (_gate)
+            {
+                if (_failedSeen.Add(path)) _failed.Add(path);
+            }
+        }
+
+        /// <summary>
+        /// Takes back out of the total the files a purge counted and could not remove — the
+        /// ones it named as failed that are still on the disk, at the size they have there.
+        /// </summary>
+        public void Unfree(IReadOnlyList<string> paths)
+        {
+            long bytes = 0;
+            int files = 0;
+
+            foreach (string path in paths)
+            {
+                // A folder robocopy could not read is named too; its contents were never in
+                // the Extras column, so there is nothing of it to take back.
+                var file = new FileInfo(path);
+                if (!file.Exists) continue;
+
+                bytes += file.Length;
+                files++;
+            }
+
+            if (files == 0) return;
+
+            lock (_gate)
+            {
+                _bytes -= bytes;
+                _files -= files;
+            }
         }
 
         public void Consume(string? line, TransferItem item)

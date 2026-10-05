@@ -2673,6 +2673,19 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             ? index.MarkDeleted(CollectionsMarshal.AsSpan(gone))
             : default;
 
+        // A folder the purge emptied but could not remove — one file in it held open — is a
+        // failure with almost all of its contents gone. What left the disk leaves the index,
+        // and is counted as freed; the rest stays, on the disk's word, entry by entry.
+        if (index is not null && worthTheEngine)
+        {
+            foreach (DeleteResult result in report.Results)
+            {
+                if (result.Succeeded || !result.IsDirectory) continue;
+                if (byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry))
+                    removed += IndexPrune.Vanished(index, entry);
+            }
+        }
+
         if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
 
         ReportDeletion(report, removed, mode);

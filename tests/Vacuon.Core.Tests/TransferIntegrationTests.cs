@@ -439,4 +439,65 @@ public class TransferIntegrationTests : IDisposable
         Assert.Equal(600_000, report.BytesTransferred);
         Assert.True(report.BytesWereFreed);
     }
+
+    [Fact]
+    public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
+    {
+        // Measured on the real tool before this was written: the purge removes everything
+        // else, prints an ERROR line for the held file, counts it under Extras anyway, reports
+        // nothing under FAILED and exits with 2 — success. The folder removal after it then
+        // threw, and the item came back as "failed, 0 bytes", naming nothing, while the total
+        // claimed the held file's bytes as freed.
+        string target = Dir("held-delete");
+        WriteFile(target, "a.bin", 100_000);
+        WriteFile(Path.Combine(target, "sub"), "b.bin", 200_000);
+        string held = WriteFile(target, "held.bin", 5_000_000);
+
+        using (var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = new FileTransferService();
+            TransferPlan plan = service.Plan([target], string.Empty, TransferKind.Delete);
+            TransferReport report = await service.ExecuteAsync(plan);
+
+            TransferItemResult item = Assert.Single(report.Results);
+            Assert.Equal(TransferOutcome.Failed, item.Outcome);
+
+            // The file that stopped it, by name — which is what the window lists, and what it
+            // asks the Restart Manager about.
+            Assert.Contains(report.FailedFilePaths,
+                            p => string.Equals(p, held, StringComparison.OrdinalIgnoreCase));
+
+            // Freed is what left the disk, and not one byte of the file still on it.
+            Assert.Equal(300_000, report.BytesTransferred);
+            Assert.Equal(300_000, item.BytesTransferred);
+
+            // And the disk agrees: the folder is down to the one file.
+            Assert.True(File.Exists(held));
+            Assert.False(Directory.Exists(Path.Combine(target, "sub")));
+            Assert.Single(Directory.GetFileSystemEntries(target));
+        }
+    }
+
+    [Fact]
+    public async Task ASingleFileHeldOpen_IsNamedToo_AndNotCountedAsFreed()
+    {
+        // A lone file in a delete batch skips robocopy. It used to count its bytes as freed
+        // before looking, and to fail as an exception with nothing named.
+        string folder = Dir("held-single");
+        string held = WriteFile(folder, "held.bin", 70_000);
+        string fine = WriteFile(folder, "fine.bin", 30_000);
+
+        using (var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var service = new FileTransferService();
+            TransferPlan plan = service.Plan([held, fine], string.Empty, TransferKind.Delete);
+            TransferReport report = await service.ExecuteAsync(plan);
+
+            Assert.Equal(30_000, report.BytesTransferred);
+            Assert.Contains(report.FailedFilePaths,
+                            p => string.Equals(p, held, StringComparison.OrdinalIgnoreCase));
+            Assert.False(File.Exists(fine));
+            Assert.True(File.Exists(held));
+        }
+    }
 }
