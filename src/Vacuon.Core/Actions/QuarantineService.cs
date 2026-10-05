@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Runtime.Versioning;
 using Vacuon.Core.Safety;
 
@@ -453,6 +454,13 @@ public sealed class QuarantineService
 
         try
         {
+            // Links first, each by itself. The recursive delete does not go through one, but
+            // measured on a junction it removes it and THEN throws ("the parameter is
+            // incorrect", from unmounting it as if it were a volume) — after everything else in
+            // the batch was gone and before the batch folder was. That came back as nothing
+            // freed, for a batch that had just been emptied.
+            foreach (string link in Links.FoldersBelow(batch.BatchFolder)) Links.Remove(link);
+
             Directory.Delete(batch.BatchFolder, recursive: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -506,7 +514,11 @@ public sealed class QuarantineService
             if (Directory.Exists(path))
             {
                 var directory = new DirectoryInfo(path);
-                return (DirectorySize(directory), true, true, directory.LastWriteTimeUtc);
+
+                // A link moves into the quarantine as a link. None of what it points at comes
+                // with it, so none of it is held.
+                long bytes = Links.IsLink(directory) ? 0 : DirectorySize(directory);
+                return (bytes, true, true, directory.LastWriteTimeUtc);
             }
 
             var file = new FileInfo(path);
@@ -524,13 +536,22 @@ public sealed class QuarantineService
     {
         long total = 0;
 
+        // ⚠️ Not through a link. This walked into every junction in the folder and counted the
+        // folder behind it as held — a quarantine of a folder holding the junction the app
+        // leaves after a move claimed to hold the whole folder that had moved, which never
+        // left the other drive.
+        var files = new FileSystemEnumerable<long>(
+            directory.FullName,
+            static (ref FileSystemEntry entry) => entry.Length,
+            new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = true })
+        {
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory && !Links.IsLink(ref entry),
+            ShouldRecursePredicate = static (ref FileSystemEntry entry) => !Links.IsLink(ref entry),
+        };
+
         try
         {
-            foreach (FileInfo file in directory.EnumerateFiles("*", SearchOption.AllDirectories))
-            {
-                try { total += file.Length; }
-                catch (IOException) { }
-            }
+            foreach (long length in files) total += length;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Vacuon.Core.Actions;
 using Vacuon.Core.Safety;
+using Vacuon.Native.Interop;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -31,7 +32,13 @@ public class QuarantineServiceTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_root, recursive: true); }
+        try
+        {
+            // Links first, each by itself: the recursive delete reports a junction as an error
+            // after removing it, and leaves the folder.
+            foreach (string link in Links.FoldersBelow(_root)) Links.Remove(link);
+            Directory.Delete(_root, recursive: true);
+        }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
 
@@ -292,6 +299,49 @@ public class QuarantineServiceTests : IDisposable
         Assert.Equal(2048, freed);
         Assert.False(Directory.Exists(batch.BatchFolder));
         Assert.Empty(service.ListBatches("C:\\"));
+    }
+
+    [Fact]
+    public void AFolderWithAJunctionInside_HoldsItsOwnBytes_AndPurgingItLeavesWhatTheJunctionPointsAt()
+    {
+        // The size walk went through the junction and counted the folder behind it as held,
+        // and the purge then failed on the junction after deleting everything else: the
+        // recursive delete removes one and throws, so the batch reported nothing freed.
+        string outside = Dir("outside");
+        string precious = File_(outside, "precious.bin", new string('p', 5000));
+        string from = Dir("from");
+        File_(from, "mine.bin", new string('m', 300));
+        Assert.True(Junction.Create(Path.Combine(from, "door"), outside));
+
+        var service = Service();
+        QuarantineReport report = service.Execute([from]);
+
+        Assert.Equal(300, Assert.Single(report.Results).Bytes);
+
+        QuarantineBatch batch = Assert.Single(service.ListBatches("C:\\"));
+        Assert.Equal(300, service.Held(batch).Bytes);
+
+        long freed = service.Purge(batch);
+
+        Assert.Equal(300, freed);
+        Assert.False(Directory.Exists(batch.BatchFolder));
+        Assert.True(File.Exists(precious));
+    }
+
+    [Fact]
+    public void AJunctionIsQuarantinedAsALink_AndHoldsNothing()
+    {
+        string outside = Dir("outside");
+        string precious = File_(outside, "precious.bin", new string('p', 5000));
+        string door = Path.Combine(_root, "door");
+        Assert.True(Junction.Create(door, outside));
+
+        QuarantineResult result = Assert.Single(Service().Execute([door]).Results);
+
+        Assert.Equal(QuarantineOutcome.Quarantined, result.Outcome);
+        Assert.Equal(0, result.Bytes);
+        Assert.False(Directory.Exists(door));
+        Assert.True(File.Exists(precious));
     }
 
     [Fact]
