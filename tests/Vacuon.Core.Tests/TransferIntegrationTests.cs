@@ -974,4 +974,153 @@ public class TransferIntegrationTests : IDisposable
         Assert.True(File.Exists(precious));
         Assert.Equal(30_000, report.BytesTransferred);
     }
+
+    [Fact]
+    public async Task MovingAFolder_CarriesTheJunctionInsideAsAJunction_AndLeavesWhatItPointsAt()
+    {
+        // ⚠️ Measured on the real tool before this was written: without /SJ /SL the move
+        // walked through the junction, copied what was behind it, and then deleted it from
+        // there as a moved source — the folder it pointed at was left with 0 of its 2 files.
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string alsoPrecious = WriteFile(Path.Combine(outside, "sub"), "also.bin", 40_000);
+
+        string source = Dir("source");
+        WriteFile(source, "mine.bin", 30_000);
+        Door(Path.Combine(source, "nested", "door"), outside);
+        string destination = Dir("destination");
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([source], destination, TransferKind.Move);
+        TransferReport report = await service.ExecuteAsync(plan);
+
+        TransferItemResult item = Assert.Single(report.Results);
+        Assert.Equal(TransferOutcome.Done, item.Outcome);
+        Assert.False(Directory.Exists(source));
+
+        Assert.True(File.Exists(precious));
+        Assert.True(File.Exists(alsoPrecious));
+
+        // The link arrived as a link, still pointing where it did.
+        string carried = Path.Combine(item.Item.Destination, "nested", "door");
+        Assert.True(Links.IsLink(carried));
+        Assert.Equal(outside, Junction.TargetOf(carried)?.TrimEnd('\\'), StringComparer.OrdinalIgnoreCase);
+
+        // And the bytes moved are the folder's own.
+        Assert.Equal(30_000, report.BytesTransferred);
+    }
+
+    [Fact]
+    public async Task CopyingAFolder_CopiesTheJunctionInsideAsAJunction_NotASecondSetOfFiles()
+    {
+        string outside = Dir("outside");
+        WriteFile(outside, "precious.bin", 70_000);
+
+        string source = Dir("source");
+        WriteFile(source, "mine.bin", 30_000);
+        string door = Door(Path.Combine(source, "door"), outside);
+        string destination = Dir("destination");
+
+        var service = new FileTransferService();
+        TransferReport report = await service.ExecuteAsync(service.Plan([source], destination, TransferKind.Copy));
+
+        TransferItemResult item = Assert.Single(report.Results);
+        Assert.Equal(TransferOutcome.Done, item.Outcome);
+
+        // The source is as it was, its link included.
+        Assert.True(Links.IsLink(door));
+
+        string carried = Path.Combine(item.Item.Destination, "door");
+        Assert.True(Links.IsLink(carried));
+
+        // The copy's own files are the one it had: nothing came through the door.
+        var ownOnly = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        Assert.Single(Directory.GetFiles(item.Item.Destination, "*", ownOnly));
+        Assert.Equal(30_000, report.BytesTransferred);
+    }
+
+    [Fact]
+    public async Task MovingAJunction_MovesTheLink_AndNotTheFolderBehindIt()
+    {
+        // The item itself is the link: robocopy carries that one too, with the same switches.
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string door = Door(Path.Combine(_root, "door"), outside);
+        string destination = Dir("destination");
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([door], destination, TransferKind.Move);
+
+        // Weighed as what it carries, which is nothing of the folder behind it.
+        Assert.Equal(0, plan.Items[0].Bytes);
+
+        TransferReport report = await service.ExecuteAsync(plan);
+
+        TransferItemResult item = Assert.Single(report.Results);
+        Assert.Equal(TransferOutcome.Done, item.Outcome);
+        Assert.False(Directory.Exists(door));
+        Assert.True(Links.IsLink(item.Item.Destination));
+        Assert.True(File.Exists(precious));
+        Assert.Equal(0, report.BytesTransferred);
+    }
+
+    [SkippableFact]
+    public async Task MovingAFolder_CarriesADirectorySymlinkAsALink()
+    {
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string source = Dir("source");
+        WriteFile(source, "mine.bin", 30_000);
+        string destination = Dir("destination");
+
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(source, "symlink"), outside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Skip.If(true, "this session may not make symbolic links (it needs elevation or Developer Mode).");
+        }
+
+        var service = new FileTransferService();
+        TransferReport report = await service.ExecuteAsync(service.Plan([source], destination, TransferKind.Move));
+
+        TransferItemResult item = Assert.Single(report.Results);
+        Assert.Equal(TransferOutcome.Done, item.Outcome);
+        Assert.True(File.Exists(precious));
+        Assert.True(Links.IsLink(Path.Combine(item.Item.Destination, "symlink")));
+        Assert.Equal(30_000, report.BytesTransferred);
+    }
+
+    [SkippableFact]
+    public void TheEmptyFileLeftWhereALinkWasRefused_IsRemoved_AndACarriedLinkIsNot()
+    {
+        // Measured run de-elevated: refused the privilege, robocopy names the file symlink with
+        // ERROR 1314 and leaves a 0-byte plain file under its name. A link and that stub have
+        // the same length, so only "the source is a link and this is not" tells them apart.
+        string folder = Dir("stub");
+        string named = WriteFile(folder, "named.bin", 10);
+        string source = Path.Combine(folder, "link.bin");
+        string stub = Path.Combine(folder, "stub-of-link.bin");
+        string carried = Path.Combine(folder, "carried.bin");
+
+        try
+        {
+            File.CreateSymbolicLink(source, named);
+            File.CreateSymbolicLink(carried, named);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Skip.If(true, "this session may not make symbolic links (it needs elevation or Developer Mode).");
+        }
+
+        File.WriteAllBytes(stub, []);
+
+        Assert.True(FileTransferService.RemovePartial(new TransferItem(source, stub, 0, false), source));
+        Assert.False(File.Exists(stub));
+
+        Assert.False(FileTransferService.RemovePartial(new TransferItem(source, carried, 0, false), source));
+        Assert.True(Links.IsLink(carried));
+        Assert.True(File.Exists(named));
+    }
 }

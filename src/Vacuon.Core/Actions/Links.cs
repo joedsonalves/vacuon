@@ -105,7 +105,26 @@ public static class Links
         return !Path.Exists(link);
     }
 
-    private static bool IsLink(ref FileSystemEntry entry) =>
+    /// <summary>The same question for an entry already read from the disk.</summary>
+    public static bool IsLink(FileSystemInfo info)
+    {
+        try
+        {
+            return info.Exists
+                && (info.Attributes & FileAttributes.ReparsePoint) != 0
+                && info.LinkTarget is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The same question for an entry a walk is standing on. Only a reparse point is opened
+    /// to ask, so a walk over ordinary files pays nothing for it.
+    /// </summary>
+    internal static bool IsLink(ref FileSystemEntry entry) =>
         (entry.Attributes & FileAttributes.ReparsePoint) != 0
         && entry.ToFileSystemInfo().LinkTarget is not null;
 }

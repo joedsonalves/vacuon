@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Enumeration;
 using System.Runtime.Versioning;
 using Vacuon.Core.Actions;
 using Vacuon.Core.Localization;
@@ -83,10 +84,10 @@ public sealed class FileTransferService
         if (!(isDirectory || File.Exists(path)))
             return new TransferItem(path, path, 0, isDirectory, TransferOutcome.NotFound);
 
-        // A link is deleted as a link, so nothing it points at is freed. The index reads the
-        // folder the way the disk holds it and already says zero; a walk would start on the
-        // far side of the door and count everything there.
-        TransferMeasurement size = kind == TransferKind.Delete && isDirectory && Links.IsLink(path)
+        // A link travels as a link and is deleted as one, so nothing it points at is moved,
+        // copied or freed. The index reads the folder the way the disk holds it and already
+        // says zero; a walk would start on the far side of the door and count everything there.
+        TransferMeasurement size = isDirectory && Links.IsLink(path)
             ? new TransferMeasurement(0, 0)
             : measure?.Invoke(path) ?? Weigh(path, isDirectory);
 
@@ -375,21 +376,41 @@ public sealed class FileTransferService
         // Robocopy removes each source folder as it empties it, so the folders the second
         // pass has just finished emptying are still standing. A move left there is not one —
         // and a junction put in the old place afterwards would find a folder in its way. Only
-        // a tree with no file left anywhere in it goes; one that still holds something stays,
+        // a tree with nothing left anywhere in it goes; one that still holds something stays,
         // and the item with it.
-        if (kind == TransferKind.Move && HoldsAnyFile(item.Source)) return false;
+        if (kind == TransferKind.Move && HoldsAnything(item.Source)) return false;
 
         RemoveFolder(item.Source);
         return !Directory.Exists(item.Source);
     }
 
-    /// <summary>Whether a folder has a file anywhere below it. True when it cannot be read, to be safe.</summary>
-    private static bool HoldsAnyFile(string folder)
+    /// <summary>
+    /// Whether a folder holds anything below it but empty folders. True when it cannot be
+    /// read, to be safe.
+    /// <para>
+    /// A link counts, and is not entered. One still here is one the move did not carry —
+    /// robocopy could not make it at the other end — and removing the folder around it would
+    /// lose it. And entering it would answer for a folder somewhere else: this used to say
+    /// "still holds files" for a link that pointed at some, and "empty" for one that did not.
+    /// </para>
+    /// </summary>
+    private static bool HoldsAnything(string folder)
     {
+        if (!Directory.Exists(folder)) return false;
+
+        var walk = new FileSystemEnumerable<bool>(
+            folder,
+            static (ref FileSystemEntry entry) => true,
+            new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0, IgnoreInaccessible = false })
+        {
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory || Links.IsLink(ref entry),
+            ShouldRecursePredicate = static (ref FileSystemEntry entry) => !Links.IsLink(ref entry),
+        };
+
         try
         {
-            return Directory.Exists(folder)
-                && Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any();
+            foreach (bool _ in walk) return true;
+            return false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -449,10 +470,18 @@ public sealed class FileTransferService
 
             if (!File.Exists(source)) return -1;
 
+            var original = new FileInfo(source);
+
+            // A link travels as a link or not at all. This pass copies bytes, and the bytes of
+            // a link are the file it names: copying them would turn the link into a copy of
+            // something that lives elsewhere — and, for a move, release the link afterwards.
+            // Robocopy names one it could not make (no privilege, or a disk that cannot hold
+            // links), and named it stays.
+            if (Links.IsLink(original)) return -1;
+
             string target = MapToDestination(item, source);
             if (target.Length == 0) return -1;
 
-            var original = new FileInfo(source);
             long length = original.Length;
 
             // A failed attempt can leave a stub behind. Only a whole file counts as arrived —
@@ -563,8 +592,16 @@ public sealed class FileTransferService
             var written = new FileInfo(target);
             if (!written.Exists) return false;
 
+            // A link is made in one step, so one at the destination is never a fragment.
+            if (Links.IsLink(written)) return false;
+
             var original = new FileInfo(source);
-            if (!original.Exists || IsWhole(original, written)) return false;
+            if (!original.Exists) return false;
+
+            // ⚠️ Refused a link, robocopy leaves an empty plain file under the link's name —
+            // measured run de-elevated, with ERROR 1314. That is never a copy of anything: the
+            // source is a link and this is not one. Otherwise only a whole file stays.
+            if (!Links.IsLink(original) && IsWhole(original, written)) return false;
 
             if (written.IsReadOnly) written.IsReadOnly = false;
             written.Delete();
@@ -596,9 +633,22 @@ public sealed class FileTransferService
             AttributesToSkip = 0,
         };
 
+        // Not through a link. Robocopy makes them at the destination as links, and behind one
+        // is a folder somewhere else — the very one the source's link points at, so the walk
+        // would be comparing that folder's files with themselves, all of them, and around any
+        // loop it holds.
+        var walk = new FileSystemEnumerable<string>(
+            item.Destination,
+            static (ref FileSystemEntry entry) => entry.ToFullPath(),
+            options)
+        {
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory && !Links.IsLink(ref entry),
+            ShouldRecursePredicate = static (ref FileSystemEntry entry) => !Links.IsLink(ref entry),
+        };
+
         try
         {
-            foreach (string written in Directory.EnumerateFiles(item.Destination, "*", options))
+            foreach (string written in walk)
             {
                 string relative = Path.GetRelativePath(item.Destination, written);
                 RemovePartial(item, Path.Combine(item.Source, relative));

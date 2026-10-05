@@ -1,6 +1,7 @@
 using Vacuon.Core.Actions;
 using Vacuon.Core.Index;
 using Vacuon.Core.Scan;
+using Vacuon.Native.Interop;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -30,7 +31,16 @@ public class IndexGraftTests : IDisposable
 
     public void Dispose()
     {
-        try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
+        try
+        {
+            // Links first, each by itself: the recursive delete reports a junction as an error
+            // after removing it, and leaves the folder.
+            if (Directory.Exists(_root))
+            {
+                foreach (string link in Links.FoldersBelow(_root)) Links.Remove(link);
+                Directory.Delete(_root, recursive: true);
+            }
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
         GC.SuppressFinalize(this);
@@ -154,6 +164,39 @@ public class IndexGraftTests : IDisposable
 
         Assert.Equal(before + written, index.TotalLogicalBytes);
         Assert.Equal(30, index.GetSubtreeFileCount(planted));
+    }
+
+    [Fact]
+    public void ALinkInTheCopiedTree_IsPlantedAsItself_AndNotEntered()
+    {
+        // The transfer carries links as links, so a copied tree can hold a junction. What is
+        // behind it lives somewhere else, and the MFT lists none of it under the link — entering
+        // would count that folder a second time, under a path it does not have.
+        string outside = Path.Combine(_root, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllBytes(Path.Combine(outside, "precious.bin"), new byte[70_000]);
+
+        string tree = Path.Combine(_root, "copy");
+        Directory.CreateDirectory(tree);
+        File.WriteAllBytes(Path.Combine(tree, "mine.bin"), new byte[300]);
+        string door = Path.Combine(tree, "door");
+        Assert.True(Junction.Create(door, outside));
+
+        VolumeIndex index = IndexDownToRoot(room: 32, out _, out int firstFree);
+        long before = index.TotalLogicalBytes;
+
+        long next = firstFree;
+        var asked = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        long RecordOf(string path) => asked.TryGetValue(path, out long record) ? record : asked[path] = next++;
+
+        GraftResult graft = IndexGraft.AddTree(index, tree, RecordOf);
+
+        Assert.True(graft.Complete);
+        Assert.True(index.FindEntry(door) >= 0);
+        Assert.DoesNotContain(asked.Keys, path => path.StartsWith(door + "\\", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(1, index.GetSubtreeFileCount(index.FindEntry(tree)));
+        Assert.Equal(before + 300, index.TotalLogicalBytes);
     }
 
     [Fact]

@@ -287,6 +287,25 @@ public class RobocopyArgumentTests
     }
 
     [Fact]
+    public void CopiesAndMovesCarryLinksAsLinks()
+    {
+        // Without /SJ /SL robocopy walks through every link it meets, and a move then takes
+        // the files out of whatever folder the link pointed at. A single file asks for it too:
+        // the one selected can be a symbolic link itself.
+        foreach (List<string> args in new[]
+        {
+            RobocopyArguments.Copy(@"C:\a", @"D:\b", null, 32),
+            RobocopyArguments.Copy(@"C:\a", @"D:\b", "clip.mp4", 32),
+            RobocopyArguments.Move(@"C:\a", @"D:\b", null, 32),
+            RobocopyArguments.Move(@"C:\a", @"D:\b", "clip.mp4", 32),
+        })
+        {
+            Assert.Contains("/SJ", args);
+            Assert.Contains("/SL", args);
+        }
+    }
+
+    [Fact]
     public void MoveAddsMoveAndKeepsEverythingCopyAsked()
     {
         List<string> copy = RobocopyArguments.Copy(@"C:\a", @"D:\b", null, 8);

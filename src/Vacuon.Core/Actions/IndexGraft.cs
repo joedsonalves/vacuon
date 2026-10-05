@@ -110,6 +110,12 @@ public static class IndexGraft
         added++;
         if (item is not DirectoryInfo folder) return true;
 
+        // A link is planted as itself and not entered. The transfer carries links as links,
+        // so a copied tree can hold one, and what stands behind it is not inside this folder:
+        // the MFT lists none of it here, and a scan would not either. Entering would count a
+        // folder that lives somewhere else a second time, under a path it does not have.
+        if (Links.IsLink(folder)) return true;
+
         // ⚠️ Matched by name against a table read once per folder, never with FindEntry per
         // child. FindEntry walks the child index, and every AddFile drops that index — so a
         // lookup per child rebuilt it per child, across the whole volume: 55 ms a rebuild on

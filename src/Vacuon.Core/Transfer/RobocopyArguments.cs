@@ -30,6 +30,27 @@ public static class RobocopyArguments
     /// </summary>
     private static readonly string[] Common = ["/R:1", "/W:1", "/BYTES", "/NJH", "/NDL"];
 
+    /// <summary>
+    /// A link travels as a link: <c>/SJ</c> for junctions, <c>/SL</c> for symbolic links.
+    /// <para>
+    /// ⚠️ Without them robocopy walks through every link it meets. Measured on 5 October 2026:
+    /// a move of a folder holding a junction took the files out of the folder the junction
+    /// pointed at — every one, from a place nobody selected — and a copy filled the
+    /// destination with a second set of them. With both switches the link arrives as a link,
+    /// whatever is behind it stays where it is, and the bytes moved are the ones the index
+    /// counted for the folder. The item itself being a link is covered too: robocopy then
+    /// carries that link, and leaves the folder it stands for alone.
+    /// </para>
+    /// <para>
+    /// A symbolic link needs a privilege an unelevated process does not hold. Measured run
+    /// de-elevated: robocopy names each one with <c>ERROR 1314</c> and leaves an empty plain
+    /// file or folder under its name. That is a failure on the list, which is the honest
+    /// outcome — falling back to walking through it is the very thing these switches stop.
+    /// A junction needs no privilege at all.
+    /// </para>
+    /// </summary>
+    private static readonly string[] AsLinks = ["/SJ", "/SL"];
+
     public static List<string> Copy(string sourceFolder, string destinationFolder, string? singleFile, int threads)
     {
         var args = new List<string> { sourceFolder, destinationFolder };
@@ -37,6 +58,7 @@ public static class RobocopyArguments
         if (!string.IsNullOrEmpty(singleFile)) args.Add(singleFile);
         else args.Add("/E");   // subdirectories, empty ones included
 
+        args.AddRange(AsLinks);
         args.AddRange(Common);
         AddThreads(args, threads, singleFile is not null);
         return args;
