@@ -5229,6 +5229,14 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             return done;
         });
 
+        // Before the search below runs again: it reads the index, and an index still holding
+        // each replaced copy as a file of its own put every group straight back on the list.
+        if (Index is not null)
+        {
+            for (int i = 0; i < results.Count; i++)
+                if (results[i].Succeeded) HardLinkService.Record(Index, pairs[i].Keeper, pairs[i].Copy);
+        }
+
         ReportLinks(results);
 
         // The groups on screen describe a disk that has changed, so the listing is rebuilt

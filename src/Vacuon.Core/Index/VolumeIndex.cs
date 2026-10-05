@@ -255,6 +255,26 @@ public sealed class VolumeIndex
     }
 
     /// <summary>
+    /// One name more, or one name fewer, for a file the index already holds — a hard link
+    /// made to it, or one of its links removed. The entry stays where it is: it is one
+    /// record, credited once whatever its names (see <see cref="BuildSubtreeSizes"/>), so no
+    /// total moves. What moves is the count the duplicate search reads to know that removing
+    /// a name frees nothing.
+    /// </summary>
+    public void ChangeNameCount(int index, int by)
+    {
+        if (index < 0 || index >= Entries.Length) return;
+
+        ref FileEntry e = ref Entries[index];
+        if (!e.IsInUse || e.IsDirectory) return;
+
+        e.HardLinkCount = (ushort)Math.Clamp(e.HardLinkCount + by, 1, ushort.MaxValue);
+
+        if (e.HardLinkCount > 1) e.Flags |= EntryFlags.HardLinked;
+        else e.Flags &= ~EntryFlags.HardLinked;
+    }
+
+    /// <summary>
     /// Puts a directory that exists on disk but not in this index into it — at its real
     /// MFT record number, never at an invented one.
     /// <para>

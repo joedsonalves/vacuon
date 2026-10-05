@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
+using Vacuon.Core.Index;
 using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
 using Vacuon.Native.Interop;
@@ -149,6 +150,40 @@ public static class HardLinkService
         }
 
         return new LinkResult(copyFull, LinkOutcome.Linked, names == 1 ? held : 0);
+    }
+
+    /// <summary>
+    /// Tells the index what a successful <see cref="Replace"/> did to the disk.
+    /// <para>
+    /// ⚠️ It used to be told nothing. The copy stayed in it as a file of its own, the keeper
+    /// with one name, so the search that rebuilds the list right afterwards found every
+    /// group again — each replaced copy back on the list as recoverable, beside a status
+    /// line saying it had just been freed. Linking it again was refused as "already linked",
+    /// which was the first true thing the list said about it.
+    /// </para>
+    /// </summary>
+    /// <returns>What left the index: the copy's own record, when it had no other name.</returns>
+    public static Removal Record(VolumeIndex index, string keeper, string copy)
+    {
+        ArgumentNullException.ThrowIfNull(index);
+
+        int kept = index.FindEntry(keeper);
+        int gone = index.FindEntry(copy);
+        if (kept < 0 || gone < 0 || kept == gone) return default;
+
+        // The keeper's record now answers to the copy's path as well.
+        index.ChangeNameCount(kept, +1);
+
+        // The copy's record lost that name. With no other, it is gone from the disk; with
+        // another, it lives on there and only its count changes — the path the index shows
+        // for it is the one it just lost, and the next scan puts it under the one it kept.
+        if (index.Entries[gone].HardLinkCount > 1)
+        {
+            index.ChangeNameCount(gone, -1);
+            return default;
+        }
+
+        return index.MarkDeleted(gone);
     }
 
     /// <summary>Removes the old copy's name. False when it will not go.</summary>

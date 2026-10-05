@@ -1,3 +1,4 @@
+using Vacuon.Core.Actions;
 using Vacuon.Core.Analyzers;
 using Vacuon.Core.Index;
 using Vacuon.Core.Scan;
@@ -341,6 +342,33 @@ public class DuplicateFinderTests : IDisposable
         Assert.True(group.Keeper.IsHardLinked);
         Assert.Equal("original.bin", Path.GetFileName(Assert.Single(group.Redundant).Path));
         Assert.Equal(50_000, group.RecoverableBytes);
+    }
+
+    [Fact]
+    public void ACopyReplacedByALink_DoesNotComeBackOnTheList()
+    {
+        // The list is rebuilt from the index right after the links are made. The index used
+        // to keep the replaced copy as a file of its own, the keeper with a single name, and
+        // the copy's path now reads the keeper's bytes — so every group came straight back,
+        // the copy "recoverable" again beside a line saying it had just been freed.
+        byte[] content = Pattern(50_000, 9);
+        string keeper = Write("keeper.bin", content);
+        string copy = Write("copy.bin", content);
+
+        VolumeIndex index = Index();
+        Assert.Single(new DuplicateFinder().Find(index, Small()).Groups);
+        long before = index.TotalBytesOnDisk;
+
+        Assert.Equal(LinkOutcome.Linked, HardLinkService.Replace(keeper, copy).Outcome);
+        Removal gone = HardLinkService.Record(index, keeper, copy);
+
+        Assert.Empty(new DuplicateFinder().Find(index, Small()).Groups);
+
+        // The copy's bytes left the index, and only those: the keeper is one record with two
+        // names now, still counted once.
+        Assert.Equal(50_000, gone.BytesOnDisk);
+        Assert.Equal(before - 50_000, index.TotalBytesOnDisk);
+        Assert.Equal(2, index.Entries[index.FindEntry(keeper)].HardLinkCount);
     }
 
     [Fact]
