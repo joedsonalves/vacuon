@@ -424,6 +424,81 @@ public class VolumeIndexTests
         Assert.Equal(1024, gone.LogicalBytes);
         Assert.Equal(0, gone.BytesOnDisk);
     }
+
+    /// <summary>A volume of <paramref name="folders"/> folders under the root, each holding three files of 100 bytes.</summary>
+    private static VolumeIndex FoldersOfThree(int folders)
+    {
+        var names = new NameBlob(1024);
+        var entries = new FileEntry[6 + folders * 4];
+
+        void Set(int i, string name, int parent, long size, bool dir = false) => entries[i] = new FileEntry
+        {
+            RecordNumber = (uint)i,
+            ParentIndex = (uint)parent,
+            NameOffset = names.Append(name),
+            NameLength = (ushort)name.Length,
+            Flags = dir ? EntryFlags.Directory : EntryFlags.None,
+            LogicalSize = size,
+            AllocatedSize = size,
+            HardLinkCount = 1,
+        };
+
+        Set(5, ".", 5, 0, dir: true);
+
+        for (int f = 0; f < folders; f++)
+        {
+            int folder = 6 + f * 4;
+            Set(folder, $"pasta{f}", 5, 0, dir: true);
+            for (int c = 1; c <= 3; c++) Set(folder + c, $"arquivo{c}.bin", folder, 100);
+        }
+
+        var volume = new VolumeInfo('C', "Teste", "NTFS", 1_000_000, 500_000, 4096, false);
+        return new VolumeIndex(entries, names, volume, ScanStrategy.Mft);
+    }
+
+    [Fact]
+    public void MarkDeleted_ManyFoldersAtOnce_BuildsTheChildIndexOnce()
+    {
+        // One call per folder rebuilt the child index once per folder: 500 folders on a
+        // real index of 3.7 M records held the window for 24 s.
+        VolumeIndex index = FoldersOfThree(50);
+        int[] folders = [.. Enumerable.Range(0, 50).Select(f => 6 + f * 4)];
+
+        int builds = index.ChildIndexBuilds;
+        Removal gone = index.MarkDeleted(folders);
+
+        Assert.Equal(1, index.ChildIndexBuilds - builds);
+        Assert.Equal(200, gone.Entries);
+        Assert.Equal(50 * 300, gone.LogicalBytes);
+        Assert.Equal(0, index.FileCount);
+        Assert.Equal(0, index.GetSubtreeSize(index.RootIndex));
+    }
+
+    [Fact]
+    public void MarkDeleted_AnEntryBesideItsOwnFolder_IsCountedOnce()
+    {
+        // A folder and a file inside it, both in the list: the file leaves with its folder,
+        // and its bytes must not leave twice.
+        VolumeIndex index = FoldersOfThree(2);
+
+        Removal gone = index.MarkDeleted([7, 6, 7, 11]);
+
+        Assert.Equal(5, gone.Entries);           // pasta0 and its three files, plus arquivo1 of pasta1
+        Assert.Equal(400, gone.LogicalBytes);
+        Assert.Equal(200, index.GetSubtreeSize(index.RootIndex));
+    }
+
+    [Fact]
+    public void MarkDeleted_FilesOnly_NeverBuildTheChildIndex()
+    {
+        VolumeIndex index = FoldersOfThree(3);
+        int builds = index.ChildIndexBuilds;
+
+        Removal gone = index.MarkDeleted([7, 8, 11, 15]);
+
+        Assert.Equal(400, gone.LogicalBytes);
+        Assert.Equal(builds, index.ChildIndexBuilds);
+    }
 }
 
 public class FileCategoriesTests

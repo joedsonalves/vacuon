@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
@@ -2658,15 +2659,19 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
             : service.Execute(paths, mode);
 
         // Take out of the index exactly what the disk reported as gone, and measure the
-        // result from the entries themselves — the whole subtree included.
-        Removal removed = default;
+        // result from the entries themselves — the whole subtree included. All in one call:
+        // one at a time, every folder rebuilt the child index of the whole volume.
+        var gone = new List<int>(report.Results.Count);
 
         foreach (DeleteResult result in report.Results)
         {
             if (!result.Succeeded) continue;
-            if (byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry))
-                removed += index!.MarkDeleted(entry);
+            if (byPath.TryGetValue(result.Path.TrimEnd('\\'), out int entry)) gone.Add(entry);
         }
+
+        Removal removed = index is not null && gone.Count > 0
+            ? index.MarkDeleted(CollectionsMarshal.AsSpan(gone))
+            : default;
 
         if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
 
@@ -3441,7 +3446,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         bool destinationResolved = false;
 
         var moved = new HashSet<int>();
-        Removal left = default;
+        var departed = new List<int>();
         int unplaced = 0;
 
         foreach (MoveResult result in report.Results)
@@ -3453,8 +3458,9 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
             if (result.CrossVolume)
             {
-                // Gone from this volume for real: its clusters are free here now.
-                left += index.MarkDeleted(entry);
+                // Gone from this volume for real: its clusters are free here now. Freed all
+                // together below, for the same reason a delete is.
+                departed.Add(entry);
                 continue;
             }
 
@@ -3470,6 +3476,8 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                 unplaced++;
             }
         }
+
+        Removal left = departed.Count > 0 ? index.MarkDeleted(CollectionsMarshal.AsSpan(departed)) : default;
 
         if (report.FailedCount > 0) LastFailures = [.. report.Failures.Select(Describe)];
 

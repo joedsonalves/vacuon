@@ -130,56 +130,80 @@ public sealed class VolumeIndex
     /// What left the index, measured from the entries themselves. Callers report this
     /// instead of the figure the shell guessed while deleting.
     /// </returns>
-    public Removal MarkDeleted(int index)
+    public Removal MarkDeleted(int index) => MarkDeleted([index]);
+
+    /// <summary>
+    /// Takes several entries, and everything below each of them, out of the index in one pass.
+    /// <para>
+    /// ⚠️ Callers with more than one item must use this rather than call
+    /// <see cref="MarkDeleted(int)"/> in a loop. Freeing a folder needs the child index to
+    /// find what is inside, and every call drops it on the way out — so the next folder
+    /// rebuilt it over the whole volume. Measured on a real index of 3.7 M records: 500
+    /// folders took 24.08 s one call at a time, one rebuild each, with the window frozen.
+    /// </para>
+    /// <para>
+    /// An entry listed twice, or listed beside an ancestor that is also listed, is freed and
+    /// counted once: whichever reaches it first takes it, and the other finds it gone.
+    /// </para>
+    /// </summary>
+    public Removal MarkDeleted(ReadOnlySpan<int> indices)
     {
-        if (index < 0 || index >= Entries.Length) return default;
-        if (!Entries[index].IsInUse) return default;
-
-        // The root is refused by ProtectedPaths and cannot be deleted on disk. Emptying
-        // the whole index because of a bug upstream would be far worse than doing nothing.
-        if (index == RootIndex) return default;
-
-        // Collect before clearing: GetChildren reads the child index, and that index is
-        // built from the very entries this method is about to free.
-        var subtree = new List<int>();
-        var pending = new Stack<int>();
-        pending.Push(index);
-
-        while (pending.Count > 0)
+        // Built once, before anything is freed: the walk reads children from it, and a
+        // rebuild halfway would be built from entries this method has already emptied.
+        // Only a folder needs it. A file has no children, and asking anyway rebuilds the
+        // child index of the whole volume to learn that.
+        foreach (int start in indices)
         {
-            int current = pending.Pop();
-            subtree.Add(current);
+            if (start < 0 || start >= Entries.Length) continue;
+            if (!Entries[start].IsInUse || !Entries[start].IsDirectory) continue;
 
-            // A file has no children, and asking anyway is not free: GetChildren rebuilds the
-            // child index of the whole volume whenever the last mutation dropped it — 55 ms on
-            // 3.7 M records, paid once per file by every caller that frees files in a loop.
-            if (!Entries[current].IsDirectory) continue;
-
-            foreach (int child in GetChildren(current))
-                if (Entries[child].IsInUse) pending.Push(child);
+            BuildChildIndex();
+            break;
         }
 
+        int removed = 0;
         long logical = 0;
         long onDisk = 0;
+        var pending = new Stack<int>();
 
-        foreach (int i in subtree)
+        foreach (int start in indices)
         {
-            ref FileEntry entry = ref Entries[i];
+            if (start < 0 || start >= Entries.Length) continue;
+            if (!Entries[start].IsInUse) continue;
 
-            if (!entry.IsDirectory)
+            // The root is refused by ProtectedPaths and cannot be deleted on disk. Emptying
+            // the whole index because of a bug upstream would be far worse than doing nothing.
+            if (start == RootIndex) continue;
+
+            pending.Push(start);
+
+            while (pending.Count > 0)
             {
-                logical += entry.LogicalSize;
+                int current = pending.Pop();
+                ref FileEntry entry = ref Entries[current];
+                if (!entry.IsInUse) continue;
 
-                // Same rule as TotalBytesOnDisk: a hardlinked file's clusters were never
-                // credited to it, and removing one of its names does not free them either.
-                if (entry.HardLinkCount <= 1) onDisk += GetSizeOnDisk(i);
+                if (entry.IsDirectory)
+                {
+                    foreach (int child in GetChildren(current))
+                        if (Entries[child].IsInUse) pending.Push(child);
+                }
+                else
+                {
+                    logical += entry.LogicalSize;
+
+                    // Same rule as TotalBytesOnDisk: a hardlinked file's clusters were never
+                    // credited to it, and removing one of its names does not free them either.
+                    if (entry.HardLinkCount <= 1) onDisk += GetSizeOnDisk(current);
+                }
+
+                entry.NameLength = 0;
+                removed++;
             }
-
-            entry.NameLength = 0;
         }
 
-        InvalidateAggregates();
-        return new Removal(subtree.Count, logical, onDisk);
+        if (removed > 0) InvalidateAggregates();
+        return new Removal(removed, logical, onDisk);
     }
 
     /// <summary>
