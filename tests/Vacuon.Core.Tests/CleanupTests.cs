@@ -395,6 +395,52 @@ public class RuleEngineTests : IDisposable
     }
 
     [Fact]
+    public void TheReportSaysWhichFilesLeft_SoTheIndexCanBeToldToo()
+    {
+        // It used to carry counts and nothing else. Without the paths, the list could not be
+        // updated, and every cleaned file stayed in the Explorer and the totals until the
+        // next scan.
+        string gone = Write("goes.tmp", 100, ageDays: 1);
+        string held = Write("held.tmp", 100, ageDays: 1);
+
+        var engine = new RuleEngine();
+        CleanupPlan plan = engine.Plan([Rule("**")], CleanupProfile.Quick, false);
+
+        CleanupReport report;
+        using (new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None))
+            report = engine.Execute(plan, CleanupDisposal.Permanent);
+
+        Assert.Equal([gone], report.Done);
+        Assert.Null(report.Quarantine);
+    }
+
+    [Fact]
+    public void TheQuarantineRoute_HandsOverWhereEachFileWent()
+    {
+        string file = Write("aside.tmp", 100, ageDays: 1);
+
+        var engine = new RuleEngine();
+        CleanupPlan plan = engine.Plan([Rule("**")], CleanupProfile.Quick, false);
+        CleanupReport report = engine.Execute(plan, CleanupDisposal.Quarantine);
+
+        try
+        {
+            Assert.Equal([file], report.Done);
+            QuarantineReport quarantine = Assert.IsType<QuarantineReport>(report.Quarantine);
+            Assert.NotNull(Assert.Single(quarantine.Results).StoredName);
+        }
+        finally
+        {
+            // Same tidying as the test above: the store is the real one for this volume.
+            var store = new QuarantineService();
+            foreach (QuarantineBatch batch in store.ListBatches(Path.GetPathRoot(_root)!))
+            {
+                if (batch.BatchId == report.QuarantineBatchId) store.Purge(batch);
+            }
+        }
+    }
+
+    [Fact]
     public void OnlyThePermanentRouteReportsBytesAsFreed()
     {
         Write("a.tmp", 400);

@@ -2736,6 +2736,29 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
     private bool _deleting;
 
     /// <summary>
+    /// Brings the index in line with what a cleanup did: set-aside files are re-parented into
+    /// the quarantine, deleted and recycled ones are taken out.
+    /// </summary>
+    private void AfterCleanup(CleanupReport report)
+    {
+        VolumeIndex? index = Index;
+        if (index is null || report.Done.Count == 0) return;
+
+        Dictionary<string, int> byPath = EntriesAt(report.Done);
+
+        if (report.Quarantine is QuarantineReport quarantine)
+        {
+            ApplyQuarantine(quarantine, byPath);
+            return;
+        }
+
+        var gone = new List<int>(byPath.Count);
+        foreach (int entry in byPath.Values) gone.Add(entry);
+
+        AfterDeletion(index.MarkDeleted(CollectionsMarshal.AsSpan(gone)));
+    }
+
+    /// <summary>
     /// Says what happened — and, for the Recycle Bin, what did not.
     /// <para>
     /// A move to the bin frees nothing. The bytes sit in <c>$Recycle.Bin</c> until it is
@@ -4580,6 +4603,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
 
         var engine = new RuleEngine();
         CleanupReport report = await Task.Run(() => engine.Execute(plan, disposal));
+
+        // ⚠️ And the index is told, as it is after every other way of removing things. The
+        // cleanup used to stop at its report: the files were gone from the disk and still in
+        // the index, so the Explorer, the treemap and the dashboard went on counting them.
+        AfterCleanup(report);
 
         var parts = new List<string>(4)
         {

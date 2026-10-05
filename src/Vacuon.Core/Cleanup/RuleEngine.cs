@@ -343,7 +343,11 @@ public sealed class RuleEngine
 
             return new CleanupReport(
                 report.QuarantinedCount, report.FailedCount, report.BytesHeld,
-                disposal, report.BatchId, [.. report.Failures.Select(f => f.Path)]);
+                disposal, report.BatchId, [.. report.Failures.Select(f => f.Path)])
+            {
+                Done = [.. report.Results.Where(r => r.Succeeded).Select(r => r.Path)],
+                Quarantine = report,
+            };
         }
 
         DeleteReport deleted = new DeleteService().Execute(
@@ -353,7 +357,10 @@ public sealed class RuleEngine
 
         return new CleanupReport(
             deleted.DeletedCount, deleted.FailedCount, deleted.BytesFreed,
-            disposal, null, [.. deleted.Failures.Select(f => f.Path)]);
+            disposal, null, [.. deleted.Failures.Select(f => f.Path)])
+        {
+            Done = [.. deleted.Results.Where(r => r.Succeeded).Select(r => r.Path)],
+        };
     }
 }
 
@@ -383,4 +390,17 @@ public sealed record CleanupReport(
     /// </para>
     /// </summary>
     public bool BytesWereFreed => Disposal == CleanupDisposal.Permanent;
+
+    /// <summary>
+    /// Every path that left its place: deleted, sent to the bin, or set aside.
+    /// <para>
+    /// ⚠️ The counts alone were all the report carried, so nothing downstream could tell
+    /// which files those were — and the list, the totals and the dashboard went on showing
+    /// every one of them after the cleanup, until the next scan.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> Done { get; init; } = [];
+
+    /// <summary>The quarantine's own report, for the route that sets things aside: where each one went, and as what.</summary>
+    public QuarantineReport? Quarantine { get; init; }
 }
