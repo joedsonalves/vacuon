@@ -440,6 +440,47 @@ public class TransferIntegrationTests : IDisposable
         Assert.True(report.BytesWereFreed);
     }
 
+    /// <summary>
+    /// Keeps every report, in order, on the thread that raised it. <see cref="Progress{T}"/>
+    /// would post them to the thread pool, where they arrive late and out of order.
+    /// </summary>
+    private sealed class Recorder : IProgress<TransferProgress>
+    {
+        public List<TransferProgress> Seen { get; } = [];
+
+        public void Report(TransferProgress value)
+        {
+            lock (Seen) Seen.Add(value);
+        }
+    }
+
+    [Fact]
+    public async Task TheSecondPass_SaysWhichFileItIsOn_BeforeTryingIt()
+    {
+        // It used to work in silence after robocopy exited: the last line of the tool stayed
+        // on screen and every figure stood still, for as long as the pass took.
+        string source = Dir("second-pass-source");
+        string destination = Dir("second-pass-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string held = WriteFile(source, "held.bin", 4096);
+
+        using var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.None);
+
+        var service = new FileTransferService();
+        var recorder = new Recorder();
+        await service.ExecuteAsync(service.Plan([source], destination, TransferKind.Copy), recorder);
+
+        // Robocopy names the held file twice, once per attempt; the pass goes back for it once.
+        TransferProgress second = Assert.Single(recorder.Seen, p => p.SecondTryOf > 0);
+        Assert.Equal(1, second.SecondTry);
+        Assert.Equal(1, second.SecondTryOf);
+        Assert.Equal(held, second.CurrentItem, ignoreCase: true);
+
+        // And the closing report is not still inside the pass.
+        Assert.Equal(0, recorder.Seen[^1].SecondTryOf);
+    }
+
     [Fact]
     public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
     {

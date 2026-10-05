@@ -143,9 +143,15 @@ public partial class TransferWindow : Window
             Bar.Value = fraction.Value * 100;
         }
 
-        CurrentText.Text = progress.CurrentItem.Length > 0
-            ? progress.CurrentItem
-            : L.T("transfer.preparing");
+        // The second pass names itself and how far along it is. Without that it was the last
+        // robocopy line standing still over figures that had stopped moving — a window that
+        // looks hung on exactly the batches with the most to go back for.
+        CurrentText.Text = progress.SecondTryOf > 0
+            ? L.T("transfer.secondTry", Format.Count(progress.SecondTry),
+                  Format.Count(progress.SecondTryOf), progress.CurrentItem)
+            : progress.CurrentItem.Length > 0
+                ? progress.CurrentItem
+                : L.T("transfer.preparing");
 
         // Two percentages would be one too many. The overall figure is the one that answers
         // "how much longer"; the per-file one only appears while a single large file is the

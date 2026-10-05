@@ -260,51 +260,69 @@ public sealed class FileTransferService
     {
         int recovered = 0;
 
-        for (int i = 0; i < results.Count; i++)
+        // Counted up front, so the window can say "3 of 120" and not only "3".
+        int total = 0;
+        foreach (TransferItemResult result in results) total += result.FailedPaths.Count;
+
+        int number = 0;
+
+        try
         {
-            TransferItemResult result = results[i];
-            if (result.FailedPaths.Count == 0) continue;
-            if (cancellationToken.IsCancellationRequested) break;
-
-            var stillFailed = new List<string>(result.FailedPaths.Count);
-            long extraBytes = 0;
-
-            foreach (string source in result.FailedPaths)
+            for (int i = 0; i < results.Count; i++)
             {
-                if (cancellationToken.IsCancellationRequested)
+                TransferItemResult result = results[i];
+                if (result.FailedPaths.Count == 0) continue;
+                if (cancellationToken.IsCancellationRequested) break;
+
+                var stillFailed = new List<string>(result.FailedPaths.Count);
+                long extraBytes = 0;
+
+                foreach (string source in result.FailedPaths)
                 {
-                    stillFailed.Add(source);
-                    continue;
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        stillFailed.Add(source);
+                        continue;
+                    }
+
+                    // Said before the attempt, not after it: a file that is going to fail
+                    // reports nothing on its way out, and those are most of what is here.
+                    state.TryingAgain(source, ++number, total);
+
+                    long bytes = await RetryOneAsync(plan.Kind, result.Item, source, state, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    // -1: still out of reach. -2: it is at the destination already, which
+                    // happens when the tool's own retry got it after announcing the failure —
+                    // it is not failed, and this pass did not rescue it either.
+                    if (bytes == -1) stillFailed.Add(source);
+                    else if (bytes >= 0)
+                    {
+                        recovered++;
+                        extraBytes += bytes;
+                    }
                 }
 
-                long bytes = await RetryOneAsync(plan.Kind, result.Item, source, state, cancellationToken)
-                    .ConfigureAwait(false);
+                if (stillFailed.Count == result.FailedPaths.Count) continue;
 
-                // -1: still out of reach. -2: it is at the destination already, which
-                // happens when the tool's own retry got it after announcing the failure —
-                // it is not failed, and this pass did not rescue it either.
-                if (bytes == -1) stillFailed.Add(source);
-                else if (bytes >= 0)
+                // Everything that was missing arrived, so the item is no longer a failure — and
+                // if some of it is still missing, it stays one, with the shorter list.
+                bool finished = stillFailed.Count == 0 && result.Outcome == TransferOutcome.Failed
+                                && Finished(plan.Kind, result.Item);
+
+                results[i] = result with
                 {
-                    recovered++;
-                    extraBytes += bytes;
-                }
+                    Outcome = finished ? TransferOutcome.Done : result.Outcome,
+                    BytesTransferred = result.BytesTransferred + extraBytes,
+                    Message = finished ? null : result.Message,
+                    FailedPaths = stillFailed,
+                };
             }
-
-            if (stillFailed.Count == result.FailedPaths.Count) continue;
-
-            // Everything that was missing arrived, so the item is no longer a failure — and
-            // if some of it is still missing, it stays one, with the shorter list.
-            bool finished = stillFailed.Count == 0 && result.Outcome == TransferOutcome.Failed
-                            && Finished(plan.Kind, result.Item);
-
-            results[i] = result with
-            {
-                Outcome = finished ? TransferOutcome.Done : result.Outcome,
-                BytesTransferred = result.BytesTransferred + extraBytes,
-                Message = finished ? null : result.Message,
-                FailedPaths = stillFailed,
-            };
+        }
+        finally
+        {
+            // Whatever happened in there, the window is not on a second try any more.
+            state.SecondPassOver();
         }
 
         return recovered;
@@ -717,6 +735,10 @@ public sealed class FileTransferService
         private string _current = string.Empty;
         private int? _percent;
 
+        // The second pass's place: which file, of how many. Zero outside it.
+        private int _secondTry;
+        private int _secondTryOf;
+
         // ⚠️ Nullable, not a TimeSpan.MinValue sentinel. Subtracting MinValue from the
         // stopwatch overflows, and it threw on the very first progress report — so a
         // transfer with nobody watching worked and one with the window open died at the
@@ -957,7 +979,32 @@ public sealed class FileTransferService
             }
         }
 
-        public void Report(TransferPhase phase, string? current)
+        /// <summary>Says which file the second pass is about to try, before it tries it.</summary>
+        public void TryingAgain(string path, int number, int of)
+        {
+            lock (_gate)
+            {
+                _secondTry = number;
+                _secondTryOf = of;
+                _percent = null;
+            }
+
+            // The first one past the throttle: robocopy's last line went out a moment ago, and
+            // a pass that fails fast on one file would otherwise never get onto the screen.
+            Report(TransferPhase.Running, path, force: number == 1);
+        }
+
+        /// <summary>Ends the second pass, so the closing report is not read as still inside it.</summary>
+        public void SecondPassOver()
+        {
+            lock (_gate)
+            {
+                _secondTry = 0;
+                _secondTryOf = 0;
+            }
+        }
+
+        public void Report(TransferPhase phase, string? current, bool force = false)
         {
             if (_progress is null) return;
 
@@ -968,7 +1015,7 @@ public sealed class FileTransferService
                 TimeSpan now = _clock.Elapsed;
 
                 bool terminal = phase is not (TransferPhase.Running or TransferPhase.Preparing);
-                if (!terminal && _lastReport is TimeSpan last && now - last < ReportEvery) return;
+                if (!terminal && !force && _lastReport is TimeSpan last && now - last < ReportEvery) return;
 
                 _lastReport = now;
                 if (current is not null) _current = current;
@@ -986,7 +1033,11 @@ public sealed class FileTransferService
                     _meter.FilesPerSecond,
                     now,
                     _meter.Estimate(_plan.Bytes - _bytes),
-                    _percent);
+                    _percent)
+                {
+                    SecondTry = _secondTry,
+                    SecondTryOf = _secondTryOf,
+                };
             }
 
             _progress.Report(snapshot);

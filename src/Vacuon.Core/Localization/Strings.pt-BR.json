@@ -868,6 +868,7 @@
   "transfer.pathNotCopied": "A área de transferência não aceitou — o caminho continua na tela",
   "transfer.recovered": "{0} recuperados numa segunda tentativa",
   "transfer.recoveredOne": "{0} recuperado numa segunda tentativa",
+  "transfer.secondTry": "Segunda tentativa, {0} de {1}: {2}",
   "transfer.listBehind": "isto foi grande demais para entrar na lista na hora — varra de novo para ver tudo",
   "transfer.heldBy": "em uso por {0}",
   "transfer.heldByService": "em uso pelo serviço {0}",

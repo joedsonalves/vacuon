@@ -163,6 +163,21 @@ public sealed record TransferProgress(
     public double? Fraction => BytesTotal > 0
         ? Math.Clamp((double)BytesDone / BytesTotal, 0, 1)
         : null;
+
+    /// <summary>
+    /// During the second pass, the number of the file it is on, counting from one; zero
+    /// outside it. <see cref="SecondTryOf"/> is how many it has to go through.
+    /// <para>
+    /// The second pass goes back for what robocopy could not take, one file at a time, after
+    /// the tool has exited. It used to do that without a word: the last robocopy line stayed
+    /// on screen and every figure stood still, which on a batch with thousands of refusals is
+    /// a window that looks hung while it works.
+    /// </para>
+    /// </summary>
+    public int SecondTry { get; init; }
+
+    /// <summary>How many files the second pass is going back for; zero outside it.</summary>
+    public int SecondTryOf { get; init; }
 }
 
 /// <summary>
