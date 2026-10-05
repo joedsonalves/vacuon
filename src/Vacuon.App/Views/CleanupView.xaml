@@ -30,7 +30,8 @@
                 <StackPanel Orientation="Horizontal">
                     <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
                             Content="{DynamicResource S.cleanup.scan}"
-                            Command="{Binding ScanForJunkCommand}"/>
+                            Command="{Binding ScanForJunkCommand}"
+                            IsEnabled="{Binding CanUseCleanup}"/>
 
                     <Border Width="1" Margin="14,2" Background="{DynamicResource Stroke.Subtle}"/>
 
@@ -39,14 +40,17 @@
                     <RadioButton GroupName="profile" VerticalAlignment="Center"
                                  Content="{DynamicResource S.cleanup.profileQuick}"
                                  IsChecked="{Binding IsQuickProfile, Mode=OneWay}"
+                                 IsEnabled="{Binding CanUseCleanup}"
                                  Checked="OnProfileQuick"/>
                     <RadioButton GroupName="profile" Margin="12,0,0,0" VerticalAlignment="Center"
                                  Content="{DynamicResource S.cleanup.profileDeep}"
                                  IsChecked="{Binding IsDeepProfile, Mode=OneWay}"
+                                 IsEnabled="{Binding CanUseCleanup}"
                                  Checked="OnProfileDeep"/>
                     <RadioButton GroupName="profile" Margin="12,0,0,0" VerticalAlignment="Center"
                                  Content="{DynamicResource S.cleanup.profileCustom}"
                                  IsChecked="{Binding IsCustomProfile, Mode=OneWay}"
+                                 IsEnabled="{Binding CanUseCleanup}"
                                  Checked="OnProfileCustom"/>
                 </StackPanel>
 
@@ -156,8 +160,9 @@
                                Text="{Binding RestorePointHint}"/>
                 </StackPanel>
 
-              <StackPanel Orientation="Horizontal">
-                <!-- Reversible first and primary; permanent last and red. -->
+              <StackPanel Orientation="Horizontal" IsEnabled="{Binding CanUseCleanup}">
+                <!-- Reversible first and primary; permanent last and red. Off while a run is
+                     going, so a second one cannot start over it. -->
                 <Button Style="{StaticResource Button.Primary}" FontSize="12" Padding="12,6"
                         Content="{DynamicResource S.cleanup.toQuarantine}" Click="OnQuarantine"/>
                 <Button Style="{StaticResource Button.Base}" FontSize="12" Padding="10,6" Margin="8,0,0,0"
