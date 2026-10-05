@@ -150,6 +150,11 @@ public sealed class VolumeIndex
             int current = pending.Pop();
             subtree.Add(current);
 
+            // A file has no children, and asking anyway is not free: GetChildren rebuilds the
+            // child index of the whole volume whenever the last mutation dropped it — 55 ms on
+            // 3.7 M records, paid once per file by every caller that frees files in a loop.
+            if (!Entries[current].IsDirectory) continue;
+
             foreach (int child in GetChildren(current))
                 if (Entries[child].IsInUse) pending.Push(child);
         }
@@ -520,6 +525,17 @@ public sealed class VolumeIndex
     private int[]? _childList;
 
     /// <summary>
+    /// How many times the child index has been built over the whole entry array.
+    /// <para>
+    /// For the tests, which hold this to a handful across an operation that touches
+    /// thousands of entries. Each build is two passes over every record on the volume — 55 ms
+    /// on 3.7 M — and a loop that triggers one per item is a freeze that no profiler run on a
+    /// small test index would ever show.
+    /// </para>
+    /// </summary>
+    internal int ChildIndexBuilds { get; private set; }
+
+    /// <summary>
     /// Constrói o índice de filhos em duas passadas O(n), no formato CSR
     /// (dois arrays planos, como matriz esparsa).
     /// <para>
@@ -532,6 +548,8 @@ public sealed class VolumeIndex
     public void BuildChildIndex()
     {
         if (_childStart is not null) return;
+
+        ChildIndexBuilds++;
 
         int n = Entries.Length;
         var counts = new int[n + 1];

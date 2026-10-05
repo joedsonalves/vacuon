@@ -43,10 +43,26 @@ public static class IndexGraft
     /// </summary>
     public const int MaxEntries = 20_000;
 
+    /// <summary>What every folder in the graft is read with.</summary>
+    private static readonly EnumerationOptions Children = new()
+    {
+        AttributesToSkip = 0,
+        IgnoreInaccessible = true,
+        RecurseSubdirectories = false,
+    };
+
     /// <summary>
     /// Plants <paramref name="path"/> and everything under it into <paramref name="index"/>.
     /// </summary>
-    public static GraftResult AddTree(VolumeIndex index, string path)
+    public static GraftResult AddTree(VolumeIndex index, string path) =>
+        AddTree(index, path, FileIdentity.RecordNumberOf);
+
+    /// <param name="recordOf">
+    /// Where record numbers come from. The file system, always, outside the tests — which
+    /// hand in small numbers so the index they build does not have to be the size of a real
+    /// MFT to hold them.
+    /// </param>
+    internal static GraftResult AddTree(VolumeIndex index, string path, Func<string, long> recordOf)
     {
         ArgumentNullException.ThrowIfNull(index);
 
@@ -60,8 +76,8 @@ public static class IndexGraft
         if (root is null || !root.StartsWith(index.Volume.Root, StringComparison.OrdinalIgnoreCase))
             return new GraftResult(0, false);
 
-        bool isDirectory = Directory.Exists(full);
-        if (!isDirectory && !File.Exists(full)) return new GraftResult(0, false);
+        FileSystemInfo top = Directory.Exists(full) ? new DirectoryInfo(full) : new FileInfo(full);
+        if (!top.Exists) return new GraftResult(0, false);
 
         string? parentPath = Path.GetDirectoryName(full);
         if (string.IsNullOrEmpty(parentPath)) return new GraftResult(0, false);
@@ -71,68 +87,82 @@ public static class IndexGraft
         int parent = MoveTarget.Locate(index, parentPath);
         if (parent < 0) return new GraftResult(0, false);
 
+        // The one lookup by path in the whole graft. Everything below it is matched by name
+        // against the folder it sits in — see Plant for why that matters.
+        int known = index.FindEntry(full);
+
         int added = 0;
-        bool complete = Plant(index, full, parent, isDirectory, ref added);
+        bool complete = Plant(index, top, parent, known, recordOf, ref added);
 
         return new GraftResult(added, complete);
     }
 
     /// <summary>One entry and, when it is a folder, everything inside it.</summary>
-    private static bool Plant(VolumeIndex index, string path, int parent, bool isDirectory, ref int added)
+    /// <param name="known">The entry the index already holds for this item, or -1 when it holds none.</param>
+    private static bool Plant(VolumeIndex index, FileSystemInfo item, int parent, int known,
+                              Func<string, long> recordOf, ref int added)
     {
         if (added >= MaxEntries) return false;
 
-        int entry = Adopt(index, path, parent, isDirectory);
+        int entry = known >= 0 ? known : Adopt(index, item, parent, recordOf);
         if (entry < 0) return false;
 
         added++;
-        if (!isDirectory) return true;
+        if (item is not DirectoryInfo folder) return true;
 
-        // Enumerated with attributes in hand, so telling a folder from a file costs nothing
-        // extra — the entry the enumerator already read carries them.
-        var options = new EnumerationOptions
-        {
-            AttributesToSkip = 0,
-            IgnoreInaccessible = true,
-            RecurseSubdirectories = false,
-        };
+        // ⚠️ Matched by name against a table read once per folder, never with FindEntry per
+        // child. FindEntry walks the child index, and every AddFile drops that index — so a
+        // lookup per child rebuilt it per child, across the whole volume: 55 ms a rebuild on
+        // 3.7 M records. Measured on a fresh scan of a real C:, robocopy copied 5,000 files
+        // in 1.6 s and the graft then held the window for 258 s; it now takes 0.18 s. A
+        // folder adopted just now has nothing below it in the index to find, so it gets no
+        // table at all.
+        Dictionary<string, int>? existing = known >= 0 ? ChildrenOf(index, entry) : null;
 
         bool complete = true;
 
-        foreach (string child in Directory.EnumerateFileSystemEntries(path, "*", options))
+        // FileSystemInfo, not paths: the enumerator has already read each entry's size,
+        // times and attributes, and asking for them again was a second call per file.
+        foreach (FileSystemInfo child in folder.EnumerateFileSystemInfos("*", Children))
         {
-            bool childIsDirectory = Directory.Exists(child);
-            if (!Plant(index, child, entry, childIsDirectory, ref added)) complete = false;
+            int childKnown = existing is not null && existing.TryGetValue(child.Name, out int found) ? found : -1;
+            if (!Plant(index, child, entry, childKnown, recordOf, ref added)) complete = false;
         }
 
         return complete;
     }
 
-    /// <summary>
-    /// The entry for a path: the one already there, or a new one at its real record number.
-    /// </summary>
-    private static int Adopt(VolumeIndex index, string path, int parent, bool isDirectory)
+    /// <summary>The entries the index holds directly under a folder, by name.</summary>
+    private static Dictionary<string, int> ChildrenOf(VolumeIndex index, int folder)
     {
-        int found = index.FindEntry(path);
-        if (found >= 0) return found;
+        var children = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        long record = FileIdentity.RecordNumberOf(path);
+        foreach (int child in index.GetChildren(folder))
+        {
+            if (index.Entries[child].IsInUse) children[index.GetName(child).ToString()] = child;
+        }
+
+        return children;
+    }
+
+    /// <summary>A new entry for something the index has never seen, at its real record number.</summary>
+    private static int Adopt(VolumeIndex index, FileSystemInfo item, int parent, Func<string, long> recordOf)
+    {
+        long record = recordOf(item.FullName);
         if (record <= 0 || record >= index.Entries.Length) return -1;
 
-        if (!ClaimRecord(index, (int)record)) return -1;
+        if (!ClaimRecord(index, (int)record, recordOf)) return -1;
 
-        ReadOnlySpan<char> name = Path.GetFileName(path.AsSpan().TrimEnd('\\'));
+        ReadOnlySpan<char> name = item.Name;
         if (name.Length == 0) return -1;
 
-        if (isDirectory) return index.AddDirectory((int)record, parent, name);
+        if (item is not FileInfo file) return index.AddDirectory((int)record, parent, name);
 
-        var info = new FileInfo(path);
-
-        return index.AddFile((int)record, parent, name, info.Length,
-                             AllocatedFor(info.Length, (int)index.Volume.BytesPerCluster),
-                             info.LastWriteTimeUtc, info.CreationTimeUtc,
-                             (info.Attributes & FileAttributes.Hidden) != 0,
-                             (info.Attributes & FileAttributes.System) != 0);
+        return index.AddFile((int)record, parent, name, file.Length,
+                             AllocatedFor(file.Length, (int)index.Volume.BytesPerCluster),
+                             file.LastWriteTimeUtc, file.CreationTimeUtc,
+                             (file.Attributes & FileAttributes.Hidden) != 0,
+                             (file.Attributes & FileAttributes.System) != 0);
     }
 
     /// <summary>
@@ -152,7 +182,7 @@ public static class IndexGraft
     /// walks away from it rather than papering over it with a plausible-looking entry.
     /// </para>
     /// </summary>
-    private static bool ClaimRecord(VolumeIndex index, int record, int depth = 0)
+    private static bool ClaimRecord(VolumeIndex index, int record, Func<string, long> recordOf, int depth = 0)
     {
         if (!index.Entries[record].IsInUse) return true;
 
@@ -169,8 +199,14 @@ public static class IndexGraft
         // turning up in the way: it is rewritten under the same name every scan, so the path
         // is always there while the record behind it changes. Asking the file system which
         // record that path is now is the only question with an answer.
-        long current = FileIdentity.RecordNumberOf(occupant);
+        long current = recordOf(occupant);
         if (current == record) return false;
+
+        // Read before the entry is freed. The occupant's path was built from this very
+        // chain, so if it still exists under another record its folder is this entry —
+        // and knowing that spares a FindEntry, which would rebuild the child index once
+        // per displaced file.
+        int folder = (int)index.Entries[record].ParentIndex;
 
         index.MarkDeleted(record);
         if (index.Entries[record].IsInUse) return false;
@@ -185,22 +221,18 @@ public static class IndexGraft
         // that record's occupant on another. Two levels covers what a real disk produced
         // here; deeper than that the bytes wait for the next scan rather than the graft
         // walking a chain of its own making.
-        if (depth < 2) Refile(index, occupant, current, depth + 1);
+        if (depth < 2) Refile(index, occupant, folder, current, recordOf, depth + 1);
 
         return true;
     }
 
     /// <summary>Puts a file that moved records back into the index, at the record it has now.</summary>
-    private static void Refile(VolumeIndex index, string path, long record, int depth)
+    private static void Refile(VolumeIndex index, string path, int parent, long record,
+                               Func<string, long> recordOf, int depth)
     {
         if (record <= 0 || record >= index.Entries.Length) return;
-        if (!ClaimRecord(index, (int)record, depth)) return;
-
-        string? parentPath = Path.GetDirectoryName(path);
-        if (string.IsNullOrEmpty(parentPath)) return;
-
-        int parent = index.FindEntry(parentPath);
-        if (parent < 0) return;
+        if (parent < 0 || parent >= index.Entries.Length || !index.Entries[parent].IsInUse) return;
+        if (!ClaimRecord(index, (int)record, recordOf, depth)) return;
 
         var info = new FileInfo(path);
         if (!info.Exists) return;
