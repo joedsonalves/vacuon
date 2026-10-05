@@ -214,7 +214,9 @@ public class VolumeIndexTests
     [Fact]
     public void HardLinkedFile_CountsAgainstDiskOnlyOnce()
     {
-        // Contar N vezes faria pastas como WinSxS parecerem ocupar o triplo do real.
+        // One record, one entry, credited once. Not N times, which would have WinSxS look
+        // three times its size — and not zero times either, which is what this test used to
+        // assert: measured on a real C:, that hid 10.48 GiB from the volume's total.
         var names = new NameBlob(64);
         var entries = new FileEntry[8];
 
@@ -242,8 +244,8 @@ public class VolumeIndexTests
 
         Assert.Equal(1024, index.TotalLogicalBytes);
 
-        Assert.Equal(0, index.TotalBytesOnDisk);      // hardlink: não credita a ninguém
-        Assert.Equal(0, index.GetSubtreeSizeOnDisk(5));
+        Assert.Equal(4096, index.TotalBytesOnDisk);
+        Assert.Equal(4096, index.GetSubtreeSizeOnDisk(5));
     }
 
     [Fact]

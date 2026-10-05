@@ -1857,7 +1857,6 @@ static class Commands
         {
             ref FileEntry e = ref index.Entries[i];
             if (!e.IsInUse || e.IsDirectory) continue;
-            if (e.HardLinkCount > 1) continue; // mesma regra do total, senão não explica o total
 
             long onDisk = index.GetSizeOnDisk(i);
             if (onDisk > 0) worst.Add((i, onDisk));
