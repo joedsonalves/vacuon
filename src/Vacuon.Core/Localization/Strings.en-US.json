@@ -423,6 +423,7 @@
   "snapshot.refusedJournalReplaced": "the change journal was recreated — its numbering no longer matches",
   "snapshot.refusedJournalWrapped": "the change journal discarded the records we needed",
   "snapshot.refusedNeedsElevation": "reading the change journal requires running as Administrator",
+  "snapshot.refusedOutgrown": "the volume gained file records while the change journal was being read",
   "snapshot.age.seconds": "{0} s",
   "snapshot.age.minutes": "{0} min",
   "snapshot.age.hours": "{0} h",

@@ -100,6 +100,82 @@ public class IndexSnapshotTests : IDisposable
     }
 
     [Fact]
+    public void ASnapshotLoadsWithRoomForTheRecordsTheMftGainedSince()
+    {
+        // The MFT only grows. Loaded at the size it had, the index has no slot for a file
+        // created in a newer record — measured on my C:, 161,024 records newer than its
+        // snapshot — and the journal update dropped every one of them without a word.
+        IndexSnapshot.Save(Sample(), JournalMark.None, Path_);
+
+        LoadedSnapshot loaded = IndexSnapshot.Load(Path_, 0, capacity: 40)!;
+
+        Assert.Equal(40, loaded.Index.Entries.Length);
+        Assert.Equal("render.mp4", loaded.Index.GetName(7).ToString());
+        Assert.Equal(9_000_000_000, loaded.Index.Entries[7].LogicalSize);
+        Assert.False(loaded.Index.Entries[39].IsInUse);
+
+        // Asking for less than it holds never cuts it short.
+        Assert.Equal(16, IndexSnapshot.Load(Path_, 0, capacity: 4)!.Index.Entries.Length);
+    }
+
+    [Fact]
+    public void AJournalRecordPastTheEndOfTheIndex_IsNotDroppedInSilence()
+    {
+        VolumeIndex index = Sample();
+        var applier = new DeltaApplier(index);
+
+        // In range: placed, and nothing outgrown.
+        var inside = new UsnRecord
+        {
+            IsValid = true,
+            FileReferenceNumber = 9,
+            ParentFileReferenceNumber = 6,
+            Reason = UsnReason.FileCreate,
+            FileName = "novo.txt",
+        };
+        applier.Apply(ref inside);
+
+        Assert.False(applier.Outgrown);
+        Assert.Equal("novo.txt", index.GetName(9).ToString());
+
+        // A record the index never held, going away: no loss.
+        var goneOutside = new UsnRecord { IsValid = true, FileReferenceNumber = 20, Reason = UsnReason.FileDelete };
+        applier.Apply(ref goneOutside);
+        Assert.False(applier.Outgrown);
+
+        // A file created in a record past the end has nowhere to go.
+        var outside = new UsnRecord
+        {
+            IsValid = true,
+            FileReferenceNumber = 20,
+            ParentFileReferenceNumber = 6,
+            Reason = UsnReason.FileCreate,
+            FileName = "fora.txt",
+        };
+        applier.Apply(ref outside);
+        Assert.True(applier.Outgrown);
+    }
+
+    [Fact]
+    public void AFileMovedIntoAFolderPastTheEndOfTheIndex_IsNotDroppedInSilenceEither()
+    {
+        VolumeIndex index = Sample();
+        var applier = new DeltaApplier(index);
+
+        var moved = new UsnRecord
+        {
+            IsValid = true,
+            FileReferenceNumber = 8,
+            ParentFileReferenceNumber = 30,
+            Reason = UsnReason.RenameNewName,
+            FileName = "nota.txt",
+        };
+        applier.Apply(ref moved);
+
+        Assert.True(applier.Outgrown);
+    }
+
+    [Fact]
     public void MissingFileLoadsAsNull()
     {
         Assert.Null(IndexSnapshot.Load(System.IO.Path.Combine(_dir, "absent.vsnap"), 0));
@@ -232,6 +308,7 @@ public class SnapshotDescriptionTests
             SnapshotDescription.Refusal(IncrementalRefusal.JournalReplaced),
             SnapshotDescription.Refusal(IncrementalRefusal.JournalWrapped),
             SnapshotDescription.Refusal(IncrementalRefusal.NeedsElevation),
+            SnapshotDescription.Refusal(IncrementalRefusal.MftOutgrown),
         ];
 
         Assert.Equal(texts.Length, texts.Distinct().Count());

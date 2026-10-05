@@ -21,6 +21,11 @@ public enum IncrementalRefusal
     JournalWrapped,
     /// <summary>Reading the journal needs an elevated handle on the volume.</summary>
     NeedsElevation,
+    /// <summary>
+    /// The journal names a record past the end of the index, even after it was sized to the
+    /// MFT — the MFT grew while it was being read.
+    /// </summary>
+    MftOutgrown,
 }
 
 public sealed record IncrementalResult(
@@ -71,7 +76,11 @@ public sealed class IncrementalUpdater(string? snapshotDirectory = null)
         {
             string path = IndexSnapshot.PathFor(device.SerialNumber, _directory);
 
-            LoadedSnapshot? snapshot = IndexSnapshot.Load(path, device.SerialNumber);
+            // ⚠️ Room for every record the MFT has now, not just the ones it had at the
+            // snapshot. A record past the end of the index was dropped without a word, so a
+            // file created in one never entered the list or the totals — and the MFT had grown
+            // by 161,024 records on my C: since its snapshot of 10 September.
+            LoadedSnapshot? snapshot = IndexSnapshot.Load(path, device.SerialNumber, RecordsIn(device.VolumeData));
             if (snapshot is null)
                 return Refuse(File.Exists(path)
                     ? IncrementalRefusal.UnusableSnapshot
@@ -107,6 +116,10 @@ public sealed class IncrementalUpdater(string? snapshotDirectory = null)
             {
                 return Refuse(IncrementalRefusal.JournalWrapped, snapshot);
             }
+
+            // A record past the end even now: the MFT grew while this was reading. What is in
+            // that record has nowhere to go, and an index that leaves it out says nothing.
+            if (applier.Outgrown) return Refuse(IncrementalRefusal.MftOutgrown, snapshot);
 
             applier.Finish();
 
@@ -148,6 +161,12 @@ public sealed class IncrementalUpdater(string? snapshotDirectory = null)
         }
     }
 
+    /// <summary>How many records the MFT holds right now.</summary>
+    private static int RecordsIn(NtfsVolumeData data) =>
+        data.BytesPerFileRecordSegment == 0
+            ? 0
+            : (int)Math.Min(data.MftValidDataLength / data.BytesPerFileRecordSegment, int.MaxValue);
+
     private static IncrementalResult Refuse(IncrementalRefusal reason, LoadedSnapshot? snapshot = null) =>
         new(null, reason, 0, snapshot?.Journal ?? JournalMark.None,
             snapshot?.TakenAtUtc ?? DateTime.MinValue);
@@ -169,10 +188,23 @@ internal sealed class DeltaApplier(VolumeIndex index)
 
     public int ChangeCount { get; private set; }
 
+    /// <summary>
+    /// Whether a record named something the index has no slot for — a file in a record past
+    /// its end, or one placed in a folder that is. Either one would be left out of the index
+    /// without a trace, so the caller refuses the delta instead.
+    /// </summary>
+    public bool Outgrown { get; private set; }
+
     public void Apply(ref UsnRecord record)
     {
         int entry = (int)record.RecordNumber;
-        if (entry < 0 || entry >= index.Entries.Length) return;
+
+        if (entry < 0 || entry >= index.Entries.Length)
+        {
+            // Something the index never held going away is no loss to it.
+            if ((record.Reason & UsnReason.FileDelete) == 0) Outgrown = true;
+            return;
+        }
 
         ChangeCount++;
 
@@ -196,6 +228,12 @@ internal sealed class DeltaApplier(VolumeIndex index)
 
         if (namesThis && !record.FileName.IsEmpty)
         {
+            if (record.ParentRecordNumber >= (uint)index.Entries.Length)
+            {
+                Outgrown = true;
+                return;
+            }
+
             target.RecordNumber = record.RecordNumber;
             target.ParentIndex = record.ParentRecordNumber;
             target.NameOffset = index.Names.Append(record.FileName);

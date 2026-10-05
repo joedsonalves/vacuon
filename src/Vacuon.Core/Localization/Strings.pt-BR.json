@@ -423,6 +423,7 @@
   "snapshot.refusedJournalReplaced": "o diário de alterações foi recriado — a numeração não bate mais",
   "snapshot.refusedJournalWrapped": "o diário de alterações descartou os registros de que precisávamos",
   "snapshot.refusedNeedsElevation": "ler o diário de alterações exige executar como Administrador",
+  "snapshot.refusedOutgrown": "o volume ganhou registros de arquivo enquanto o diário de alterações era lido",
   "snapshot.age.seconds": "{0} s",
   "snapshot.age.minutes": "{0} min",
   "snapshot.age.hours": "{0} h",

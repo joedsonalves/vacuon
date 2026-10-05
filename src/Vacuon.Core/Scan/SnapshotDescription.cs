@@ -27,6 +27,7 @@ public static class SnapshotDescription
         IncrementalRefusal.JournalReplaced => "snapshot.refusedJournalReplaced",
         IncrementalRefusal.JournalWrapped => "snapshot.refusedJournalWrapped",
         IncrementalRefusal.NeedsElevation => "snapshot.refusedNeedsElevation",
+        IncrementalRefusal.MftOutgrown => "snapshot.refusedOutgrown",
         _ => "snapshot.refusedNoSnapshot",
     });
 

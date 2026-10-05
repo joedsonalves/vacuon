@@ -125,7 +125,11 @@ public static class IndexSnapshot
     /// <c>null</c> when the file is missing, truncated, from another schema, or for a
     /// different volume. Every one of those means "rescan", never "guess".
     /// </returns>
-    public static LoadedSnapshot? Load(string path, long expectedVolumeSerial)
+    /// <param name="capacity">
+    /// How many entries the loaded index must have room for, at least: the MFT's record count
+    /// now. A snapshot holds as many as the MFT had when it was taken, and the MFT only grows.
+    /// </param>
+    public static LoadedSnapshot? Load(string path, long expectedVolumeSerial, int capacity = 0)
     {
         if (!File.Exists(path)) return null;
 
@@ -152,6 +156,7 @@ public static class IndexSnapshot
             long lastUsn = BinaryPrimitives.ReadInt64LittleEndian(header[44..]);
 
             if (entryCount is < 0 or > 100_000_000) return null;
+            if (capacity is < 0 or > 100_000_000) return null;
             if (nameChars is < 0 or > 500_000_000) return null;
             if (adsCount < 0) return null;
 
@@ -169,8 +174,10 @@ public static class IndexSnapshot
             string label = ReadUtf8(stream, labelLength);
             string fileSystem = ReadUtf8(stream, fileSystemLength);
 
-            var entries = new FileEntry[entryCount];
-            if (!ReadExact(stream, MemoryMarshal.AsBytes(entries.AsSpan()))) return null;
+            // Sized once, here, rather than grown after: the array is 64 bytes a record, a
+            // quarter of a gigabyte on my C:, and a copy would hold two of them at once.
+            var entries = new FileEntry[Math.Max(entryCount, capacity)];
+            if (!ReadExact(stream, MemoryMarshal.AsBytes(entries.AsSpan(0, entryCount)))) return null;
 
             char[] names = new char[nameChars];
             if (!ReadExact(stream, MemoryMarshal.AsBytes(names.AsSpan()))) return null;
