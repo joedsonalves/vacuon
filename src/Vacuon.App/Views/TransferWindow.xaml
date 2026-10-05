@@ -148,24 +148,48 @@
                         window open at all, and retyping a path out of a screenshot is not a
                         thing to ask of anybody.
                     -->
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
-                        <ItemsControl x:Name="FailedFilesList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="0,3" Cursor="Hand"
-                                                Background="Transparent"
-                                                MouseLeftButtonUp="OnCopyPath">
-                                        <TextBlock Text="{Binding Path}" TextWrapping="Wrap"
-                                                   Style="{StaticResource Text.Sub}"/>
-                                        <TextBlock Text="{Binding Held}" TextWrapping="Wrap"
-                                                   Style="{StaticResource Text.Sub}" FontSize="11"
-                                                   Foreground="{DynamicResource Risk.Notable}"
-                                                   Visibility="{Binding HeldVisibility}"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <!--
+                        Virtualised, with the scroller inside its own template. It used to be a
+                        plain ItemsControl in a ScrollViewer, which builds every row up front:
+                        measured on this window, opening the list took 1.2 s for 2,000 files and
+                        2.8 s for 5,000, and a batch that loses that many is exactly the one
+                        somebody opens the list for. HorizontalScrollBarVisibility stays Disabled
+                        or the paths would stop wrapping.
+                    -->
+                    <ItemsControl x:Name="FailedFilesList" MaxHeight="220"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel"
+                                  ScrollViewer.CanContentScroll="True">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              CanContentScroll="True" Focusable="False">
+                                    <ItemsPresenter/>
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,3" Cursor="Hand"
+                                            Background="Transparent"
+                                            MouseLeftButtonUp="OnCopyPath">
+                                    <TextBlock Text="{Binding Path}" TextWrapping="Wrap"
+                                               Style="{StaticResource Text.Sub}"/>
+                                    <TextBlock Text="{Binding Held}" TextWrapping="Wrap"
+                                               Style="{StaticResource Text.Sub}" FontSize="11"
+                                               Foreground="{DynamicResource Risk.Notable}"
+                                               Visibility="{Binding HeldVisibility}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <TextBlock x:Name="CopyHint" Style="{StaticResource Text.Sub}" Margin="0,8,0,0"
                                TextWrapping="Wrap" Foreground="{DynamicResource Text.Muted}"/>
