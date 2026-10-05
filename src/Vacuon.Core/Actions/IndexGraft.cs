@@ -84,7 +84,7 @@ public static class IndexGraft
 
         // The destination folder itself may be younger than the scan — a copy into a folder
         // created on the spot. MoveTarget adopts the whole chain, or gives up.
-        int parent = MoveTarget.Locate(index, parentPath);
+        int parent = MoveTarget.Locate(index, parentPath, recordOf);
         if (parent < 0) return new GraftResult(0, false);
 
         // The one lookup by path in the whole graft. Everything below it is matched by name
@@ -198,6 +198,13 @@ public static class IndexGraft
     /// walks away from it rather than papering over it with a plausible-looking entry.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Frees <paramref name="record"/> for a new owner when the disk says its occupant is
+    /// gone. True when the record is free now.
+    /// </summary>
+    internal static bool Claim(VolumeIndex index, int record, Func<string, long> recordOf) =>
+        ClaimRecord(index, record, recordOf);
+
     private static bool ClaimRecord(VolumeIndex index, int record, Func<string, long> recordOf, int depth = 0)
     {
         if (!index.Entries[record].IsInUse) return true;

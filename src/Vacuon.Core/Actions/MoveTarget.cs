@@ -25,7 +25,11 @@ public static class MoveTarget
     /// that walked the API instead of the MFT, or a record number the index already uses
     /// for something else. The caller then has a stale index and has to say so.
     /// </returns>
-    public static int Locate(VolumeIndex index, string folderPath)
+    public static int Locate(VolumeIndex index, string folderPath) =>
+        Locate(index, folderPath, FileIdentity.RecordNumberOf);
+
+    /// <param name="recordOf">Where record numbers come from: the file system, outside the tests.</param>
+    internal static int Locate(VolumeIndex index, string folderPath, Func<string, long> recordOf)
     {
         if (string.IsNullOrWhiteSpace(folderPath)) return -1;
 
@@ -51,11 +55,19 @@ public static class MoveTarget
 
         // Recursion depth is the path depth — "D:\a\b\c" at worst. Each level either
         // finds an entry or adopts one, so a fresh chain of folders comes in whole.
-        int parent = Locate(index, parentPath);
+        int parent = Locate(index, parentPath, recordOf);
         if (parent < 0) return -1;
 
-        long record = FileIdentity.RecordNumberOf(full);
+        long record = recordOf(full);
         if (record <= 0 || record >= index.Entries.Length) return -1;
+
+        // ⚠️ A folder made a moment ago very often lands on a record the index still gives to
+        // a file deleted since the scan — NTFS recycles records fast. This gave up on that, so
+        // the most natural way to use "Move to", into a folder just made, ended with the list
+        // saying it could not place what had moved; and the quarantine, whose batch folder is
+        // made on the spot every time, could end every run the same way. The graft already
+        // frees such a record when the disk says its occupant is gone, and so does this now.
+        if (!IndexGraft.Claim(index, (int)record, recordOf)) return -1;
 
         return index.AddDirectory((int)record, parent, Path.GetFileName(full).AsSpan());
     }

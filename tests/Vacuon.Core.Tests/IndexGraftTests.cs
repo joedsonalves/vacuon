@@ -227,6 +227,48 @@ public class IndexGraftTests : IDisposable
     }
 
     [Fact]
+    public void AFolderMadeAMomentAgo_IsAdoptedOverARecordAFileLeftBehind()
+    {
+        // "Move to" into a folder just made, or the quarantine's batch folder: the folder very
+        // often gets the record of a file deleted since the scan. Locate used to give up, and
+        // the list said it could not place what had moved.
+        string folder = Path.Combine(_root, "nova");
+        Directory.CreateDirectory(folder);
+
+        VolumeIndex index = IndexDownToRoot(room: 8, out int rootEntry, out int firstFree);
+        index.AddFile(firstFree, rootEntry, "apagado-depois.tmp", 500, 4096, DateTime.UtcNow, DateTime.UtcNow);
+
+        long before = index.TotalLogicalBytes;
+
+        // The folder's record is the stale file's; the stale file's own path resolves to nothing.
+        int located = MoveTarget.Locate(index, folder,
+            path => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase) ? firstFree : -1);
+
+        Assert.Equal(firstFree, located);
+        Assert.True(index.Entries[located].IsDirectory);
+        Assert.Equal(rootEntry, (int)index.Entries[located].ParentIndex);
+        Assert.Equal(before - 500, index.TotalLogicalBytes);
+    }
+
+    [Fact]
+    public void AFolderWhoseRecordIsStillReallyTaken_IsNotForcedIn()
+    {
+        // The disk decides: an occupant that is still that record is a real disagreement, and
+        // papering over it would bury it.
+        string folder = Path.Combine(_root, "nova");
+        Directory.CreateDirectory(folder);
+
+        VolumeIndex index = IndexDownToRoot(room: 8, out int rootEntry, out int firstFree);
+        index.AddFile(firstFree, rootEntry, "ainda-aqui.tmp", 500, 4096, DateTime.UtcNow, DateTime.UtcNow);
+
+        int located = MoveTarget.Locate(index, folder, _ => firstFree);
+
+        Assert.Equal(-1, located);
+        Assert.False(index.Entries[firstFree].IsDirectory);
+        Assert.True(index.Entries[firstFree].IsInUse);
+    }
+
+    [Fact]
     public void AFileHasNoChildren_SoFreeingOneDoesNotAskForThem()
     {
         VolumeIndex index = IndexDownToRoot(room: 8, out int rootEntry, out int firstFree);
