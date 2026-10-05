@@ -43,6 +43,57 @@ public class FileEditorTests : IDisposable
         Assert.Equal(original, File.ReadAllBytes(path));
     }
 
+    // "Configuração: ação\r\nvalor=1\r\n" as Notepad saved "ANSI" until 2019: Windows-1252,
+    // one byte per accented letter, and not valid UTF-8.
+    private static readonly byte[] Ansi =
+    [
+        0x43, 0x6F, 0x6E, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0xE7, 0xE3, 0x6F, 0x3A, 0x20,
+        0x61, 0xE7, 0xE3, 0x6F, 0x0D, 0x0A, 0x76, 0x61, 0x6C, 0x6F, 0x72, 0x3D, 0x31, 0x0D, 0x0A,
+    ];
+
+    [Fact]
+    public void AnAnsiFile_ChangesOnlyWhereItWasEdited()
+    {
+        // Measured before the fix: changing "valor=1" to "valor=2" wrote EF BF BD - the
+        // replacement character - over all four accents.
+        string path = Write("ansi.txt", Ansi);
+
+        EditableFile file = FileEditor.Load(path);
+        Assert.True(file.CanEdit);
+        Assert.NotEqual("utf-8", file.EncodingName);
+
+        Assert.True(FileEditor.Save(path, file.Text.Replace("valor=1", "valor=2"), file).Succeeded);
+
+        byte[] expected = [.. Ansi];
+        expected[^3] = 0x32;
+        Assert.Equal(expected, File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void ACharacterTheFilesEncodingHasNoPlaceFor_StopsTheSave_InsteadOfBecomingAQuestionMark()
+    {
+        string path = Write("ansi.txt", Ansi);
+        EditableFile file = FileEditor.Load(path);
+
+        SaveResult result = FileEditor.Save(path, file.Text + "\U0001F600", file);
+
+        Assert.Equal(SaveOutcome.CannotEncode, result.Outcome);
+        Assert.Equal(Ansi, File.ReadAllBytes(path));
+        Assert.Single(Directory.GetFiles(_root));       // and no scratch file left beside it
+        Assert.Empty(FileEditor.BytesFor(file.Text + "\U0001F600", file));
+    }
+
+    [Fact]
+    public void BytesThatDoNotSurviveTheRoundTrip_AreNotOpenedForEditing()
+    {
+        // Looks like UTF-16 without a BOM - every other byte NUL - with half a surrogate pair
+        // in it. Decoded and encoded back, those bytes cannot come out the same.
+        byte[] bytes = [.. Encoding.Unicode.GetBytes("ABCDEFGHIJ"), 0x00, 0xD8, .. Encoding.Unicode.GetBytes("KLMNOPQRST")];
+        string path = Write("broken.txt", bytes);
+
+        Assert.Equal(EditLoadOutcome.WouldChange, FileEditor.Load(path).Outcome);
+    }
+
     [Fact]
     public void AFileWithUnixEndingsKeepsThem()
     {

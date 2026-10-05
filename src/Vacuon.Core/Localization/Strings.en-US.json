@@ -1002,6 +1002,8 @@
   "edit.saved": "Saved.",
   "edit.tooBig": "This file is {0} and the editor takes up to {1}. It is not opened partly: editing a slice and saving it would write that slice over the whole file.",
   "edit.notText": "Nothing decoded this as text.",
+  "edit.wouldChange": "Its characters would not come back the same if it were saved from here — it is neither UTF-8 nor this system's ANSI code page — so it is not opened for editing.",
+  "edit.cannotEncode": "Not saved: this file is in {0}, which has no place for one of the characters typed. Writing it would have turned it into a question mark.",
   "edit.protected": "This path is on the protected list, and nothing here writes to it.",
   "edit.unreadable": "This file could not be read.",
   "edit.saveFailed": "It could not be saved. {0}",

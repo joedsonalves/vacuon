@@ -16,6 +16,11 @@ public enum EditLoadOutcome
     Unreadable,
     /// <summary>Under a path the app never writes to.</summary>
     Protected,
+    /// <summary>
+    /// Its bytes would not come back the same: neither UTF-8 nor this system's ANSI code page
+    /// reads them and writes them back unchanged. See <see cref="FileEditor.Load"/>.
+    /// </summary>
+    WouldChange,
 }
 
 /// <summary>
@@ -47,6 +52,8 @@ public enum SaveOutcome
     InUse,
     Protected,
     Failed,
+    /// <summary>A character typed has no place in the file's encoding. Nothing was written.</summary>
+    CannotEncode,
 }
 
 /// <summary>
@@ -76,6 +83,9 @@ public sealed record SaveResult(SaveOutcome Outcome, string? Message, IReadOnlyL
 [SupportedOSPlatform("windows")]
 public static class FileEditor
 {
+    // The ANSI code pages - 1252 and its neighbours - are not in .NET until asked for.
+    static FileEditor() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
     /// <summary>
     /// The ceiling for editing. Generous for anything anybody edits by hand, and far below
     /// what would make the window stop responding while a text box lays it out.
@@ -119,13 +129,25 @@ public static class FileEditor
             return new EditableFile(EditLoadOutcome.Unreadable, string.Empty, string.Empty, false, true, 0);
         }
 
-        Encoding? encoding = FilePreview.DetectText(bytes);
+        Encoding? detected = FilePreview.DetectText(bytes);
 
-        if (encoding is null)
+        if (detected is null)
             return new EditableFile(EditLoadOutcome.NotText, string.Empty, string.Empty, false, true, length);
 
+        // ⚠️ Opened for editing only in an encoding the file's bytes survive unchanged. The
+        // detection says UTF-8 for anything without a BOM or NULs - including the Windows-1252
+        // that Notepad saved as "ANSI" until 2019 - and bytes that are not UTF-8 decode to the
+        // replacement character. Measured: changing "valor=1" to "valor=2" in a 1252 file with
+        // "Configuração: ação" in it wrote EF BF BD over every accent, four characters
+        // destroyed by an edit that touched none of them.
+        Encoding? encoding = Lossless(bytes, detected);
+
+        if (encoding is null)
+            return new EditableFile(EditLoadOutcome.WouldChange, string.Empty, string.Empty, false, true, length);
+
         bool bom = HasBom(bytes, encoding);
-        string text = FilePreview.Decode(bytes, encoding);
+        int skip = bom ? encoding.GetPreamble().Length : 0;
+        string text = encoding.GetString(bytes, skip, bytes.Length - skip);
 
         // A file with no line ending at all is written back with the platform's, which is
         // what a new line typed into it would have been anyway.
@@ -150,14 +172,16 @@ public static class FileEditor
         ProtectionVerdict verdict = ProtectedPaths.Check(path);
         if (verdict.IsProtected) return new SaveResult(SaveOutcome.Protected, verdict.Reason.ToString(), []);
 
-        Encoding encoding = EncodingOf(original.EncodingName, original.HasBom);
-        string body = original.UsesCrLf ? Normalise(text) : Normalise(text).Replace("\r\n", "\n");
+        // Encoded in memory, all of it, before the disk is touched: a character the file's
+        // encoding has no place for stops the save here, rather than going in as a "?".
+        if (!TryEncode(text, original, out byte[] content))
+            return new SaveResult(SaveOutcome.CannotEncode, original.EncodingName, []);
 
         string temporary = path + ".vacuon-edit";
 
         try
         {
-            File.WriteAllText(temporary, body, encoding);
+            File.WriteAllBytes(temporary, content);
 
             // Overwrites in one step, and keeps the original's attributes and stream by
             // replacing rather than deleting first.
@@ -294,10 +318,70 @@ public static class FileEditor
     {
         ArgumentNullException.ThrowIfNull(original);
 
+        // Empty when the text cannot be encoded - and then the save it would have queued has
+        // already failed for that reason, so there is nothing to queue.
+        return TryEncode(text, original, out byte[] content) ? content : [];
+    }
+
+    /// <summary>
+    /// The exact bytes the text becomes in the file's own encoding, line endings and BOM, or
+    /// false when a character in it has no place in that encoding.
+    /// </summary>
+    private static bool TryEncode(string text, EditableFile original, out byte[] content)
+    {
         Encoding encoding = EncodingOf(original.EncodingName, original.HasBom);
         string body = original.UsesCrLf ? Normalise(text) : Normalise(text).Replace("\r\n", "\n");
 
-        return [.. encoding.GetPreamble(), .. encoding.GetBytes(body)];
+        try
+        {
+            content = [.. encoding.GetPreamble(), .. encoding.GetBytes(body)];
+            return true;
+        }
+        catch (EncoderFallbackException)
+        {
+            content = [];
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The encoding <paramref name="bytes"/> survive a round trip through, or null when none
+    /// of the candidates hands them back unchanged.
+    /// <para>
+    /// UTF-8 is what the detection guesses when it has nothing else to go on. When the bytes
+    /// are not UTF-8, the ANSI code page this Windows uses is the next candidate, because that
+    /// is what every program that wrote "ANSI" meant by it. Each one is checked the same way:
+    /// decode strictly, encode strictly, and compare with the original byte for byte.
+    /// </para>
+    /// </summary>
+    private static Encoding? Lossless(byte[] bytes, Encoding detected)
+    {
+        if (RoundTrips(bytes, detected)) return detected;
+
+        if (detected.CodePage != Encoding.UTF8.CodePage) return null;
+
+        // Code page 0 is this machine's ANSI code page, once the provider is registered.
+        Encoding ansi = Encoding.GetEncoding(0);
+
+        return ansi.CodePage != detected.CodePage && RoundTrips(bytes, ansi) ? ansi : null;
+    }
+
+    private static bool RoundTrips(byte[] bytes, Encoding encoding)
+    {
+        Encoding strict = Encoding.GetEncoding(encoding.CodePage,
+                                               EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+
+        int skip = HasBom(bytes, encoding) ? encoding.GetPreamble().Length : 0;
+
+        try
+        {
+            string text = strict.GetString(bytes, skip, bytes.Length - skip);
+            return strict.GetBytes(text).AsSpan().SequenceEqual(bytes.AsSpan(skip));
+        }
+        catch (Exception ex) when (ex is DecoderFallbackException or EncoderFallbackException)
+        {
+            return false;
+        }
     }
 
     private static IReadOnlyList<FileHolder> WhoHolds(string path)
@@ -335,11 +419,16 @@ public static class FileEditor
     /// none would silently grow three bytes at the front — enough to break a shell script's
     /// shebang or a JSON parser that is stricter than most.
     /// </remarks>
+    /// <remarks>
+    /// Every one of them throws on a character it cannot write rather than writing a "?" in
+    /// its place: <see cref="TryEncode"/> turns that into a save that says why it did not
+    /// happen.
+    /// </remarks>
     private static Encoding EncodingOf(string name, bool bom) => name switch
     {
-        "utf-16" => new UnicodeEncoding(bigEndian: false, byteOrderMark: bom),
-        "utf-16be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: bom),
-        "utf-8" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: bom),
-        _ => new UTF8Encoding(encoderShouldEmitUTF8Identifier: bom),
+        "utf-16" => new UnicodeEncoding(bigEndian: false, byteOrderMark: bom, throwOnInvalidBytes: true),
+        "utf-16be" => new UnicodeEncoding(bigEndian: true, byteOrderMark: bom, throwOnInvalidBytes: true),
+        "utf-8" => new UTF8Encoding(encoderShouldEmitUTF8Identifier: bom, throwOnInvalidBytes: true),
+        _ => Encoding.GetEncoding(name, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback),
     };
 }

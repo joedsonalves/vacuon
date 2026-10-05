@@ -1002,6 +1002,8 @@
   "edit.saved": "Salvo.",
   "edit.tooBig": "Este arquivo tem {0} e o editor abre até {1}. Ele não é aberto pela metade: editar um pedaço e salvar escreveria esse pedaço por cima do arquivo inteiro.",
   "edit.notText": "Nada decodificou isto como texto.",
+  "edit.wouldChange": "Os caracteres deste arquivo não voltariam iguais se ele fosse salvo daqui — ele não é UTF-8 nem a página de código ANSI deste sistema —, então não é aberto para edição.",
+  "edit.cannotEncode": "Não foi salvo: este arquivo está em {0}, que não comporta um dos caracteres digitados. Gravá-lo o teria trocado por um ponto de interrogação.",
   "edit.protected": "Este caminho está na lista protegida, e nada aqui escreve nele.",
   "edit.unreadable": "Não foi possível ler este arquivo.",
   "edit.saveFailed": "Não foi possível salvar. {0}",

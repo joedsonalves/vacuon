@@ -1205,6 +1205,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                                               Format.Bytes(FileEditor.MaxEditableBytes)),
                 EditLoadOutcome.NotText => L.T("edit.notText"),
                 EditLoadOutcome.Protected => L.T("edit.protected"),
+                EditLoadOutcome.WouldChange => L.T("edit.wouldChange"),
                 _ => L.T("edit.unreadable"),
             };
 
@@ -1333,6 +1334,7 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
         {
             SaveOutcome.Protected => L.T("edit.protected"),
             SaveOutcome.InUse => L.T("edit.inUse", Describe(result.Holders)),
+            SaveOutcome.CannotEncode => L.T("edit.cannotEncode", result.Message ?? string.Empty),
             _ => L.T("edit.saveFailed", result.Message ?? string.Empty),
         };
 
