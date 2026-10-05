@@ -162,6 +162,22 @@ public class RobocopyOutputTests
         Assert.Equal(32, line.ErrorCode);
     }
 
+    [Theory]
+    // Measured: the same move, another run - two paths with nothing at all between them.
+    [InlineData(@"2026/10/05 12:31:07 ERROR 32 (0x00000020) Deleting Source File C:\pasta\preso.binC:\pasta\preso.bin",
+                @"C:\pasta\preso.bin")]
+    [InlineData(@"2026/10/05 12:31:07 ERROR 32 (0x00000020) Deleting Source File C:\pasta\preso.binD:\outra\coisa.bin",
+                @"C:\pasta\preso.bin")]
+    [InlineData(@"2026/10/05 12:31:07 ERROR 5 (0x00000005) Copying File \\servidor\parte\a.bin\\servidor\parte\a.bin",
+                @"\\servidor\parte\a.bin")]
+    public void TwoPathsGluedWithNothingBetween_NameOnlyTheFirst(string line, string path)
+    {
+        RobocopyLine parsed = RobocopyOutput.Parse(line);
+
+        Assert.Equal(RobocopyLineKind.Error, parsed.Kind);
+        Assert.Equal(path, parsed.Path);
+    }
+
     [Fact]
     public void TheLineGluedBehindAnError_IsReadAsTheLineItIs()
     {

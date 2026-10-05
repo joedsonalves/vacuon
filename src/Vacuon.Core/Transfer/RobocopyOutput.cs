@@ -256,10 +256,31 @@ public static class RobocopyOutput
             int stop = path.IndexOfAny('\t', '\r');
             if (stop >= 0) path = path[..stop];
 
+            // ⚠️ And where a second path begins. The same test caught a second variant: two
+            // paths glued with nothing at all between them, "…\held.binC:\…\held.bin". A
+            // Windows name cannot hold a colon or a doubled backslash, so a drive designator
+            // or a UNC start after the first one can only be the next path.
+            int next = NextRoot(path);
+            if (next > 0) path = path[..next];
+
             return path.Trim().ToString();
         }
 
         return string.Empty;
+    }
+
+    /// <summary>Where a second rooted path begins inside <paramref name="path"/>, or -1.</summary>
+    private static int NextRoot(ReadOnlySpan<char> path)
+    {
+        for (int k = 1; k + 2 < path.Length; k++)
+        {
+            bool drive = char.IsLetter(path[k]) && path[k + 1] == ':' && path[k + 2] == '\\';
+            bool unc = k >= 2 && path[k] == '\\' && path[k + 1] == '\\' && char.IsLetterOrDigit(path[k + 2]);
+
+            if (drive || unc) return k;
+        }
+
+        return -1;
     }
 
     /// <summary>
