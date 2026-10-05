@@ -182,10 +182,7 @@ public static class FileEditor
         try
         {
             File.WriteAllBytes(temporary, content);
-
-            // Overwrites in one step, and keeps the original's attributes and stream by
-            // replacing rather than deleting first.
-            File.Move(temporary, path, overwrite: true);
+            Swap(temporary, path);
 
             return SaveResult.Ok();
         }
@@ -288,7 +285,7 @@ public static class FileEditor
         try
         {
             File.WriteAllBytes(temporary, bytes);
-            File.Move(temporary, path, overwrite: true);
+            Swap(temporary, path);
 
             return SaveResult.Ok();
         }
@@ -383,6 +380,22 @@ public static class FileEditor
             return false;
         }
     }
+
+    /// <summary>
+    /// Puts the freshly written file in the original's place, keeping what the original was
+    /// besides its contents.
+    /// <para>
+    /// ⚠️ <c>File.Replace</c>, not <c>File.Move</c> with overwrite. This used to say the move
+    /// "keeps the original's attributes and stream by replacing rather than deleting first",
+    /// and it did not: a move over a file throws the old one away, and the new one is the
+    /// scratch file with nothing of the original's. Measured: a hidden file created in 2020
+    /// came out of one save visible and created today. <c>ReplaceFile</c> is the call that
+    /// carries over the replaced file's attributes, creation time, permissions and alternate
+    /// streams — the Zone.Identifier that says where a download came from among them.
+    /// </para>
+    /// </summary>
+    private static void Swap(string replacement, string original) =>
+        File.Replace(replacement, original, destinationBackupFileName: null);
 
     private static IReadOnlyList<FileHolder> WhoHolds(string path)
     {

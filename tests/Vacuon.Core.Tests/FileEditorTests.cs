@@ -83,6 +83,42 @@ public class FileEditorTests : IDisposable
         Assert.Empty(FileEditor.BytesFor(file.Text + "\U0001F600", file));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SavingKeepsWhatTheFileWasBesidesItsContents(bool asBytes)
+    {
+        // Measured before the fix: a hidden file created in 2020 came out of one save visible
+        // and created today. A move over the original throws the old file away; only the
+        // replace carries its attributes, its creation time and its other streams across.
+        string path = Write("dados.txt", Encoding.UTF8.GetBytes("um\r\ndois\r\n"));
+
+        // Where a download came from lives in a stream beside the content.
+        File.WriteAllText(path + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+
+        var created = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+        File.SetCreationTimeUtc(path, created);
+        File.SetAttributes(path, FileAttributes.Hidden | FileAttributes.Archive);
+
+        try
+        {
+            SaveResult result = asBytes
+                ? FileEditor.SaveBytes(path, Encoding.UTF8.GetBytes("um\r\ntres\r\n"))
+                : FileEditor.Save(path, "um\r\ntres", FileEditor.Load(path));
+
+            Assert.True(result.Succeeded, result.Message);
+            Assert.StartsWith("um\r\ntres", File.ReadAllText(path));
+
+            Assert.True(File.GetAttributes(path).HasFlag(FileAttributes.Hidden));
+            Assert.Equal(created, File.GetCreationTimeUtc(path));
+            Assert.Contains("ZoneId=3", File.ReadAllText(path + ":Zone.Identifier"));
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+        }
+    }
+
     [Fact]
     public void BytesThatDoNotSurviveTheRoundTrip_AreNotOpenedForEditing()
     {
