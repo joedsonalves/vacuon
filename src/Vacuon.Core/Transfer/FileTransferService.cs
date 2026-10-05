@@ -83,7 +83,13 @@ public sealed class FileTransferService
         if (!(isDirectory || File.Exists(path)))
             return new TransferItem(path, path, 0, isDirectory, TransferOutcome.NotFound);
 
-        TransferMeasurement size = measure?.Invoke(path) ?? Weigh(path, isDirectory);
+        // A link is deleted as a link, so nothing it points at is freed. The index reads the
+        // folder the way the disk holds it and already says zero; a walk would start on the
+        // far side of the door and count everything there.
+        TransferMeasurement size = kind == TransferKind.Delete && isDirectory && Links.IsLink(path)
+            ? new TransferMeasurement(0, 0)
+            : measure?.Invoke(path) ?? Weigh(path, isDirectory);
+
         long bytes = size.Bytes;
         int files = Math.Max(1, size.Files);
 
@@ -791,9 +797,35 @@ public sealed class FileTransferService
         if (!Directory.Exists(full))
             return new TransferItemResult(item, TransferOutcome.NotFound, 0);
 
-        string empty = Path.Combine(Path.GetTempPath(), $".vacuon-empty-{Guid.NewGuid():N}");
         long before = state.BytesDone;
         int failedBefore = state.FailedCount;
+
+        // ⚠️ A link is a door, and the purge walks through doors — see Links. Aimed at a
+        // junction, it empties the folder the junction stands for. A link goes as a link, by
+        // itself, which is what Explorer and rd do with one too.
+        if (Links.IsLink(full))
+        {
+            if (Links.Remove(full)) return new TransferItemResult(item, TransferOutcome.Done, 0);
+
+            state.NameFailed(full);
+            return new TransferItemResult(item, TransferOutcome.Failed, 0, L.T("transfer.linkNotRemoved", full))
+            {
+                FailedPaths = state.FailedSince(failedBefore),
+            };
+        }
+
+        // The links inside go first, each by itself, so the purge finds no door left to walk
+        // through. One that will not go stops the folder: purging around it is the very walk
+        // this is here to prevent.
+        if (RemoveLinksInside(full, state) is string blocked)
+        {
+            return new TransferItemResult(item, TransferOutcome.Failed, 0, blocked)
+            {
+                FailedPaths = state.FailedSince(failedBefore),
+            };
+        }
+
+        string empty = Path.Combine(Path.GetTempPath(), $".vacuon-empty-{Guid.NewGuid():N}");
 
         try
         {
@@ -843,6 +875,34 @@ public sealed class FileTransferService
             try { if (Directory.Exists(empty)) Directory.Delete(empty, recursive: true); }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
+    }
+
+    /// <summary>
+    /// Removes every folder link inside a folder about to be purged, each one by itself.
+    /// </summary>
+    /// <returns>Why the folder must not be purged, or null when nothing in it leads anywhere else.</returns>
+    private static string? RemoveLinksInside(string folder, RunState state)
+    {
+        List<string> links;
+
+        try
+        {
+            links = Links.FoldersBelow(folder);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return L.T("transfer.linksUnsearchable", ex.Message);
+        }
+
+        foreach (string link in links)
+        {
+            if (Links.Remove(link)) continue;
+
+            state.NameFailed(link);
+            return L.T("transfer.linkInside", link);
+        }
+
+        return null;
     }
 
     /// <summary>Removes what a purge left of a folder.</summary>

@@ -1,4 +1,6 @@
+using Vacuon.Core.Actions;
 using Vacuon.Core.Transfer;
+using Vacuon.Native.Interop;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -25,7 +27,16 @@ public class TransferIntegrationTests : IDisposable
 
     public void Dispose()
     {
-        try { if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true); }
+        try
+        {
+            // Links first, each by itself: a link test that failed half-way leaves one, and the
+            // recursive delete reports a junction as an error after removing it.
+            if (Directory.Exists(_root))
+            {
+                foreach (string link in Links.FoldersBelow(_root)) Links.Remove(link);
+                Directory.Delete(_root, recursive: true);
+            }
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 
         GC.SuppressFinalize(this);
@@ -843,5 +854,124 @@ public class TransferIntegrationTests : IDisposable
             Assert.False(File.Exists(fine));
             Assert.True(File.Exists(held));
         }
+    }
+
+    // ==================== links ====================
+
+    private static string Door(string link, string target)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+        Assert.True(Junction.Create(link, target), $"could not make the junction {link}");
+        return link;
+    }
+
+    [Fact]
+    public async Task DeletingAFolder_RemovesTheJunctionsInside_AndNotWhatTheyPointAt()
+    {
+        // ⚠️ Measured on the real tool before this was written: the purge went through a
+        // junction and erased every file in the folder it pointed at, two levels down as
+        // readily as one. That folder was never selected, the index counted none of it, and
+        // the app's own "leave a link behind" makes exactly this shape.
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string alsoPrecious = WriteFile(Path.Combine(outside, "sub"), "also.bin", 40_000);
+
+        string doomed = Dir("doomed");
+        WriteFile(doomed, "mine.bin", 30_000);
+        Door(Path.Combine(doomed, "door"), outside);
+        Door(Path.Combine(doomed, "nested", "deeper", "door"), outside);
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([doomed], string.Empty, TransferKind.Delete);
+        TransferReport report = await service.ExecuteAsync(plan);
+
+        Assert.Equal(TransferPhase.Finished, report.Phase);
+        Assert.False(Directory.Exists(doomed));
+
+        Assert.True(File.Exists(precious));
+        Assert.True(File.Exists(alsoPrecious));
+
+        // Freed is what was in the folder, and nothing on the far side of a door.
+        Assert.Equal(30_000, report.BytesTransferred);
+    }
+
+    [Fact]
+    public async Task DeletingAJunction_RemovesTheJunction_AndNotTheFolderItStandsFor()
+    {
+        // Aimed at a junction, the purge emptied the folder behind it.
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string door = Door(Path.Combine(_root, "door"), outside);
+
+        var service = new FileTransferService();
+        TransferPlan plan = service.Plan([door], string.Empty, TransferKind.Delete);
+
+        // Weighed as what it frees, which is nothing. A walk would start on the far side.
+        Assert.Equal(0, plan.Items[0].Bytes);
+
+        TransferReport report = await service.ExecuteAsync(plan);
+
+        Assert.Equal(TransferOutcome.Done, Assert.Single(report.Results).Outcome);
+        Assert.False(Directory.Exists(door));
+        Assert.True(File.Exists(precious));
+        Assert.Equal(0, report.BytesTransferred);
+    }
+
+    [Fact]
+    public async Task ALinkThatWillNotGo_StopsThePurge_InsteadOfBeingWalkedAround()
+    {
+        // Purging around a link that stayed is the walk through it this exists to prevent.
+        // Holding the junction itself open, without sharing delete, is what keeps it there.
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+
+        string doomed = Dir("doomed");
+        string mine = WriteFile(doomed, "mine.bin", 30_000);
+        string door = Door(Path.Combine(doomed, "door"), outside);
+
+        using (var held = Kernel32.CreateFile(door, Kernel32.GENERIC_READ,
+                                              Kernel32.FILE_SHARE_READ | Kernel32.FILE_SHARE_WRITE, 0,
+                                              Kernel32.OPEN_EXISTING,
+                                              Kernel32.FILE_FLAG_BACKUP_SEMANTICS | Kernel32.FILE_FLAG_OPEN_REPARSE_POINT, 0))
+        {
+            Assert.False(held.IsInvalid);
+
+            var service = new FileTransferService();
+            TransferReport report = await service.ExecuteAsync(service.Plan([doomed], string.Empty, TransferKind.Delete));
+
+            TransferItemResult item = Assert.Single(report.Results);
+            Assert.Equal(TransferOutcome.Failed, item.Outcome);
+            Assert.Contains(door, item.FailedPaths, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(door, item.Message, StringComparison.OrdinalIgnoreCase);
+
+            Assert.True(File.Exists(precious));
+            Assert.True(File.Exists(mine));
+            Assert.Equal(0, report.BytesTransferred);
+        }
+    }
+
+    [SkippableFact]
+    public async Task DeletingAFolder_RemovesADirectorySymlinkInside_AndNotWhatItPointsAt()
+    {
+        string outside = Dir("outside");
+        string precious = WriteFile(outside, "precious.bin", 70_000);
+        string doomed = Dir("doomed");
+        WriteFile(doomed, "mine.bin", 30_000);
+
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(doomed, "symlink"), outside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Skip.If(true, "this session may not make symbolic links (it needs elevation or Developer Mode).");
+        }
+
+        var service = new FileTransferService();
+        TransferReport report = await service.ExecuteAsync(service.Plan([doomed], string.Empty, TransferKind.Delete));
+
+        Assert.False(Directory.Exists(doomed));
+        Assert.True(File.Exists(precious));
+        Assert.Equal(30_000, report.BytesTransferred);
     }
 }

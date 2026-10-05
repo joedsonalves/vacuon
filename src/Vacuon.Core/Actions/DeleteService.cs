@@ -332,7 +332,10 @@ public sealed class DeleteService
     {
         try
         {
-            if (Directory.Exists(path)) return (sizeOf?.Invoke(path) ?? DirectorySize(path), true, true);
+            // A link goes as a link and frees nothing of what it points at. Walked, it would be
+            // weighed from the far side of the door — the whole folder it stands for.
+            if (Directory.Exists(path))
+                return (Links.IsLink(path) ? 0 : sizeOf?.Invoke(path) ?? DirectorySize(path), true, true);
 
             var file = new FileInfo(path);
             return file.Exists ? (file.Length, false, true) : (0, false, false);
