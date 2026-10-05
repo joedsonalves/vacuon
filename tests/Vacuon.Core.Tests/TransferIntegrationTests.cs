@@ -718,6 +718,73 @@ public class TransferIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task AMovedFileThatCouldNotLeaveItsSource_IsNotReportedAsMoved()
+    {
+        // Held open for reading by somebody else: robocopy can copy it, and cannot remove it.
+        // The copy at the destination is whole - so the second pass called it "already
+        // there" and took it off the failure list, and the move reported itself complete with
+        // the file still sitting at the source.
+        string source = Dir("move-held-source");
+        string destination = Dir("move-held-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string held = WriteFile(source, "held.bin", 8192);
+
+        using (var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var service = new FileTransferService();
+            TransferReport report = await service.ExecuteAsync(service.Plan([source], destination, TransferKind.Move));
+
+            Assert.True(File.Exists(held));
+            Assert.Equal(TransferPhase.Failed, report.Phase);
+            // The list itself in the message: this assertion is how two ways of robocopy gluing
+            // its lines together were found, and the next one will show up here first.
+            Assert.True(report.FailedFilePaths.Any(p => string.Equals(p, held, StringComparison.OrdinalIgnoreCase)),
+                        "named: " + string.Join(" | ", report.FailedFilePaths.Select(p => $"<{p}>")));
+        }
+    }
+
+    /// <summary>Lets go of a file the moment the second pass says it is starting on it.</summary>
+    private sealed class ReleaseOnSecondTry(IDisposable hold) : IProgress<TransferProgress>
+    {
+        public void Report(TransferProgress value)
+        {
+            if (value.SecondTryOf > 0) hold.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task AMoveTheSecondPassFinishes_LeavesNoSourceBehind()
+    {
+        // The same file, let go just as the second pass reaches it: now it can leave. The
+        // move is only finished when it has - and when the folders robocopy could not empty
+        // are gone too, or a junction left in the old place has nowhere to go.
+        string source = Dir("move-late-source");
+        string destination = Dir("move-late-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string held = WriteFile(Path.Combine(source, "deep"), "late.bin", 8192);
+
+        var hold = new FileStream(held, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        try
+        {
+            var service = new FileTransferService();
+            TransferReport report = await service.ExecuteAsync(
+                service.Plan([source], destination, TransferKind.Move), new ReleaseOnSecondTry(hold));
+
+            Assert.Equal(TransferPhase.Finished, report.Phase);
+            Assert.Empty(report.FailedFilePaths);
+            Assert.False(Directory.Exists(source));
+            Assert.True(File.Exists(Path.Combine(destination, "move-late-source", "deep", "late.bin")));
+        }
+        finally
+        {
+            hold.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
     {
         // Measured on the real tool before this was written: the purge removes everything

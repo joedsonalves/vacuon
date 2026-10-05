@@ -1049,6 +1049,7 @@
   "transfer.failedListPartial": "{0} de {1} com nome aqui: um erro sozinho pode levar uma pasta inteira junto, e só aparecem os arquivos que ele nomeou um a um",
   "transfer.notThere": "a ferramenta disse que deu certo, mas nada chegou",
   "transfer.notGone": "parte do que havia dentro continua no lugar",
+  "transfer.notReleased": "copiado, mas parte dele não pôde ser removida de onde estava",
   "transfer.itemSomeNotDeleted": "alguns dos arquivos lá dentro não puderam ser apagados",
   "transfer.itemFatalDelete": "a exclusão parou num erro antes de terminar",
   "transfer.nothingToCopy": "Nada nesta seleção pode ser copiado.",

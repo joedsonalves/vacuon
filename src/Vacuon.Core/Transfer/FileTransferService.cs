@@ -362,10 +362,50 @@ public sealed class FileTransferService
     /// </summary>
     private static bool Finished(TransferKind kind, TransferItem item)
     {
-        if (kind != TransferKind.Delete || !item.IsDirectory) return true;
+        if (kind == TransferKind.Copy) return true;
+
+        if (!item.IsDirectory) return !File.Exists(item.Source);
+
+        // Robocopy removes each source folder as it empties it, so the folders the second
+        // pass has just finished emptying are still standing. A move left there is not one —
+        // and a junction put in the old place afterwards would find a folder in its way. Only
+        // a tree with no file left anywhere in it goes; one that still holds something stays,
+        // and the item with it.
+        if (kind == TransferKind.Move && HoldsAnyFile(item.Source)) return false;
 
         RemoveFolder(item.Source);
         return !Directory.Exists(item.Source);
+    }
+
+    /// <summary>Whether a folder has a file anywhere below it. True when it cannot be read, to be safe.</summary>
+    private static bool HoldsAnyFile(string folder)
+    {
+        try
+        {
+            return Directory.Exists(folder)
+                && Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Removes a move's source once its copy is whole. False when it will not go.</summary>
+    private static bool Release(FileInfo source)
+    {
+        try
+        {
+            // As every permanent delete here does: read-only is not a reason a move should stall.
+            if (source.Exists && source.IsReadOnly) source.IsReadOnly = false;
+            source.Delete();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        return !File.Exists(source.FullName);
     }
 
     /// <summary>
@@ -413,7 +453,19 @@ public sealed class FileTransferService
             // see IsWhole for why the same length is not enough — and anything else is an
             // unfinished file that gets written over. This is the one place a transfer
             // overwrites anything, and it is only ever its own wreckage.
-            if (IsWhole(original, new FileInfo(target))) return -2;
+            if (IsWhole(original, new FileInfo(target)))
+            {
+                // ⚠️ For a copy that is the end of it. For a move it is half: the file is still
+                // here as well, which is exactly what robocopy names a file for when another
+                // program has it open for reading — it can copy it and cannot remove it. This
+                // used to return "already there" for a move too, the file came off the failure
+                // list, and the move reported itself complete with the file still at the source.
+                if (kind != TransferKind.Move) return -2;
+
+                // Its bytes were counted when robocopy copied it. What this pass adds is the
+                // leaving, and that is what makes it rescued.
+                return Release(original) ? 0 : -1;
+            }
 
             string? folder = Path.GetDirectoryName(target);
             if (folder is not null) Directory.CreateDirectory(folder);
@@ -435,13 +487,10 @@ public sealed class FileTransferService
                 return -1;
             }
 
-            // A move is a copy that then lets go. If the source will not go, the copy still
-            // happened and the item is no worse off than the tool left it.
-            if (kind == TransferKind.Move)
-            {
-                try { File.Delete(source); }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
-            }
+            // A move is a copy that then lets go. One whose source will not go has not moved
+            // anything: it stays on the failure list, and the whole copy it made stays at the
+            // destination - IsWhole keeps the fragment sweep away from it.
+            if (kind == TransferKind.Move && !Release(original)) return -1;
 
             state.CountFile(target, length);
             return length;
@@ -643,7 +692,7 @@ public sealed class FileTransferService
             int code = await RunRobocopyAsync(args, item, state, cancellationToken).ConfigureAwait(false);
             if (code == RunState.CancelledExitCode) SweepPartials(item);
 
-            return Verdict(item, code, state.BytesDone - before, Directory.Exists(item.Destination),
+            return Verdict(kind, item, code, state.BytesDone - before, Directory.Exists(item.Destination),
                            state.FailedSince(failedBefore));
         }
 
@@ -660,7 +709,7 @@ public sealed class FileTransferService
             int code = await RunRobocopyAsync(direct, item, state, cancellationToken).ConfigureAwait(false);
             if (code == RunState.CancelledExitCode) RemovePartial(item, item.Source);
 
-            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
+            return Verdict(kind, item, code, state.BytesDone - before, File.Exists(item.Destination),
                            state.FailedSince(failedBefore));
         }
 
@@ -686,7 +735,7 @@ public sealed class FileTransferService
             if (IsWhole(new FileInfo(item.Source), new FileInfo(landed)))
                 File.Move(landed, item.Destination, overwrite: false);
 
-            return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
+            return Verdict(kind, item, code, state.BytesDone - before, File.Exists(item.Destination),
                            state.FailedSince(failedBefore));
         }
         finally
@@ -815,18 +864,31 @@ public sealed class FileTransferService
     /// "Robocopy returned a friendly number" and "the item is over there" are different
     /// statements, and only the second one is worth reporting. Both get checked.
     /// </summary>
-    private static TransferItemResult Verdict(TransferItem item, int code, long bytes, bool arrived,
-                                              IReadOnlyList<string> failed)
+    private static TransferItemResult Verdict(TransferKind kind, TransferItem item, int code, long bytes,
+                                              bool arrived, IReadOnlyList<string> failed)
     {
         if (code == RunState.CancelledExitCode)
             return new TransferItemResult(item, TransferOutcome.Cancelled, bytes) { FailedPaths = failed };
 
         if (!RobocopyOutput.Succeeded(code))
         {
-            return new TransferItemResult(item, TransferOutcome.Failed, bytes, RobocopyOutput.Describe(code))
+            return new TransferItemResult(item, TransferOutcome.Failed, bytes, RobocopyOutput.Describe(code, kind))
             {
                 FailedPaths = failed,
             };
+        }
+
+        // ⚠️ A friendly exit code and a file named as failed can arrive together. Measured on
+        // the real tool: a move whose source file another program held open for reading copied
+        // it, printed "ERROR 32 ... Deleting Source File", counted nothing under FAILED and
+        // exited with 1. The file was at both ends and the item read as moved, so the second
+        // pass never got to finish it either. Whatever is named is a failure until the second
+        // pass says otherwise — and it says so at once for a file robocopy's own retry got
+        // after naming it.
+        if (failed.Count > 0)
+        {
+            string why = kind == TransferKind.Move ? L.T("transfer.notReleased") : RobocopyOutput.Describe(8, kind);
+            return new TransferItemResult(item, TransferOutcome.Failed, bytes, why) { FailedPaths = failed };
         }
 
         return arrived

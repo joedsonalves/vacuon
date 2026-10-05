@@ -1049,6 +1049,7 @@
   "transfer.failedListPartial": "{0} of {1} named below: a single error can take a whole folder with it, and only the files it named one by one are listed",
   "transfer.notThere": "the tool reported success but nothing arrived",
   "transfer.notGone": "some of what was inside is still there",
+  "transfer.notReleased": "copied, but some of it could not be removed from where it was",
   "transfer.itemSomeNotDeleted": "some of the files inside could not be deleted",
   "transfer.itemFatalDelete": "the deletion stopped on an error before it could finish",
   "transfer.nothingToCopy": "Nothing in this selection can be copied.",
