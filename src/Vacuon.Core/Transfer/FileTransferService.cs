@@ -206,6 +206,15 @@ public sealed class FileTransferService
             ? (0, false)
             : await RetryFailedAsync(plan, results, state, cancellationToken).ConfigureAwait(false);
 
+        // Whatever is still on the failed list may have left a fragment at the destination,
+        // under the file's own name. Those go now; see RemovePartial.
+        if (plan.Kind != TransferKind.Delete)
+        {
+            foreach (TransferItemResult result in results)
+                foreach (string source in result.FailedPaths)
+                    RemovePartial(result.Item, source);
+        }
+
         TransferPhase phase = cancelled || stopped
             ? TransferPhase.Cancelled
             : results.Any(r => r.Outcome == TransferOutcome.Failed)
@@ -397,12 +406,14 @@ public sealed class FileTransferService
             string target = MapToDestination(item, source);
             if (target.Length == 0) return -1;
 
-            long length = new FileInfo(source).Length;
+            var original = new FileInfo(source);
+            long length = original.Length;
 
-            // A failed attempt can leave a stub behind. Same length is treated as arrived;
-            // any other length is an unfinished file and gets written over — this is the one
-            // place a transfer overwrites anything, and it is only ever its own wreckage.
-            if (File.Exists(target) && new FileInfo(target).Length == length) return -2;
+            // A failed attempt can leave a stub behind. Only a whole file counts as arrived —
+            // see IsWhole for why the same length is not enough — and anything else is an
+            // unfinished file that gets written over. This is the one place a transfer
+            // overwrites anything, and it is only ever its own wreckage.
+            if (IsWhole(original, new FileInfo(target))) return -2;
 
             string? folder = Path.GetDirectoryName(target);
             if (folder is not null) Directory.CreateDirectory(folder);
@@ -446,6 +457,108 @@ public sealed class FileTransferService
                                         or NotSupportedException)
         {
             return -1;
+        }
+    }
+
+    /// <summary>
+    /// Whether a file at the destination is the whole of its source.
+    /// <para>
+    /// ⚠️ <b>The same length proves nothing.</b> Measured on the real tool: a copy of four
+    /// 1 GiB files stopped after 0.7 s left all four at the destination at their full length —
+    /// robocopy sizes the file before it fills it — with only 177 to 186 MB of each actually
+    /// written, and today's date on them. What robocopy does last, once the data is all in, is
+    /// give the file its source's date. So a file counts as whole only when it is as long as
+    /// its source <b>and</b> carries its source's last-write time.
+    /// </para>
+    /// <para>
+    /// Within two seconds rather than exactly: a FAT or exFAT destination keeps times at that
+    /// granularity, and robocopy's own /FFT exists for the same reason. A fragment stopped
+    /// within two seconds of its source being written is the price, and it is the safe side
+    /// of the line — that fragment stays, where a stricter rule would delete whole copies on
+    /// every memory card.
+    /// </para>
+    /// </summary>
+    internal static bool IsWhole(FileInfo source, FileInfo destination)
+    {
+        if (!source.Exists || !destination.Exists) return false;
+        if (source.Length != destination.Length) return false;
+
+        TimeSpan apart = source.LastWriteTimeUtc - destination.LastWriteTimeUtc;
+        return apart.Duration() <= TimeSpan.FromSeconds(2);
+    }
+
+    /// <summary>
+    /// Removes a file this transfer left half-written at its destination.
+    /// <para>
+    /// ⚠️ Measured on the real tool: a file robocopy cannot finish stays at the destination
+    /// under its real name — 10,485,760 bytes of a 52,428,800-byte file whose middle another
+    /// program had locked, and at full length but mostly empty when the copy is stopped. It
+    /// sits in the folder looking like the file, beside a failure list saying otherwise that
+    /// is easy to miss — and the next step after a copy is often deleting the original.
+    /// </para>
+    /// <para>
+    /// Only ever this transfer's own wreckage: every destination is a name the plan made sure
+    /// was free, so nothing there predates the run. And never a destination whose source is
+    /// gone — a move that finished that file before it was stopped — because that one is the
+    /// only copy there is.
+    /// </para>
+    /// </summary>
+    /// <returns>True when a fragment was there and is gone now.</returns>
+    internal static bool RemovePartial(TransferItem item, string source)
+    {
+        string target = MapToDestination(item, source);
+        if (target.Length == 0) return false;
+
+        try
+        {
+            var written = new FileInfo(target);
+            if (!written.Exists) return false;
+
+            var original = new FileInfo(source);
+            if (!original.Exists || IsWhole(original, written)) return false;
+
+            if (written.IsReadOnly) written.IsReadOnly = false;
+            written.Delete();
+            return !File.Exists(target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// After a stop, everything under the item's destination that is not whole.
+    /// <para>
+    /// Robocopy runs thirty-two files at once, and a stop kills it with any of them part-way.
+    /// Its output names a file when it starts on it, not when it finishes, so the only list of
+    /// what was in flight is the disk: whatever under the destination is not its source's
+    /// equal. Earlier items finished before this one started, so only this one is walked.
+    /// </para>
+    /// </summary>
+    private static void SweepPartials(TransferItem item)
+    {
+        if (!Directory.Exists(item.Destination)) return;
+
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = 0,
+        };
+
+        try
+        {
+            foreach (string written in Directory.EnumerateFiles(item.Destination, "*", options))
+            {
+                string relative = Path.GetRelativePath(item.Destination, written);
+                RemovePartial(item, Path.Combine(item.Source, relative));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A sweep that cannot finish leaves what it did not reach as it was — no worse off
+            // than before there was a sweep at all.
         }
     }
 
@@ -497,6 +610,8 @@ public sealed class FileTransferService
                 : RobocopyArguments.Copy(item.Source, item.Destination, null, _threads);
 
             int code = await RunRobocopyAsync(args, item, state, cancellationToken).ConfigureAwait(false);
+            if (code == RunState.CancelledExitCode) SweepPartials(item);
+
             return Verdict(item, code, state.BytesDone - before, Directory.Exists(item.Destination),
                            state.FailedSince(failedBefore));
         }
@@ -512,6 +627,8 @@ public sealed class FileTransferService
                 : RobocopyArguments.Copy(sourceFolder, destinationFolder, name, _threads);
 
             int code = await RunRobocopyAsync(direct, item, state, cancellationToken).ConfigureAwait(false);
+            if (code == RunState.CancelledExitCode) RemovePartial(item, item.Source);
+
             return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
                            state.FailedSince(failedBefore));
         }
@@ -531,8 +648,12 @@ public sealed class FileTransferService
 
             int code = await RunRobocopyAsync(args, item, state, cancellationToken).ConfigureAwait(false);
 
+            // Only a whole file earns the real name. A stopped or failed run can leave its
+            // fragment in the scratch folder, and moving that out would put it in the place
+            // where the file is meant to be; left here, it goes with the scratch folder.
             string landed = Path.Combine(staging, name);
-            if (File.Exists(landed)) File.Move(landed, item.Destination, overwrite: false);
+            if (IsWhole(new FileInfo(item.Source), new FileInfo(landed)))
+                File.Move(landed, item.Destination, overwrite: false);
 
             return Verdict(item, code, state.BytesDone - before, File.Exists(item.Destination),
                            state.FailedSince(failedBefore));
@@ -732,7 +853,14 @@ public sealed class FileTransferService
         }
         catch (OperationCanceledException)
         {
-            try { process.Kill(entireProcessTree: true); }
+            try
+            {
+                process.Kill(entireProcessTree: true);
+
+                // Killing is asynchronous. Until it has exited, the files it was writing are
+                // still open in it, and the sweep that follows a stop could not remove them.
+                process.WaitForExit(5000);
+            }
             catch (Exception ex) when (ex is InvalidOperationException
                                             or System.ComponentModel.Win32Exception)
             { }

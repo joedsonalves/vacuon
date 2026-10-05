@@ -527,6 +527,153 @@ public class TransferIntegrationTests : IDisposable
         }
     }
 
+    private static readonly DateTime Then = new(2021, 5, 6, 7, 8, 9, DateTimeKind.Utc);
+
+    /// <summary>A source file dated <see cref="Then"/>, and something at its destination.</summary>
+    private (string Source, string Target, TransferItem Item) SourceAndTarget(string name, int length, int written,
+                                                                             DateTime writtenAt)
+    {
+        string from = Dir(name + "-from");
+        string to = Dir(name + "-to");
+
+        string source = WriteFile(from, "f.bin", length);
+        File.SetLastWriteTimeUtc(source, Then);
+
+        string target = WriteFile(to, "f.bin", written);
+        File.SetLastWriteTimeUtc(target, writtenAt);
+
+        return (source, target, new TransferItem(source, target, length, IsDirectory: false));
+    }
+
+    [Fact]
+    public void AFileAsLongAsItsSourceButNotDatedLikeIt_IsNotWhole()
+    {
+        // What a stopped copy leaves: robocopy sizes the file first, so a fragment is as long
+        // as its source. Only the date robocopy gives the file at the very end tells them apart.
+        (string source, string target, _) = SourceAndTarget("prealloc", 1000, 1000, DateTime.UtcNow);
+        Assert.False(FileTransferService.IsWhole(new FileInfo(source), new FileInfo(target)));
+
+        File.SetLastWriteTimeUtc(target, Then);
+        Assert.True(FileTransferService.IsWhole(new FileInfo(source), new FileInfo(target)));
+
+        // A FAT or exFAT destination keeps times to two seconds. A whole copy there must not
+        // read as a fragment, or the sweep after a stop would delete it.
+        File.SetLastWriteTimeUtc(target, Then.AddSeconds(2));
+        Assert.True(FileTransferService.IsWhole(new FileInfo(source), new FileInfo(target)));
+    }
+
+    [Fact]
+    public void AFragmentGoes_AWholeCopyStays_AndACopyWhoseSourceIsGoneIsNeverTouched()
+    {
+        (string shortSource, string shortTarget, TransferItem shortItem) = SourceAndTarget("short", 1000, 400, Then);
+        Assert.True(FileTransferService.RemovePartial(shortItem, shortSource));
+        Assert.False(File.Exists(shortTarget));
+
+        (string fullSource, string fullTarget, TransferItem fullItem) = SourceAndTarget("full", 1000, 1000, DateTime.UtcNow);
+        Assert.True(FileTransferService.RemovePartial(fullItem, fullSource));
+        Assert.False(File.Exists(fullTarget));
+
+        (string wholeSource, string wholeTarget, TransferItem wholeItem) = SourceAndTarget("whole", 1000, 1000, Then);
+        Assert.False(FileTransferService.RemovePartial(wholeItem, wholeSource));
+        Assert.True(File.Exists(wholeTarget));
+
+        // A move that finished this file before it was stopped already removed the source:
+        // what is at the destination is the only copy left, whatever it looks like.
+        (string goneSource, string goneTarget, TransferItem goneItem) = SourceAndTarget("orphan", 1000, 400, Then);
+        File.Delete(goneSource);
+        Assert.False(FileTransferService.RemovePartial(goneItem, goneSource));
+        Assert.True(File.Exists(goneTarget));
+    }
+
+    [Fact]
+    public async Task AFileRobocopyCouldNotFinish_IsNotLeftAtTheDestinationUnderItsName()
+    {
+        // Measured: a region another handle has locked stops robocopy in the middle of the
+        // file, and it leaves what it had written — 10 MB of a 50 MB file — under the real
+        // name, dated today. The second pass then stops at the same region.
+        string source = Dir("fragment-source");
+        string destination = Dir("fragment-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string locked = WriteFile(source, "region.bin", 2_000_000);
+
+        using var hold = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        hold.Lock(1_000_000, 100_000);
+
+        try
+        {
+            var service = new FileTransferService();
+            TransferReport report = await service.ExecuteAsync(service.Plan([source], destination, TransferKind.Copy));
+
+            Assert.Contains(report.FailedFilePaths,
+                            p => string.Equals(p, locked, StringComparison.OrdinalIgnoreCase));
+
+            string landed = Path.Combine(destination, "fragment-source");
+            Assert.True(File.Exists(Path.Combine(landed, "fine.bin")));
+            Assert.False(File.Exists(Path.Combine(landed, "region.bin")));
+        }
+        finally
+        {
+            hold.Unlock(1_000_000, 100_000);
+        }
+    }
+
+    [Fact]
+    public async Task AStoppedCopy_LeavesNothingAtTheDestinationThatIsNotWhole()
+    {
+        // Measured: four 1 GiB files stopped after 0.7 s were all at the destination at full
+        // length, with under a fifth of each written. Whenever the stop lands, nothing left
+        // behind may be anything but a complete copy of its source.
+        string source = Dir("stopped-source");
+        string destination = Dir("stopped-destination");
+
+        var block = new byte[1 << 20];
+        new Random(7).NextBytes(block);
+
+        for (int f = 0; f < 3; f++)
+        {
+            string path = Path.Combine(source, $"big{f}.bin");
+            using (var stream = File.Create(path))
+                for (int i = 0; i < 96; i++) stream.Write(block);
+
+            File.SetLastWriteTimeUtc(path, Then);
+        }
+
+        var service = new FileTransferService();
+        using var stop = new CancellationTokenSource();
+
+        // Stop the moment robocopy creates the first file. It creates it at full length and
+        // then fills it, so this lands with the data part-way in - the case a timer would only
+        // sometimes hit.
+        Task watching = Task.Run(async () =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                if (Directory.Exists(destination)
+                    && Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories).Any())
+                {
+                    stop.Cancel();
+                    return;
+                }
+
+                await Task.Delay(2);
+            }
+        });
+
+        TransferReport report = await service.ExecuteAsync(
+            service.Plan([source], destination, TransferKind.Copy), null, stop.Token);
+        await watching;
+
+        Assert.Equal(TransferPhase.Cancelled, report.Phase);
+
+        foreach (string written in Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories))
+        {
+            var original = new FileInfo(Path.Combine(source, Path.GetFileName(written)));
+            Assert.True(FileTransferService.IsWhole(original, new FileInfo(written)),
+                        $"{written} was left behind and is not a whole copy");
+        }
+    }
+
     [Fact]
     public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
     {
