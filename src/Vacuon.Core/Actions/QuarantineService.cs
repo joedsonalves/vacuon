@@ -38,6 +38,17 @@ public sealed record QuarantineResult(
     string? Message = null)
 {
     public bool Succeeded => Outcome == QuarantineOutcome.Quarantined;
+
+    /// <summary>
+    /// The name the item has inside its batch folder now — <c>00001.bin</c> and onwards —
+    /// or null when it never got there.
+    /// <para>
+    /// ⚠️ Not its own name. The original goes in the manifest, and what sits in the folder is
+    /// a number. The list used to file a quarantined item under its original name inside the
+    /// batch folder, so it showed a path the disk did not have.
+    /// </para>
+    /// </summary>
+    public string? StoredName { get; init; }
 }
 
 public sealed record RestoreResult(
@@ -272,7 +283,10 @@ public sealed class QuarantineService
             }
 
             return new QuarantineResult(item.OriginalPath, QuarantineOutcome.Quarantined,
-                                        item.Bytes, item.IsDirectory);
+                                        item.Bytes, item.IsDirectory)
+            {
+                StoredName = item.StoredName,
+            };
         }
         catch (UnauthorizedAccessException ex)
         {

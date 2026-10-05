@@ -3416,9 +3416,11 @@ public sealed class MainViewModel : Observable, ISelectionSink, IDisposable
                 moved.Add(entry);
 
                 // Re-parent, never MarkDeleted: the clusters are still allocated and the
-                // volume total must not fall.
-                if (destination < 0 ||
-                    !index.MarkMoved(entry, destination, Path.GetFileName(result.Path).AsSpan()))
+                // volume total must not fall. Under the name it has in there now, which is a
+                // number, not the one it had — that one lives in the manifest.
+                string name = result.StoredName ?? Path.GetFileName(result.Path);
+
+                if (destination < 0 || !index.MarkMoved(entry, destination, name.AsSpan()))
                 {
                     unplaced++;
                 }

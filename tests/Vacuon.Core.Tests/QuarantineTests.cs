@@ -70,6 +70,31 @@ public class QuarantineServiceTests : IDisposable
     }
 
     [Fact]
+    public void Execute_SaysWhatEachItemIsCalledInTheBatchFolder()
+    {
+        // The list files a quarantined item under this name. Its own name lives in the
+        // manifest; the folder holds a number, and the list used to show a path the disk did
+        // not have — the batch folder with the original name inside it.
+        string from = Dir("from");
+        string first = File_(from, "render.mp4", "one");
+        string second = File_(from, "notas.txt", "two");
+
+        QuarantineReport report = Service().Execute([first, second]);
+
+        string batch = Assert.Single(report.BatchFolders);
+
+        foreach (QuarantineResult result in report.Results)
+        {
+            Assert.NotNull(result.StoredName);
+            Assert.Matches(@"^\d{5}\.bin$", result.StoredName);
+            Assert.True(File.Exists(Path.Combine(batch, result.StoredName!)));
+            Assert.False(File.Exists(Path.Combine(batch, Path.GetFileName(result.Path))));
+        }
+
+        Assert.NotEqual(report.Results[0].StoredName, report.Results[1].StoredName);
+    }
+
+    [Fact]
     public void Execute_HoldsBytes_ItDoesNotFreeThem()
     {
         // The distinction this whole type exists to keep. A rename inside a volume moves a
