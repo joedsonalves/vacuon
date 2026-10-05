@@ -121,12 +121,28 @@ public static class IndexGraft
 
         bool complete = true;
 
-        // FileSystemInfo, not paths: the enumerator has already read each entry's size,
-        // times and attributes, and asking for them again was a second call per file.
-        foreach (FileSystemInfo child in folder.EnumerateFileSystemInfos("*", Children))
+        // ⚠️ The disk is not holding still for this. A folder that was there when its parent
+        // was read can be gone, or renamed, by the time it is opened — and an enumerator that
+        // cannot open its folder throws. That exception used to travel all the way out of the
+        // copy and take the app with it: crash.log on my machine, 9 September, a
+        // DirectoryNotFoundException for the "backend" folder of a project I had just copied,
+        // thrown from here. That folder is a plain folder today, in a project renamed since,
+        // so the likeliest story is that it moved while the old graft spent minutes on the
+        // copy. A folder that cannot be read is now a graft that is incomplete, which the
+        // caller already says out loud.
+        try
         {
-            int childKnown = existing is not null && existing.TryGetValue(child.Name, out int found) ? found : -1;
-            if (!Plant(index, child, entry, childKnown, recordOf, ref added)) complete = false;
+            // FileSystemInfo, not paths: the enumerator has already read each entry's size,
+            // times and attributes, and asking for them again was a second call per file.
+            foreach (FileSystemInfo child in folder.EnumerateFileSystemInfos("*", Children))
+            {
+                int childKnown = existing is not null && existing.TryGetValue(child.Name, out int found) ? found : -1;
+                if (!Plant(index, child, entry, childKnown, recordOf, ref added)) complete = false;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
 
         return complete;

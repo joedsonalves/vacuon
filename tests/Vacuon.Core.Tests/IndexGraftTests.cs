@@ -198,6 +198,35 @@ public class IndexGraftTests : IDisposable
     }
 
     [Fact]
+    public void AFolderThatVanishesMidGraft_LeavesItIncomplete_AndDoesNotThrow()
+    {
+        // crash.log, 9 September: a DirectoryNotFoundException from the graft's enumerator
+        // closed the app right after a copy. Here the folder goes away at the one moment that
+        // reproduces it — after it has been planted, before it is opened.
+        string tree = CopiedTree("copy", files: 30, perFolder: 10);
+        VolumeIndex index = IndexDownToRoot(room: 64, out _, out int firstFree);
+        Dictionary<string, long> records = NumberTheTree(tree, firstFree);
+
+        string doomed = Path.Combine(tree, "sub01");
+
+        long RecordOf(string path)
+        {
+            if (string.Equals(path, doomed, StringComparison.OrdinalIgnoreCase) && Directory.Exists(doomed))
+                Directory.Delete(doomed, recursive: true);
+
+            return records.TryGetValue(path, out long record) ? record : -1;
+        }
+
+        GraftResult graft = IndexGraft.AddTree(index, tree, RecordOf);
+
+        Assert.False(graft.Complete);
+
+        // Everything that was still there went in.
+        Assert.True(index.FindEntry(Path.Combine(tree, "sub00", "file0000.bin")) >= 0);
+        Assert.True(index.FindEntry(Path.Combine(tree, "sub02", "file0029.bin")) >= 0);
+    }
+
+    [Fact]
     public void AFileHasNoChildren_SoFreeingOneDoesNotAskForThem()
     {
         VolumeIndex index = IndexDownToRoot(room: 8, out int rootEntry, out int firstFree);
