@@ -1,6 +1,8 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
+using Vacuon.Native.Interop;
 
 namespace Vacuon.Core.Actions;
 
@@ -103,9 +105,29 @@ public static class ShredService
             return new ShredResult(full, ShredOutcome.Blocked, 0, ShredDoubt.None, MoveService.Describe(guard.Reason));
 
         if (Directory.Exists(full))
-            return new ShredResult(full, ShredOutcome.Blocked, 0, ShredDoubt.None, "a folder is not a stream of bytes");
+            return new ShredResult(full, ShredOutcome.Blocked, 0, ShredDoubt.None, L.T("shred.isFolder"));
 
         if (!File.Exists(full)) return new ShredResult(full, ShredOutcome.NotFound, 0, ShredDoubt.None);
+
+        // A link holds none of the bytes it shows. Overwriting through it is overwriting the
+        // file it names, somewhere else, under a name nobody picked here.
+        if (Links.IsLink(full))
+        {
+            return new ShredResult(full, ShredOutcome.Blocked, 0, ShredDoubt.None,
+                                   L.T("shred.isLink", new FileInfo(full).LinkTarget ?? string.Empty));
+        }
+
+        // ⚠️ A file with more than one name is ONE set of bytes under several paths. Writing
+        // noise over it through this path writes the same noise under all the others, and
+        // deleting this name then leaves them holding it. The app makes such files itself:
+        // replacing a duplicate with a hard link puts the keeper's bytes under the copy's
+        // path — so shredding "the copy" afterwards destroyed the keeper it was linked to.
+        int names = FileIdentity.NameCountOf(full);
+        if (names > 1)
+        {
+            return new ShredResult(full, ShredOutcome.Blocked, 0, ShredDoubt.None,
+                                   L.T("shred.otherNames"));
+        }
 
         var info = new FileInfo(full);
         long length = info.Length;
@@ -123,7 +145,7 @@ public static class ShredService
             File.Delete(full);
 
             if (File.Exists(full))
-                return new ShredResult(full, ShredOutcome.Failed, length, doubt, "the file is still there");
+                return new ShredResult(full, ShredOutcome.Failed, length, doubt, L.T("shred.stillThere"));
 
             return new ShredResult(full, ShredOutcome.Shredded, length, doubt);
         }

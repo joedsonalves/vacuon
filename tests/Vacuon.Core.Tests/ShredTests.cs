@@ -1,4 +1,5 @@
 using Vacuon.Core.Actions;
+using Vacuon.Native.Interop;
 using Xunit;
 
 namespace Vacuon.Core.Tests;
@@ -127,6 +128,45 @@ public class ShredTests : IDisposable
     {
         Assert.Equal(ShredOutcome.Blocked,
                      ShredService.Shred(@"C:\Windows\explorer.exe", volumeIsSolidState: true).Outcome);
+    }
+
+    [Fact]
+    public void AFileWithAnotherName_IsRefused_AndTheOtherNameKeepsItsBytes()
+    {
+        // ⚠️ One set of bytes under two paths. Measured before this was written: shredding
+        // one name overwrote the bytes under the other, which then read as random noise. The
+        // app makes exactly this pair when it replaces a duplicate with a hard link.
+        string keeper = Write("fica.bin", 50_000, 0x42);
+        string other = Path.Combine(_root, "outro-nome.bin");
+        Assert.True(Kernel32.CreateHardLink(other, keeper, 0));
+
+        ShredResult result = ShredService.Shred(other, volumeIsSolidState: false);
+
+        Assert.Equal(ShredOutcome.Blocked, result.Outcome);
+        Assert.True(File.Exists(other));
+        Assert.All(File.ReadAllBytes(keeper), b => Assert.Equal(0x42, b));
+    }
+
+    [SkippableFact]
+    public void ASymbolicLink_IsRefused_AndTheFileItNamesIsLeftAlone()
+    {
+        string target = Write("alvo.bin", 50_000, 0x43);
+        string link = Path.Combine(_root, "link.bin");
+
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Skip.If(true, "this session may not make symbolic links (it needs elevation or Developer Mode).");
+        }
+
+        ShredResult result = ShredService.Shred(link, volumeIsSolidState: false);
+
+        Assert.Equal(ShredOutcome.Blocked, result.Outcome);
+        Assert.Contains(target, result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.All(File.ReadAllBytes(target), b => Assert.Equal(0x43, b));
     }
 
     [Fact]
