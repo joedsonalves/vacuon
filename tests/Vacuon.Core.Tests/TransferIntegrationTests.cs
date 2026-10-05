@@ -481,6 +481,52 @@ public class TransferIntegrationTests : IDisposable
         Assert.Equal(0, recorder.Seen[^1].SecondTryOf);
     }
 
+    /// <summary>Presses Stop the moment the second pass says it is starting on a file.</summary>
+    private sealed class StopOnSecondTry(CancellationTokenSource stop) : IProgress<TransferProgress>
+    {
+        public void Report(TransferProgress value)
+        {
+            if (value.SecondTryOf > 0) stop.Cancel();
+        }
+    }
+
+    [Fact]
+    public async Task StoppingDuringTheSecondPass_StopsIt_InsteadOfThrowing()
+    {
+        // A region locked by another handle: robocopy fails on it, but the second pass can
+        // open the file, so Stop lands inside its copy. The cancellation came out of that
+        // copy as an exception nobody caught, and the window's async Loaded handler handed it
+        // to the dispatcher - which closes the app.
+        string source = Dir("stop-second-source");
+        string destination = Dir("stop-second-destination");
+
+        WriteFile(source, "fine.bin", 4096);
+        string locked = WriteFile(source, "region.bin", 1_000_000);
+
+        using var hold = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        hold.Lock(500_000, 100_000);
+
+        try
+        {
+            using var stop = new CancellationTokenSource();
+            var service = new FileTransferService();
+
+            TransferReport report = await service.ExecuteAsync(
+                service.Plan([source], destination, TransferKind.Copy), new StopOnSecondTry(stop), stop.Token);
+
+            Assert.Equal(TransferPhase.Cancelled, report.Phase);
+            Assert.Contains(report.FailedFilePaths,
+                            p => string.Equals(p, locked, StringComparison.OrdinalIgnoreCase));
+
+            // And the second pass's own half-written copy is not left behind as the file.
+            Assert.False(File.Exists(Path.Combine(destination, "stop-second-source", "region.bin")));
+        }
+        finally
+        {
+            hold.Unlock(500_000, 100_000);
+        }
+    }
+
     [Fact]
     public async Task DeletingAFolderWithAFileHeldOpen_NamesIt_AndDoesNotCountItAsFreed()
     {

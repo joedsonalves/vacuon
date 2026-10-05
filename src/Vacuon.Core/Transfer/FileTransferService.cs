@@ -202,10 +202,11 @@ public sealed class FileTransferService
 
         // Second pass over what the tool could not take, now that the batch has had time to
         // run: see RetryFailedAsync for what this can and cannot rescue.
-        int recovered = cancelled ? 0 : await RetryFailedAsync(plan, results, state, cancellationToken)
-            .ConfigureAwait(false);
+        (int recovered, bool stopped) = cancelled
+            ? (0, false)
+            : await RetryFailedAsync(plan, results, state, cancellationToken).ConfigureAwait(false);
 
-        TransferPhase phase = cancelled
+        TransferPhase phase = cancelled || stopped
             ? TransferPhase.Cancelled
             : results.Any(r => r.Outcome == TransferOutcome.Failed)
                 ? TransferPhase.Failed
@@ -254,11 +255,15 @@ public sealed class FileTransferService
     /// finishes the copy instead of handing back a list.
     /// </para>
     /// </summary>
-    /// <returns>How many files the second pass brought over.</returns>
-    private static async Task<int> RetryFailedAsync(TransferPlan plan, List<TransferItemResult> results,
-                                                    RunState state, CancellationToken cancellationToken)
+    /// <returns>
+    /// How many files the second pass brought over, and whether Stop cut it short with files
+    /// still to go — which makes the whole batch a stopped one, not merely a failed one.
+    /// </returns>
+    private static async Task<(int Recovered, bool Stopped)> RetryFailedAsync(
+        TransferPlan plan, List<TransferItemResult> results, RunState state, CancellationToken cancellationToken)
     {
         int recovered = 0;
+        bool stopped = false;
 
         // Counted up front, so the window can say "3 of 120" and not only "3".
         int total = 0;
@@ -272,7 +277,12 @@ public sealed class FileTransferService
             {
                 TransferItemResult result = results[i];
                 if (result.FailedPaths.Count == 0) continue;
-                if (cancellationToken.IsCancellationRequested) break;
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    stopped = true;
+                    break;
+                }
 
                 var stillFailed = new List<string>(result.FailedPaths.Count);
                 long extraBytes = 0;
@@ -281,6 +291,7 @@ public sealed class FileTransferService
                 {
                     if (cancellationToken.IsCancellationRequested)
                     {
+                        stopped = true;
                         stillFailed.Add(source);
                         continue;
                     }
@@ -295,7 +306,11 @@ public sealed class FileTransferService
                     // -1: still out of reach. -2: it is at the destination already, which
                     // happens when the tool's own retry got it after announcing the failure —
                     // it is not failed, and this pass did not rescue it either.
-                    if (bytes == -1) stillFailed.Add(source);
+                    if (bytes == -1)
+                    {
+                        stillFailed.Add(source);
+                        if (cancellationToken.IsCancellationRequested) stopped = true;
+                    }
                     else if (bytes >= 0)
                     {
                         recovered++;
@@ -325,7 +340,7 @@ public sealed class FileTransferService
             state.SecondPassOver();
         }
 
-        return recovered;
+        return (recovered, stopped);
     }
 
     /// <summary>
@@ -392,12 +407,27 @@ public sealed class FileTransferService
             string? folder = Path.GetDirectoryName(target);
             if (folder is not null) Directory.CreateDirectory(folder);
 
-            // The most permissive request there is: whatever the owner allows, this accepts.
-            using (var reader = new FileStream(source, FileMode.Open, FileAccess.Read,
-                                               FileShare.ReadWrite | FileShare.Delete))
-            using (var writer = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None))
+            try
             {
-                await reader.CopyToAsync(writer, cancellationToken).ConfigureAwait(false);
+                // The most permissive request there is: whatever the owner allows, this accepts.
+                using (var reader = new FileStream(source, FileMode.Open, FileAccess.Read,
+                                                   FileShare.ReadWrite | FileShare.Delete))
+                using (var writer = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    await reader.CopyToAsync(writer, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // ⚠️ Stop, pressed while this file was on its way. That used to leave as an
+                // exception nobody caught: out of the transfer, into the window's async Loaded
+                // handler, onto the dispatcher — which closes the app. It is a file that did
+                // not make it, like any other here. What this attempt had written is a fragment
+                // under the file's own name, since it opened the target with Create, so it goes.
+                try { File.Delete(target); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+
+                return -1;
             }
 
             // A move is a copy that then lets go. If the source will not go, the copy still

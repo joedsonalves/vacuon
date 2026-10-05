@@ -123,6 +123,14 @@ public partial class TransferWindow : Window
             Report = new TransferReport(_plan.Kind, _plan.Destination, [],
                                         TransferPhase.Failed, 0, false, TimeSpan.Zero, ex.Message);
         }
+        catch (OperationCanceledException)
+        {
+            // The engine answers Stop with a report, not an exception. This is here because it
+            // once did not — inside its second pass — and this handler is async void: whatever
+            // leaves it goes to the dispatcher, and the dispatcher closes the app.
+            Report = new TransferReport(_plan.Kind, _plan.Destination, [],
+                                        TransferPhase.Cancelled, 0, false, TimeSpan.Zero);
+        }
 
         Finish(Report);
     }
