@@ -20,6 +20,16 @@
       executando um binário velho sem perceber.
     -->
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
+    <!--
+      This file is read BEFORE the SDK gives Configuration its default. Without this
+      line, `dotnet test tests\Vacuon.Core.Tests` with no -c built OutputPath from an
+      empty Configuration and wrote to bin\net10.0-windows\, while `dotnet build -c Debug`
+      wrote to bin\Debug\net10.0-windows\ - and a test run that skipped the build picked
+      up the stale binaries in the other folder without a word. It happened on
+      5 October 2026: the first test baseline of that session ran DLLs a month old.
+    -->
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
     <BaseOutputPath>$(MSBuildProjectDirectory)\bin\</BaseOutputPath>
     <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
   </PropertyGroup>
