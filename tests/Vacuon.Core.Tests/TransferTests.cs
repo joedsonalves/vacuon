@@ -144,6 +144,48 @@ public class RobocopyOutputTests
         Assert.Equal(5, line.ErrorCode);
     }
 
+    // Measured on the real tool, under /MT: an error line with the retry announcement of the
+    // same file glued on behind it, arriving as one line of output.
+    private const string GluedLine =
+        "2026/10/05 12:29:25 ERROR 32 (0x00000020) Deleting Source File C:\\pasta\\preso.bin"
+        + "\t    New File  \t\t    8192\tC:\\pasta\\preso.bin";
+
+    [Fact]
+    public void AnErrorLineWithTheNextLineGluedOn_NamesOnlyTheFile()
+    {
+        // The whole tail used to be taken as the path: the failure list showed one long name,
+        // and the second pass and the Restart Manager were asked about a file that cannot exist.
+        RobocopyLine line = RobocopyOutput.Parse(GluedLine);
+
+        Assert.Equal(RobocopyLineKind.Error, line.Kind);
+        Assert.Equal(@"C:\pasta\preso.bin", line.Path);
+        Assert.Equal(32, line.ErrorCode);
+    }
+
+    [Fact]
+    public void TheLineGluedBehindAnError_IsReadAsTheLineItIs()
+    {
+        string[] pieces = [.. RobocopyOutput.Pieces(GluedLine)];
+
+        Assert.Equal(2, pieces.Length);
+        Assert.Equal(RobocopyLineKind.Error, RobocopyOutput.Parse(pieces[0]).Kind);
+
+        RobocopyLine file = RobocopyOutput.Parse(pieces[1]);
+        Assert.Equal(RobocopyLineKind.File, file.Kind);
+        Assert.Equal(8192, file.Bytes);
+        Assert.Equal(@"C:\pasta\preso.bin", file.Path);
+    }
+
+    [Fact]
+    public void AnOrdinaryLine_IsOnePiece()
+    {
+        Assert.Single(RobocopyOutput.Pieces(ErrorLine));
+        Assert.Single(RobocopyOutput.Pieces("\t    New File  \t\t  200000\tC:\\folder\\file1.bin"));
+
+        // A file whose name happens to look like an error code is still a file line.
+        Assert.Single(RobocopyOutput.Pieces("\t    New File  \t\t  100\tC:\\folder\\foto (0x1).jpg"));
+    }
+
     [Fact]
     public void TheTranslatedSentenceUnderAnError_IsNotMistakenForAnything()
     {

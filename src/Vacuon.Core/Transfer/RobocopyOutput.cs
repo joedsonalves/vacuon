@@ -234,6 +234,14 @@ public static class RobocopyOutput
     /// <summary>
     /// The first rooted path in what is left of the line, drive letter or UNC. The words in
     /// front of it are translated; a path never is.
+    /// <para>
+    /// ⚠️ It ends at the first tab or carriage return. With <c>/MT</c> robocopy's threads share
+    /// one console and a line is not atomic: an error line was measured arriving with the next
+    /// file line glued on behind it — <c>…\held.bin⇥    New File  ⇥⇥    8192⇥C:\…\held.bin</c> —
+    /// and the whole of that was being taken as the path. The failure list showed it as one
+    /// long name, and the second pass and the Restart Manager were asked about a file that
+    /// cannot exist. A Windows file name holds no control characters, so the path stops there.
+    /// </para>
     /// </summary>
     private static string RootedTail(ReadOnlySpan<char> tail)
     {
@@ -242,10 +250,44 @@ public static class RobocopyOutput
             bool drive = char.IsLetter(tail[i]) && tail[i + 1] == ':' && tail[i + 2] == '\\';
             bool unc = tail[i] == '\\' && tail[i + 1] == '\\' && char.IsLetterOrDigit(tail[i + 2]);
 
-            if (drive || unc) return tail[i..].Trim().ToString();
+            if (!drive && !unc) continue;
+
+            ReadOnlySpan<char> path = tail[i..];
+            int stop = path.IndexOfAny('\t', '\r');
+            if (stop >= 0) path = path[..stop];
+
+            return path.Trim().ToString();
         }
 
         return string.Empty;
+    }
+
+    /// <summary>
+    /// The lines inside one line of output: itself, or an error line and the line that was
+    /// glued on behind it.
+    /// <para>
+    /// The second piece is a line in its own right — measured, it was robocopy announcing the
+    /// retry of the very file the error named — and it is read like any other, not dropped.
+    /// Only an error line is split: it carries no tab of its own, so a tab after its closing
+    /// bracket can only be where the next line began.
+    /// </para>
+    /// </summary>
+    public static IEnumerable<string> Pieces(string line)
+    {
+        if (TryParseError(line, out _, out _))
+        {
+            int close = line.IndexOf(')', line.IndexOf("(0x", StringComparison.Ordinal));
+            int glued = line.IndexOf('\t', close);
+
+            if (glued > 0)
+            {
+                yield return line[..glued];
+                yield return line[glued..];
+                yield break;
+            }
+        }
+
+        yield return line;
     }
 
     /// <summary>

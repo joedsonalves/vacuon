@@ -1076,7 +1076,13 @@ public sealed class FileTransferService
         {
             if (line is null) return;
 
-            RobocopyLine parsed = RobocopyOutput.Parse(line.TrimStart('﻿'));
+            // Usually one piece. See RobocopyOutput.Pieces for when it is two.
+            foreach (string piece in RobocopyOutput.Pieces(line.TrimStart('﻿'))) ConsumeOne(piece, item);
+        }
+
+        private void ConsumeOne(string line, TransferItem item)
+        {
+            RobocopyLine parsed = RobocopyOutput.Parse(line);
 
             switch (parsed.Kind)
             {
