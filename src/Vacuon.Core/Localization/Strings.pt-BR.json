@@ -816,7 +816,7 @@
   "compress.summary": "{0} pastas, uma estimativa de {1} no total.",
   "compress.already": "{0} arquivos já estão comprimidos, ocupando {1}.",
   "compress.estimate": "Esses números são ESTIMATIVAS: bytes vezes uma taxa típica do tipo de arquivo, não uma compressão de teste destes arquivos. Todo o resto que o Vacuon imprime foi medido; isto não.",
-  "compress.howTo": "O Vacuon não comprime nada. Use `compact /c /s` na pasta, ou o diálogo de Propriedades dela.",
+  "compress.howTo": "Este comando não comprime nada. Na janela, marque as pastas no Explorer e use Compactar — o espaço que volta é medido lá — ou use `compact /c /s` na pasta.",
   "diff.needsVolume": "Isto compara volumes inteiros, então precisa de uma letra de unidade, não de uma pasta.",
   "diff.needsElevation": "Comparar varreduras precisa de administrador: o snapshot é identificado pelo serial NTFS do volume, que fica nos metadados do volume.",
   "diff.noBaseline": "Não há varredura anterior deste volume para comparar. Esta execução também não criou uma — varra o volume uma vez e a próxima terá de onde medir.",

@@ -816,7 +816,7 @@
   "compress.summary": "{0} folders, an estimated {1} in all.",
   "compress.already": "{0} files are already compressed, holding {1}.",
   "compress.estimate": "Those figures are ESTIMATES: bytes times a ratio typical of the file type, not a trial compression of these files. Everything else Vacuon prints was measured; this was not.",
-  "compress.howTo": "Vacuon compresses nothing. Use `compact /c /s` in the folder, or its Properties dialog.",
+  "compress.howTo": "This command compresses nothing. In the window, tick the folders in Explorer and press Compress — the space it gives back is measured there — or use `compact /c /s` in the folder.",
   "diff.needsVolume": "This compares whole volumes, so it needs a drive letter rather than a folder.",
   "diff.needsElevation": "Comparing scans needs Administrator: the snapshot is keyed by the NTFS volume serial, which is in the volume metadata.",
   "diff.noBaseline": "There is no earlier scan of this volume to compare against. This run did not create one either — scan the volume once and the next run will have something to measure from.",
