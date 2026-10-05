@@ -941,6 +941,7 @@
   "compress.done": "{0} itens compactados · {1} liberados",
   "compress.doneOne": "{0} item compactado · {1} liberados",
   "compress.nothing": "Nada foi compactado.",
+  "compress.isLink": "é um link para {0}; compactá-lo mudaria aquela pasta, então ficou como estava",
   "compress.gainedNothing": "{0} itens compactados e nenhum encolheu — estes dados já estavam compactados.",
   "compress.partial": "{0} compactados · {1} liberados · {2} intocados",
   "move.leaveJunction": "Deixar um link no lugar, para os caminhos antigos continuarem funcionando",

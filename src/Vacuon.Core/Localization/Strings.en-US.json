@@ -941,6 +941,7 @@
   "compress.done": "{0} items compressed · {1} freed",
   "compress.doneOne": "{0} item compressed · {1} freed",
   "compress.nothing": "Nothing was compressed.",
+  "compress.isLink": "it is a link to {0}; compressing it would change that folder instead, so it was left alone",
   "compress.gainedNothing": "{0} items compressed and none of them got smaller — this data was already compressed.",
   "compress.partial": "{0} compressed · {1} freed · {2} left alone",
   "move.leaveJunction": "Leave a link behind, so the old paths keep working",

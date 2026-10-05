@@ -1,4 +1,6 @@
+using System.IO.Enumeration;
 using System.Runtime.Versioning;
+using Vacuon.Core.Localization;
 using Vacuon.Core.Safety;
 using Vacuon.Native.Interop;
 
@@ -12,7 +14,7 @@ public enum CompressOutcome
     Decompressed,
     /// <summary>Already in the state that was asked for.</summary>
     Unchanged,
-    /// <summary>Refused by <see cref="ProtectedPaths"/>. Never attempted.</summary>
+    /// <summary>Refused before anything was tried: a protected path, or a link. Never attempted.</summary>
     Blocked,
     NotFound,
     /// <summary>The volume does not do this, or the file cannot be opened for it.</summary>
@@ -114,6 +116,16 @@ public static class CompressionService
     /// </summary>
     private static CompressResult ApplyToTree(string root, bool compress)
     {
+        // ⚠️ A link is a door, not a room — see Links. Set on one, the attribute lands on the
+        // folder it stands for, wherever that is, and the walk goes on through it. The index
+        // shows the link here and none of what is behind it, so the gain reported would be
+        // that other folder's. Compressing that one is a choice made by selecting it.
+        if (Links.IsLink(root))
+        {
+            return new CompressResult(root, CompressOutcome.Blocked, 0, 0,
+                                      L.T("compress.isLink", new DirectoryInfo(root).LinkTarget ?? string.Empty));
+        }
+
         Kernel32.SetCompression(root, compress, isDirectory: true);
 
         long before = 0;
@@ -128,25 +140,55 @@ public static class CompressionService
             RecurseSubdirectories = true,
         };
 
-        foreach (string file in Directory.EnumerateFiles(root, "*", options))
+        // Measured on 5 October 2026: this walk went through every junction in the tree, so
+        // a folder holding one compressed a folder somewhere else — on another drive, if that
+        // is where the link led — and counted what that gave back as this folder's saving. A
+        // file symlink was the same door one level down: compressing it compresses the file it
+        // names. Links are now neither entered nor touched.
+        var walk = new FileSystemEnumerable<(string Path, bool IsDirectory)>(
+            root,
+            static (ref FileSystemEntry entry) => (entry.ToFullPath(), entry.IsDirectory),
+            options)
         {
-            // Every path, not just the root: the protected list applies to what is being
-            // touched, and a junction inside an ordinary folder can point anywhere.
-            if (ProtectedPaths.Check(file).IsProtected) continue;
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !Links.IsLink(ref entry),
+            ShouldRecursePredicate = static (ref FileSystemEntry entry) => !Links.IsLink(ref entry),
+        };
 
-            CompressResult one = ApplyToFile(file, compress);
+        using IEnumerator<(string Path, bool IsDirectory)> entries = walk.GetEnumerator();
+
+        while (true)
+        {
+            // ⚠️ The disk does not hold still for this. A folder that goes away between being
+            // listed and being opened throws out of the walk — and out of here it used to reach
+            // the window's async handler, which takes the app down with it.
+            try
+            {
+                if (!entries.MoveNext()) break;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                firstError ??= ex.Message;
+                break;
+            }
+
+            (string path, bool isDirectory) = entries.Current;
+
+            // Every path, not just the root: the protected list applies to what is being touched.
+            if (ProtectedPaths.Check(path).IsProtected) continue;
+
+            if (isDirectory)
+            {
+                Kernel32.SetCompression(path, compress, isDirectory: true);
+                continue;
+            }
+
+            CompressResult one = ApplyToFile(path, compress);
 
             before += one.Before;
             after += one.After;
 
             if (one.Succeeded) touched++;
             else if (one.Outcome == CompressOutcome.Failed) firstError ??= one.Message;
-        }
-
-        foreach (string folder in Directory.EnumerateDirectories(root, "*", options))
-        {
-            if (ProtectedPaths.Check(folder).IsProtected) continue;
-            Kernel32.SetCompression(folder, compress, isDirectory: true);
         }
 
         return new CompressResult(root,
