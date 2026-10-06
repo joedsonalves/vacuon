@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
+using Vacuon.Native.Interop;
 
 namespace Vacuon.Core.Optimization;
 
@@ -186,7 +187,7 @@ public sealed class StartupScanner
                 string command = key.GetValue(name)?.ToString() ?? string.Empty;
                 if (command.Length == 0) continue;
 
-                into.Add(Build(name, command, source, approved, processes));
+                into.Add(Build(name, command, source, approved, processes, TargetOf(command)));
             }
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
@@ -211,7 +212,7 @@ public sealed class StartupScanner
                 string name = Path.GetFileName(file);
                 if (name.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase)) continue;
 
-                into.Add(Build(name, file, source, approved, processes));
+                into.Add(Build(name, file, source, approved, processes, FolderItemTarget(file)));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
@@ -221,9 +222,9 @@ public sealed class StartupScanner
 
     private static StartupEntry Build(
         string name, string command, StartupSource source,
-        Dictionary<string, bool> approved, Dictionary<string, (int Count, long Bytes)> processes)
+        Dictionary<string, bool> approved, Dictionary<string, (int Count, long Bytes)> processes,
+        string? target)
     {
-        string? target = ExtractExecutable(command);
         bool exists = target is not null && File.Exists(target);
 
         // Absent from StartupApproved means nobody ever switched it off.
@@ -283,6 +284,106 @@ public sealed class StartupScanner
     }
 
     internal static bool IsDisabled(byte[] data) => data.Length > 0 && (data[0] & 1) != 0;
+
+    /// <summary>
+    /// What a Startup folder item launches: the file a shortcut points at, or the item itself
+    /// when it is not a shortcut.
+    /// <para>
+    /// ⚠️ It used to be the item's own path pushed through the command-line parser, which cut
+    /// it at the first space — and every Startup folder has one, in "Start Menu". So every
+    /// shortcut there was checked as <c>…\Windows\Start</c>, which does not exist, and was
+    /// shown as pointing at a file that does not exist: all three on my machine, all three
+    /// pointing at programs that are installed.
+    /// </para>
+    /// </summary>
+    internal static string? FolderItemTarget(string item) =>
+        string.Equals(Path.GetExtension(item), ".lnk", StringComparison.OrdinalIgnoreCase)
+            ? ShellLink.TargetOf(item)
+            : item;
+
+    /// <summary>
+    /// The file a command line launches, found the way Windows finds it — or null when that
+    /// cannot be told, which is never reported as missing.
+    /// <list type="bullet">
+    ///   <item>Environment variables expanded: a <c>REG_SZ</c> value keeps its <c>%…%</c>.</item>
+    ///   <item>An unquoted path with spaces walked the way <c>CreateProcess</c> walks it,
+    ///   space by space, until a file answers.</item>
+    ///   <item>A bare name looked for where Windows looks: System32, Windows, the PATH.
+    ///   <c>rundll32.exe …</c> was being checked against the current folder.</item>
+    /// </list>
+    /// "Missing" is only ever said of a path the app can name exactly.
+    /// </summary>
+    internal static string? TargetOf(string command, Func<string, bool>? exists = null)
+    {
+        exists ??= File.Exists;
+
+        string text = Environment.ExpandEnvironmentVariables(command.Trim());
+        if (text.Length == 0) return null;
+
+        if (text[0] == '"')
+        {
+            int close = text.IndexOf('"', 1);
+            return close > 1 ? Locate(text[1..close], exists) : null;
+        }
+
+        // Shortest first, the order CreateProcess tries them in.
+        for (int at = 0; at <= text.Length; at++)
+        {
+            if (at < text.Length && text[at] != ' ') continue;
+
+            string candidate = text[..at];
+            if (candidate.Length == 0) continue;
+
+            if (Found(candidate, exists) is string found) return found;
+        }
+
+        // Nothing on the disk answers to any part of it. A path that can be named exactly is
+        // a missing file; anything vaguer is not this app's to call missing.
+        string? named = ExtractExecutable(text);
+        if (named is null || !Path.IsPathRooted(named)) return null;
+
+        return named.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !text.Contains(' ')
+            ? named
+            : null;
+    }
+
+    /// <summary>A quoted path: itself when rooted, wherever Windows would find it when not.</summary>
+    private static string? Locate(string path, Func<string, bool> exists) =>
+        Path.IsPathRooted(path) ? path : Found(path, exists);
+
+    /// <summary>The file a candidate names, trying ".exe" after it the way Windows does.</summary>
+    private static string? Found(string candidate, Func<string, bool> exists)
+    {
+        string[] names = Path.HasExtension(candidate) ? [candidate] : [candidate, candidate + ".exe"];
+
+        foreach (string name in names)
+        {
+            if (Path.IsPathRooted(name))
+            {
+                if (exists(name)) return name;
+                continue;
+            }
+
+            foreach (string folder in SearchFolders())
+            {
+                string full = Path.Combine(folder, name);
+                if (exists(full)) return full;
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> SearchFolders()
+    {
+        yield return Environment.SystemDirectory;
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+
+        string path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+
+        foreach (string folder in path.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            if (Path.IsPathRooted(folder)) yield return folder;
+    }
 
     /// <summary>
     /// Pulls the executable out of a command line.
