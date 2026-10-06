@@ -133,7 +133,13 @@ public sealed class ProcessTerminator
                 // Measured before the kill, because afterwards there is nothing left to ask.
                 held += process.PrivateMemorySize64;
 
-                process.Kill(entireProcessTree: true);
+                // ⚠️ This process, not its tree. Every process under this name is already in
+                // the list being closed; what the tree adds is processes under OTHER names,
+                // which the confirmation never showed. Explorer is not protected and is the
+                // parent of what the Start menu and the desktop launch — closing it took every
+                // one of those programs down with it, unsaved work and all. Measured with a
+                // renamed cmd and its renamed ping: the ping went too.
+                process.Kill(entireProcessTree: false);
                 process.WaitForExit(ExitWaitMs);
 
                 if (process.HasExited) closed++;

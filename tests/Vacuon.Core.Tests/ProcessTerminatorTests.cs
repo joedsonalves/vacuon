@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Vacuon.Core.Optimization;
 using Xunit;
 
@@ -66,6 +67,80 @@ public class ProtectedProcessTests
             .CloseByName($"nao-existe-{Guid.NewGuid():N}");
 
         Assert.Equal(TerminateOutcome.NotFound, result.Outcome);
+    }
+}
+
+/// <summary>
+/// Closing really closes things, so this runs real processes: copies of cmd and ping under
+/// names nothing else on the machine has, so closing "by name" can only ever reach these.
+/// </summary>
+public class ProcessTerminatorTreeTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(
+        Path.GetTempPath(), "vacuon-close-tests-" + Guid.NewGuid().ToString("N"));
+
+    public ProcessTerminatorTreeTests() => Directory.CreateDirectory(_dir);
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+
+        GC.SuppressFinalize(this);
+    }
+
+    [Fact]
+    public void Closing_TakesTheProcessesWithThatName_NotEverythingTheyStarted()
+    {
+        // ⚠️ The kill took each process's whole tree. The confirmation names the processes in
+        // the row and nothing else — and Explorer, which is not protected, is the parent of
+        // what the Start menu and the desktop launch: closing it from the memory panel would
+        // have taken every one of those programs with it, unsaved work and all.
+        string tag = Guid.NewGuid().ToString("N")[..8];
+        string parentName = "vacuonparent" + tag;
+        string childName = "vacuonchild" + tag;
+
+        string parent = Path.Combine(_dir, parentName + ".exe");
+        string child = Path.Combine(_dir, childName + ".exe");
+        File.Copy(Path.Combine(Environment.SystemDirectory, "cmd.exe"), parent);
+        File.Copy(Path.Combine(Environment.SystemDirectory, "PING.EXE"), child);
+
+        using Process started = Process.Start(new ProcessStartInfo(parent, $"/c \"{child}\" -n 60 127.0.0.1")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        })!;
+
+        Process? kid = null;
+        for (int i = 0; i < 100 && kid is null; i++)
+        {
+            kid = Process.GetProcessesByName(childName).FirstOrDefault();
+            if (kid is null) Thread.Sleep(100);
+        }
+
+        Assert.NotNull(kid);
+
+        try
+        {
+            TerminateResult result = new ProcessTerminator().CloseByName(parentName);
+
+            Assert.Equal(TerminateOutcome.Closed, result.Outcome);
+            Assert.True(started.HasExited);
+
+            kid.Refresh();
+            Assert.False(kid.HasExited, "the child, under another name, went down with its parent");
+        }
+        finally
+        {
+            try
+            {
+                if (!kid.HasExited) kid.Kill();
+                kid.WaitForExit(5000);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+
+            kid.Dispose();
+        }
     }
 }
 
