@@ -491,6 +491,7 @@
   "ai.outcomeNotConfirmed": "The write went through but reading it back did not return it. Nothing is being claimed.",
   "ai.outcomeNotActionable": "Vacuon only reports this one.",
   "ai.outcomeFailed": "Could not change it: {0}",
+  "ai.journalUnreadable": "the record of earlier changes, {0}, could not be read — changing anything now could cost the way back from them",
   "ai.copilot.name": "Windows Copilot (this user)",
   "ai.copilot.desc": "The Copilot assistant in the taskbar and its keyboard shortcut, for the signed-in user.",
   "ai.copilotMachine.name": "Windows Copilot (all users)",

@@ -491,6 +491,7 @@
   "ai.outcomeNotConfirmed": "A escrita passou, mas a leitura de volta não devolveu o valor. Nada está sendo afirmado.",
   "ai.outcomeNotActionable": "O Vacuon apenas informa este.",
   "ai.outcomeFailed": "Não foi possível alterar: {0}",
+  "ai.journalUnreadable": "o registro das mudanças anteriores, {0}, não pôde ser lido — mudar alguma coisa agora poderia custar o caminho de volta delas",
   "ai.copilot.name": "Windows Copilot (este usuário)",
   "ai.copilot.desc": "O assistente Copilot na barra de tarefas e o atalho de teclado dele, para o usuário conectado.",
   "ai.copilotMachine.name": "Windows Copilot (todos os usuários)",

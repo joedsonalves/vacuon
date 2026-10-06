@@ -59,7 +59,17 @@ public sealed class AiComponentSwitch(PolicyJournal? journal = null)
         if (!component.IsActionable)
             return new SwitchResult(component.Id, SwitchOutcome.NotActionable);
 
-        PolicyChange? change = _journal.LastFor(component.Id);
+        PolicyChange? change;
+
+        try
+        {
+            change = _journal.LastFor(component.Id);
+        }
+        catch (IOException ex)
+        {
+            // Unreadable is not "never touched": what to put back is in there, out of reach.
+            return new SwitchResult(component.Id, SwitchOutcome.Failed, Message: ex.Message);
+        }
 
         // Never touched by Vacuon: the honest answer is to leave it alone rather than invent
         // a previous state.
@@ -86,11 +96,28 @@ public sealed class AiComponentSwitch(PolicyJournal? journal = null)
             }
             else
             {
-                using RegistryKey? key = root.OpenSubKey(component.SubKey!, writable: true);
-                key?.SetValue(component.ValueName!, change.PreviousValue.Value, RegistryValueKind.DWord);
+                // ⚠️ Created when it is gone, not skipped. The value was there before Vacuon
+                // wrote over it; something removed the key since — a cleanup, an update —
+                // and opening it gave nothing to write into, so nothing was restored while
+                // the result said it had been, and the journal entry went with it.
+                using RegistryKey key = root.CreateSubKey(component.SubKey!, writable: true);
+                key.SetValue(component.ValueName!, change.PreviousValue.Value, RegistryValueKind.DWord);
             }
 
-            _journal.RemoveLast(component.Id);
+            // Read back, as a write is: "put back" and "it is back" are different claims.
+            using (RegistryKey? verify = root.OpenSubKey(component.SubKey!))
+            {
+                object? now = verify?.GetValue(component.ValueName!);
+                bool back = change.PreviousValue is null ? now is null : now as int? == change.PreviousValue;
+
+                if (!back) return new SwitchResult(component.Id, SwitchOutcome.NotConfirmed, null, change.PreviousValue);
+            }
+
+            // The machine is as it was found. A journal that cannot be rewritten keeps the
+            // entry, and undoing it again writes the same state again — harmless.
+            try { _journal.RemoveLast(component.Id); }
+            catch (IOException) { }
+
             return new SwitchResult(component.Id, SwitchOutcome.Applied, null, change.PreviousValue);
         }
         catch (UnauthorizedAccessException ex)

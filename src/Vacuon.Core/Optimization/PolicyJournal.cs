@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Vacuon.Core.Localization;
 
 namespace Vacuon.Core.Optimization;
 
@@ -55,26 +56,31 @@ public sealed class PolicyJournal
 
     public PolicyJournal(string? path = null) => _path = path ?? DefaultPath;
 
+    /// <summary>
+    /// Every change on record. No file is an empty journal.
+    /// </summary>
+    /// <exception cref="IOException">
+    /// The file is there and could not be read. Never answered with an empty list: it is the
+    /// only way back for every change in it, and reading it as empty let the very next change
+    /// write a one-entry file over it — every earlier Undo gone, said nowhere. The caller
+    /// stops instead, before the registry is touched. Opening the app does not read this.
+    /// </exception>
     public List<PolicyChange> Read()
     {
+        if (!File.Exists(_path)) return [];
+
         try
         {
-            if (!File.Exists(_path)) return [];
-
-            List<PolicyChange>? loaded =
-                JsonSerializer.Deserialize<List<PolicyChange>>(File.ReadAllText(_path), Options);
-
-            return loaded ?? [];
+            return JsonSerializer.Deserialize<List<PolicyChange>>(File.ReadAllText(_path), Options) ?? [];
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            // A journal we cannot read is a journal we must not overwrite silently, but it
-            // also cannot be allowed to block the app from opening.
-            return [];
+            throw new IOException(L.T("ai.journalUnreadable", _path), ex);
         }
     }
 
     /// <summary>Appends a change. Called before the registry write, never after.</summary>
+    /// <exception cref="IOException">It could not be written — and then the registry must not be either.</exception>
     public void Append(PolicyChange change)
     {
         List<PolicyChange> all = Read();
@@ -108,15 +114,28 @@ public sealed class PolicyJournal
         return null;
     }
 
+    /// <summary>
+    /// Replaces the file whole.
+    /// <para>
+    /// ⚠️ A failure here used to be swallowed, and the registry was then changed anyway — a
+    /// change with no note, the one thing the order of these two steps exists to prevent. It
+    /// throws now. And it goes through a file beside it and a rename: written in place, a
+    /// crash part-way left half a journal, which then read as unreadable.
+    /// </para>
+    /// </summary>
     private void Write(List<PolicyChange> all)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            File.WriteAllText(_path, JsonSerializer.Serialize(all, Options));
+
+            string next = _path + ".tmp";
+            File.WriteAllText(next, JsonSerializer.Serialize(all, Options));
+            File.Move(next, _path, overwrite: true);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            throw new IOException(ex.Message, ex);
         }
     }
 }

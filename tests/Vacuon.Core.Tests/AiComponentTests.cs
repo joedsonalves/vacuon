@@ -104,6 +104,22 @@ public class PolicyJournalTests
     }
 
     [Fact]
+    public void AJournalCutShort_IsUnreadable_NotEmpty()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"vacuon-journal-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, "[ { \"ComponentId\": \"a\"");
+            Assert.Throws<IOException>(() => new PolicyJournal(path).Read());
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void MissingFile_ReadsAsEmptyRatherThanThrowing()
     {
         var journal = new PolicyJournal(Path.Combine(Path.GetTempPath(), $"nao-existe-{Guid.NewGuid():N}.json"));
@@ -217,6 +233,94 @@ public class AiComponentSwitchTests
 
             // Vacuon never touched this one, so it has no previous state to claim knowledge of.
             Assert.Equal(SwitchOutcome.NoChange, sw.Undo(Scratch(sub)).Outcome);
+        }
+        finally
+        {
+            Cleanup(sub, journalPath);
+        }
+    }
+
+    [Fact]
+    public void AnUnreadableJournal_StopsTheChange_AndIsLeftAsItWas()
+    {
+        // It used to read as empty, and the next change wrote a one-entry file over it: every
+        // earlier Undo gone, said nowhere. Now nothing is changed, the registry included.
+        string sub = $@"Software\Vacuon\Testes\{Guid.NewGuid():N}";
+        string journalPath = Path.Combine(Path.GetTempPath(), $"vacuon-{Guid.NewGuid():N}.json");
+        AiComponent component = Scratch(sub);
+
+        try
+        {
+            File.WriteAllText(journalPath, "[ { \"ComponentId\": \"cortado-no-meio\"");
+            byte[] before = File.ReadAllBytes(journalPath);
+
+            SwitchResult result = new AiComponentSwitch(new PolicyJournal(journalPath)).TurnOff(component);
+
+            Assert.Equal(SwitchOutcome.Failed, result.Outcome);
+            Assert.Contains(journalPath, result.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(before, File.ReadAllBytes(journalPath));
+
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(sub);
+            Assert.Null(key?.GetValue("TesteDoVacuon"));
+
+            // Undo cannot know what to put back either, and says so rather than "never touched".
+            Assert.Equal(SwitchOutcome.Failed, new AiComponentSwitch(new PolicyJournal(journalPath)).Undo(component).Outcome);
+        }
+        finally
+        {
+            Cleanup(sub, journalPath);
+        }
+    }
+
+    [Fact]
+    public void AJournalThatCannotBeWritten_LeavesTheRegistryAlone()
+    {
+        // The journal is written first so a change never goes unrecorded. A failed write was
+        // swallowed, and the registry was then changed anyway.
+        string sub = $@"Software\Vacuon\Testes\{Guid.NewGuid():N}";
+        string blocker = Path.Combine(Path.GetTempPath(), $"vacuon-blocker-{Guid.NewGuid():N}");
+        File.WriteAllText(blocker, "a file where the journal's folder would have to be");
+        string journalPath = Path.Combine(blocker, "ai-changes.json");
+
+        try
+        {
+            SwitchResult result = new AiComponentSwitch(new PolicyJournal(journalPath)).TurnOff(Scratch(sub));
+
+            Assert.NotEqual(SwitchOutcome.Applied, result.Outcome);
+
+            using RegistryKey? key = Registry.CurrentUser.OpenSubKey(sub);
+            Assert.Null(key?.GetValue("TesteDoVacuon"));
+        }
+        finally
+        {
+            Cleanup(sub, journalPath);
+            File.Delete(blocker);
+        }
+    }
+
+    [Fact]
+    public void Undo_PutsTheValueBack_EvenWhenSomethingRemovedTheKeySince()
+    {
+        // Opening a key that is gone gave nothing to write into: nothing was restored, the
+        // result said "put back", and the journal entry was dropped with it.
+        string sub = $@"Software\Vacuon\Testes\{Guid.NewGuid():N}";
+        string journalPath = Path.Combine(Path.GetTempPath(), $"vacuon-{Guid.NewGuid():N}.json");
+        AiComponent component = Scratch(sub);
+
+        try
+        {
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(sub))
+                key.SetValue("TesteDoVacuon", 7, RegistryValueKind.DWord);
+
+            var sw = new AiComponentSwitch(new PolicyJournal(journalPath));
+            Assert.Equal(SwitchOutcome.Applied, sw.TurnOff(component).Outcome);
+
+            Registry.CurrentUser.DeleteSubKeyTree(sub);
+
+            Assert.Equal(SwitchOutcome.Applied, sw.Undo(component).Outcome);
+
+            using RegistryKey? after = Registry.CurrentUser.OpenSubKey(sub);
+            Assert.Equal(7, after?.GetValue("TesteDoVacuon"));
         }
         finally
         {
